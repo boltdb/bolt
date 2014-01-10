@@ -6,16 +6,13 @@ package bolt
 // TODO: #define FREE_DBI 0
 // TODO: #define MAIN_DBI 1
 
-type Bucket interface {
-}
-
-type bucket struct {
-	pad               int
-	flags             int
-	depth             int
-	branchPageCount   int
-	leafPageCount     int
-	overflowPageCount int
-	entryCount        int
-	rootID            int
+type Bucket struct {
+	pad          uint32
+	flags        uint16
+	depth        uint16
+	branches     pgno
+	leafs        pgno
+	overflows    pgno
+	entries      uint64
+	root         pgno
 }

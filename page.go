@@ -4,17 +4,22 @@ import (
 	"unsafe"
 )
 
-const MinPageKeys = 2
-const FillThreshold = 250 // 25%
+const maxPageSize = 0x8000
+
+var _page page
+const headerSize = unsafe.Offsetof(_page.ptr)
+
+const minPageKeys = 2
+const fillThreshold = 250 // 25%
 
 const (
-	BranchPage   = 0x01
-	LeafPage     = 0x02
-	OverflowPage = 0x04
-	MetaPage     = 0x08
-	DirtyPage    = 0x10 /**< dirty page, also set for #P_SUBP pages */
-	SubPage      = 0x40
-	KeepPage     = 0x8000 /**< leave this page alone during spill */
+	p_branch   = 0x01
+	p_leaf     = 0x02
+	p_overflow = 0x04
+	p_meta     = 0x08
+	p_dirty    = 0x10 /**< dirty page, also set for #P_SUBP pages */
+	p_sub      = 0x40
+	p_keep     = 0x8000 /**< leave this page alone during spill */
 )
 
 // maxCommitPages is the maximum number of pages to commit in one writev() call.
@@ -36,22 +41,43 @@ const maxWriteByteCount 0x80000000U    // TODO: #define MAX_WRITE 0x80000000U >>
 
 // TODO: #define MDB_SPLIT_REPLACE	MDB_APPENDDUP	/**< newkey is not new */
 
+type pgno uint64
 
 type page struct {
-	header struct {
-		id                int
-		next              *page // (?)
-		lower             int
-		upper             int
-		overflowPageCount int
-	}
-	metadata []byte
+	id       pgno
+	flags    int
+	lower    int
+	upper    int
+	overflow int
+	ptr      int
 }
 
 type pageState struct {
 	head int  /**< Reclaimed freeDB pages, or NULL before use */
 	last int  /**< ID of last used record, or 0 if !mf_pghead */
 }
+
+// meta returns a pointer to the metadata section of the page.
+func (p *page) meta() (*meta, error) {
+	// Exit if page is not a meta page.
+	if (p.flags & p_meta) != 0 {
+		return InvalidMetaPageError
+	}
+
+	// Cast the meta section and validate before returning.
+	m := (*meta)(unsafe.Pointer(&p.ptr))
+	if err := m.validate(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+
+
+
+
+
+
 
 // nodeCount returns the number of nodes on the page.
 func (p *page) nodeCount() int {
@@ -67,4 +93,3 @@ func (p *page) remainingSize() int {
 func (p *page) remainingSize() int {
 	return p.header.upper - p.header.lower
 }
-

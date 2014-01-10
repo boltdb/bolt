@@ -1,14 +1,8 @@
 package bolt
 
-type meta struct {
-	magic          int32
-	version        int32
-	mapSize        int
-	free           *bucket
-	main           *bucket
-	lastPageNumber int
-	transactionID  int
-}
+var (
+	InvalidMetaPageError = &Error{"Invalid meta page"}
+)
 
 // TODO: #define mm_psize mm_dbs[0].md_pad
 // TODO: #define mm_flags mm_dbs[0].md_flags
@@ -30,3 +24,43 @@ type meta struct {
 // 	MDB_rel_func	*md_rel;	/**< user relocate function */
 // 	void		*md_relctx;		/**< user-provided context for md_rel */
 // } MDB_dbx;
+
+const magic int32 = 0xBEEFC0DE
+
+
+
+type meta struct {
+	magic    int32
+	version  int32
+	mapsize  int
+	free     bucket
+	main     bucket
+	pgno     int
+	txnid    int
+}
+
+// validate checks the marker bytes and version of the meta page to ensure it matches this binary.
+func (m *meta) validate() error {
+	if m.magic != magic {
+		return InvalidError
+	} else if m.version != Version {
+		return VersionMismatchError
+	}
+	return nil
+}
+
+
+// Read the environment parameters of a DB environment before
+// mapping it into memory.
+// @param[in] env the environment handle
+// @param[out] meta address of where to store the meta information
+// @return 0 on success, non-zero on failure.
+func (m *meta) read(p *page) error {
+	/*
+		if (off == 0 || m->mm_txnid > meta->mm_txnid)
+			*meta = *m;
+	}
+	return 0;
+	*/
+	return nil
+}

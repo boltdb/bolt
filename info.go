@@ -1,7 +1,7 @@
 package bolt
 
-// info contains information about the database.
-type info struct {
+// Info contains information about the database.
+type Info struct {
 	MapSize           int
 	LastPageID        int
 	LastTransactionID int

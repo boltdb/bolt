@@ -46,6 +46,13 @@ type cursor struct {
 	ki          []int /**< stack of page indices */
 }
 
+type xcursor struct {
+	cursor     cursor
+	bucket     *bucket
+	bucketx    *bucketx
+	bucketFlag int
+}
+
 // Set or clear P_KEEP in dirty, non-overflow, non-sub pages watched by txn.
 // @param[in] mc A cursor handle for the current operation.
 // @param[in] pflags Flags of the pages to update:
