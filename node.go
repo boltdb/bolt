@@ -44,48 +44,48 @@ func (n *node) size() int {
 // @param[in] indx The index of the subpage on the main page.
 func (n *node) shrink(index int) {
 	/*
-	MDB_node *node;
-	MDB_page *sp, *xp;
-	char *base;
-	int nsize, delta;
-	indx_t		 i, numkeys, ptr;
+		MDB_node *node;
+		MDB_page *sp, *xp;
+		char *base;
+		int nsize, delta;
+		indx_t		 i, numkeys, ptr;
 
-	node = NODEPTR(mp, indx);
-	sp = (MDB_page *)NODEDATA(node);
-	delta = SIZELEFT(sp);
-	xp = (MDB_page *)((char *)sp + delta);
+		node = NODEPTR(mp, indx);
+		sp = (MDB_page *)NODEDATA(node);
+		delta = SIZELEFT(sp);
+		xp = (MDB_page *)((char *)sp + delta);
 
-	// shift subpage upward
-	if (IS_LEAF2(sp)) {
-		nsize = NUMKEYS(sp) * sp->mp_pad;
-		if (nsize & 1)
-			return;		// do not make the node uneven-sized
-		memmove(METADATA(xp), METADATA(sp), nsize);
-	} else {
-		int i;
-		numkeys = NUMKEYS(sp);
-		for (i=numkeys-1; i>=0; i--)
-			xp->mp_ptrs[i] = sp->mp_ptrs[i] - delta;
-	}
-	xp->mp_upper = sp->mp_lower;
-	xp->mp_lower = sp->mp_lower;
-	xp->mp_flags = sp->mp_flags;
-	xp->mp_pad = sp->mp_pad;
-	COPY_PGNO(xp->mp_pgno, mp->mp_pgno);
+		// shift subpage upward
+		if (IS_LEAF2(sp)) {
+			nsize = NUMKEYS(sp) * sp->mp_pad;
+			if (nsize & 1)
+				return;		// do not make the node uneven-sized
+			memmove(METADATA(xp), METADATA(sp), nsize);
+		} else {
+			int i;
+			numkeys = NUMKEYS(sp);
+			for (i=numkeys-1; i>=0; i--)
+				xp->mp_ptrs[i] = sp->mp_ptrs[i] - delta;
+		}
+		xp->mp_upper = sp->mp_lower;
+		xp->mp_lower = sp->mp_lower;
+		xp->mp_flags = sp->mp_flags;
+		xp->mp_pad = sp->mp_pad;
+		COPY_PGNO(xp->mp_pgno, mp->mp_pgno);
 
-	nsize = NODEDSZ(node) - delta;
-	SETDSZ(node, nsize);
+		nsize = NODEDSZ(node) - delta;
+		SETDSZ(node, nsize);
 
-	// shift lower nodes upward
-	ptr = mp->mp_ptrs[indx];
-	numkeys = NUMKEYS(mp);
-	for (i = 0; i < numkeys; i++) {
-		if (mp->mp_ptrs[i] <= ptr)
-			mp->mp_ptrs[i] += delta;
-	}
+		// shift lower nodes upward
+		ptr = mp->mp_ptrs[indx];
+		numkeys = NUMKEYS(mp);
+		for (i = 0; i < numkeys; i++) {
+			if (mp->mp_ptrs[i] <= ptr)
+				mp->mp_ptrs[i] += delta;
+		}
 
-	base = (char *)mp + mp->mp_upper;
-	memmove(base + delta, base, ptr - mp->mp_upper + NODESIZE + NODEKSZ(node));
-	mp->mp_upper += delta;
+		base = (char *)mp + mp->mp_upper;
+		memmove(base + delta, base, ptr - mp->mp_upper + NODESIZE + NODEKSZ(node));
+		mp->mp_upper += delta;
 	*/
 }

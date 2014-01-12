@@ -7,12 +7,12 @@ package bolt
 // TODO: #define MAIN_DBI 1
 
 type Bucket struct {
-	pad          uint32
-	flags        uint16
-	depth        uint16
-	branches     pgno
-	leafs        pgno
-	overflows    pgno
-	entries      uint64
-	root         pgno
+	pad       uint32
+	flags     uint16
+	depth     uint16
+	branches  pgno
+	leafs     pgno
+	overflows pgno
+	entries   uint64
+	root      pgno
 }

@@ -1,7 +1,7 @@
 package bolt
 
 var (
-	InvalidMetaPageError = &Error{"Invalid meta page"}
+	InvalidMetaPageError = &Error{"Invalid meta page", nil}
 )
 
 // TODO: #define mm_psize mm_dbs[0].md_pad
@@ -25,18 +25,16 @@ var (
 // 	void		*md_relctx;		/**< user-provided context for md_rel */
 // } MDB_dbx;
 
-const magic int32 = 0xBEEFC0DE
-
-
+const magic uint32 = 0xC0DEC0DE
+const version uint32 = 1
 
 type meta struct {
-	magic    int32
-	version  int32
-	mapsize  int
-	free     bucket
-	main     bucket
-	pgno     int
-	txnid    int
+	magic   uint32
+	version uint32
+	free    Bucket
+	main    Bucket
+	pgno    int
+	txnid   int
 }
 
 // validate checks the marker bytes and version of the meta page to ensure it matches this binary.
@@ -49,7 +47,6 @@ func (m *meta) validate() error {
 	return nil
 }
 
-
 // Read the environment parameters of a DB environment before
 // mapping it into memory.
 // @param[in] env the environment handle
@@ -57,10 +54,10 @@ func (m *meta) validate() error {
 // @return 0 on success, non-zero on failure.
 func (m *meta) read(p *page) error {
 	/*
-		if (off == 0 || m->mm_txnid > meta->mm_txnid)
-			*meta = *m;
-	}
-	return 0;
+			if (off == 0 || m->mm_txnid > meta->mm_txnid)
+				*meta = *m;
+		}
+		return 0;
 	*/
 	return nil
 }
