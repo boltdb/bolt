@@ -27,6 +27,7 @@ type DB struct {
 	opened bool
 
 	os       _os
+	syscall  _syscall
 	file     file
 	metafile file
 	data     []byte
@@ -70,6 +71,9 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 	if db.os == nil {
 		db.os = &sysos{}
+	}
+	if db.syscall == nil {
+		db.syscall = &syssyscall{}
 	}
 
 	// Exit if the database is currently open.
@@ -145,7 +149,7 @@ func (db *DB) mmap() error {
 
 	// Determine the map size based on the file size.
 	var size int
-	if info, err := db.os.Stat(db.file.Name()); err != nil {
+	if info, err := db.os.Stat(db.path); err != nil {
 		return err
 	} else if info.Size() < int64(db.pageSize*2) {
 		return &Error{"file size too small", nil}
@@ -154,7 +158,7 @@ func (db *DB) mmap() error {
 	}
 
 	// Memory-map the data file as a byte slice.
-	if db.data, err = syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
+	if db.data, err = db.syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		return err
 	}
 

@@ -47,6 +47,20 @@ func TestDBOpenMetaFileError(t *testing.T) {
 	})
 }
 
+// Ensure that the database limits the upper bound of the page size.
+/*
+func TestDBLimitPageSize(t *testing.T) {
+	withMockDB(func(db *DB, mockos *mockos, path string) {
+		buf := make([]byte, 4096)
+		mockos.On("OpenFile", path, os.O_RDWR|os.O_CREATE, os.FileMode(0666)).Return(&mockfile{}, nil)
+		mockos.On("OpenFile", path, os.O_RDWR|os.O_SYNC, os.FileMode(0666)).Return(&mockfile{}, nil)
+		mockos.On("OpenFile", path, os.O_RDWR|os.O_SYNC, os.FileMode(0666)).Return(&mockfile{}, nil)
+		err := db.Open(path, 0666)
+		assert.Equal(t, err, exp)
+	})
+}
+*/
+
 // withDB executes a function with a database reference.
 func withDB(fn func(*DB, string)) {
 	f, _ := ioutil.TempFile("", "bolt-")
