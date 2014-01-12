@@ -4,7 +4,7 @@ import (
 	"os"
 )
 
-type OS interface {
+type _os interface {
 	OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error)
 	Stat(name string) (fi os.FileInfo, err error)
 	Getpagesize() int

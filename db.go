@@ -1,7 +1,7 @@
 package bolt
 
 import (
-	. "os"
+	"os"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -26,9 +26,9 @@ type DB struct {
 	sync.Mutex
 	opened bool
 
-	os       OS
-	file     *File
-	metafile *File
+	os       _os
+	file     file
+	metafile file
 	data     []byte
 	buf      []byte
 	meta0    *meta
@@ -56,14 +56,14 @@ type DB struct {
 }
 
 func NewDB() *DB {
-	return &DB{os: &sysos{}}
+	return &DB{}
 }
 
 func (db *DB) Path() string {
 	return db.path
 }
 
-func (db *DB) Open(path string, mode FileMode) error {
+func (db *DB) Open(path string, mode os.FileMode) error {
 	var err error
 	db.Lock()
 	defer db.Unlock()
@@ -79,11 +79,11 @@ func (db *DB) Open(path string, mode FileMode) error {
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
-	if db.file, err = db.os.OpenFile(db.path, O_RDWR|O_CREATE, mode); err != nil {
+	if db.file, err = db.os.OpenFile(db.path, os.O_RDWR|os.O_CREATE, mode); err != nil {
 		db.close()
 		return err
 	}
-	if db.metafile, err = db.os.OpenFile(db.path, O_RDWR|O_SYNC, mode); err != nil {
+	if db.metafile, err = db.os.OpenFile(db.path, os.O_RDWR|os.O_SYNC, mode); err != nil {
 		db.close()
 		return err
 	}
