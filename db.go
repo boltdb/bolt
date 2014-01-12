@@ -1,7 +1,7 @@
 package bolt
 
 import (
-	"os"
+	. "os"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -26,8 +26,9 @@ type DB struct {
 	sync.Mutex
 	opened bool
 
-	file     *os.File
-	metafile *os.File
+	os       OS
+	file     *File
+	metafile *File
 	data     []byte
 	buf      []byte
 	meta0    *meta
@@ -55,17 +56,21 @@ type DB struct {
 }
 
 func NewDB() *DB {
-	return &DB{}
+	return &DB{os: &sysos{}}
 }
 
 func (db *DB) Path() string {
 	return db.path
 }
 
-func (db *DB) Open(path string, mode os.FileMode) error {
+func (db *DB) Open(path string, mode FileMode) error {
 	var err error
 	db.Lock()
 	defer db.Unlock()
+
+	if db.os == nil {
+		db.os = &sysos{}
+	}
 
 	// Exit if the database is currently open.
 	if db.opened {
@@ -74,11 +79,11 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
-	if db.file, err = os.OpenFile(db.path, os.O_RDWR|os.O_CREATE, mode); err != nil {
+	if db.file, err = db.os.OpenFile(db.path, O_RDWR|O_CREATE, mode); err != nil {
 		db.close()
 		return err
 	}
-	if db.metafile, err = os.OpenFile(db.path, os.O_RDWR|os.O_SYNC, mode); err != nil {
+	if db.metafile, err = db.os.OpenFile(db.path, O_RDWR|O_SYNC, mode); err != nil {
 		db.close()
 		return err
 	}
@@ -140,7 +145,7 @@ func (db *DB) mmap() error {
 
 	// Determine the map size based on the file size.
 	var size int
-	if info, err := os.Stat(db.file.Name()); err != nil {
+	if info, err := db.os.Stat(db.file.Name()); err != nil {
 		return err
 	} else if info.Size() < int64(db.pageSize*2) {
 		return &Error{"file size too small", nil}
@@ -169,7 +174,7 @@ func (db *DB) mmap() error {
 // init creates a new database file and initializes its meta pages.
 func (db *DB) init() error {
 	// Set the page size to the OS page size unless that is larger than max page size.
-	db.pageSize = os.Getpagesize()
+	db.pageSize = db.os.Getpagesize()
 	if db.pageSize > maxPageSize {
 		db.pageSize = maxPageSize
 	}
@@ -765,7 +770,7 @@ func (db *DB) SetFlags(flag int, onoff bool) error {
 	return nil
 }
 
-func (db *DB) Stat() *Stat {
+func (db *DB) Stat() *stat {
 	/*
 		int toggle;
 

@@ -1467,7 +1467,7 @@ func (t *transaction) Bucket(name string, flags int) (*Bucket, error) {
 	return nil, nil
 }
 
-func (t *transaction) Stat(b Bucket) *Stat {
+func (t *transaction) Stat(b Bucket) *stat {
 	/*
 		if (txn == NULL || arg == NULL || dbi >= txn->mt_numdbs)
 			return EINVAL;
