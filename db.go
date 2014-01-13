@@ -15,7 +15,9 @@ const (
 	IntegerDupKey
 )
 
-var DatabaseAlreadyOpenedError = &Error{"Database already open", nil}
+var DatabaseNotOpenError = &Error{"db is not open", nil}
+var DatabaseAlreadyOpenedError = &Error{"db already open", nil}
+var TransactionInProgressError = &Error{"writable transaction is already in progress", nil}
 
 // TODO: #define	MDB_FATAL_ERROR	0x80000000U /** Failed to update the meta page. Probably an I/O error. */
 // TODO: #define	MDB_ENV_ACTIVE	0x20000000U /** Some fields are initialized. */
@@ -44,9 +46,9 @@ type DB struct {
 	mmapSize        int /**< size of the data memory map */
 	size            int /**< current file size */
 	pbuf            []byte
-	transaction     *transaction /**< current write transaction */
+	transaction     *Transaction /**< current write transaction */
 	maxPageNumber   int          /**< me_mapsize / me_psize */
-	pageState       pageState    /**< state of old pages from freeDB */
+	pagestate       pagestate    /**< state of old pages from freeDB */
 	dpages          []*page      /**< list of malloc'd blocks for re-use */
 	freePages       []int        /** IDL of pages that became unused in a write txn */
 	dirtyPages      []int        /** ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
@@ -203,12 +205,50 @@ func (db *DB) close() {
 	// TODO
 }
 
+// Transaction creates a transaction that's associated with this database.
+func (db *DB) Transaction(writable bool) (*Transaction, error) {
+	db.Lock()
+	defer db.Unlock()
+
+	// Exit if the database is not open yet.
+	if !db.opened {
+		return nil, DatabaseNotOpenError
+	}
+	// Exit if a writable transaction is currently in progress.
+	if writable && db.transaction != nil {
+		return nil, TransactionInProgressError
+	}
+
+	// Create a transaction associated with the database.
+	t := &Transaction{
+		db:       db,
+		writable: writable,
+	}
+
+	// We only allow one writable transaction at a time so save the reference.
+	if writable {
+		db.transaction = t
+	}
+
+	return t, nil
+}
+
 // page retrieves a page reference from a given byte array based on the current page size.
 func (db *DB) page(b []byte, id int) *page {
 	return (*page)(unsafe.Pointer(&b[id*db.pageSize]))
 }
 
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
 // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONVERTED ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
 
 func (db *DB) freePage(p *page) {
 	/*
@@ -264,103 +304,6 @@ func (db *DB) sync(force bool) error {
 			return rc;
 	*/
 	return nil
-}
-
-func (db *DB) Transaction(parent *transaction, flags int) (*transaction, error) {
-	/*
-		MDB_txn *txn;
-		MDB_ntxn *ntxn;
-		int rc, size, tsize = sizeof(MDB_txn);
-
-		if (env->me_flags & MDB_FATAL_ERROR) {
-			DPUTS("environment had fatal error, must shutdown!");
-			return MDB_PANIC;
-		}
-		if ((env->me_flags & MDB_RDONLY) && !(flags & MDB_RDONLY))
-			return EACCES;
-		if (parent) {
-			// Nested transactions: Max 1 child, write txns only, no writemap
-			if (parent->mt_child ||
-				(flags & MDB_RDONLY) ||
-				(parent->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_ERROR)) ||
-				(env->me_flags & MDB_WRITEMAP))
-			{
-				return (parent->mt_flags & MDB_TXN_RDONLY) ? EINVAL : MDB_BAD_TXN;
-			}
-			tsize = sizeof(MDB_ntxn);
-		}
-		size = tsize + env->me_maxdbs * (sizeof(MDB_db)+1);
-		if (!(flags & MDB_RDONLY))
-			size += env->me_maxdbs * sizeof(MDB_cursor *);
-
-		if ((txn = calloc(1, size)) == NULL) {
-			DPRINTF(("calloc: %s", strerror(ErrCode())));
-			return ENOMEM;
-		}
-		txn->mt_dbs = (MDB_db *) ((char *)txn + tsize);
-		if (flags & MDB_RDONLY) {
-			txn->mt_flags |= MDB_TXN_RDONLY;
-			txn->mt_dbflags = (unsigned char *)(txn->mt_dbs + env->me_maxdbs);
-		} else {
-			txn->mt_cursors = (MDB_cursor **)(txn->mt_dbs + env->me_maxdbs);
-			txn->mt_dbflags = (unsigned char *)(txn->mt_cursors + env->me_maxdbs);
-		}
-		txn->mt_env = env;
-
-		if (parent) {
-			unsigned int i;
-			txn->mt_u.dirty_list = malloc(sizeof(MDB_ID2)*MDB_IDL_UM_SIZE);
-			if (!txn->mt_u.dirty_list ||
-				!(txn->mt_free_pgs = mdb_midl_alloc(MDB_IDL_UM_MAX)))
-			{
-				free(txn->mt_u.dirty_list);
-				free(txn);
-				return ENOMEM;
-			}
-			txn->mt_txnid = parent->mt_txnid;
-			txn->mt_dirty_room = parent->mt_dirty_room;
-			txn->mt_u.dirty_list[0].mid = 0;
-			txn->mt_spill_pgs = NULL;
-			txn->mt_next_pgno = parent->mt_next_pgno;
-			parent->mt_child = txn;
-			txn->mt_parent = parent;
-			txn->mt_numdbs = parent->mt_numdbs;
-			txn->mt_flags = parent->mt_flags;
-			txn->mt_dbxs = parent->mt_dbxs;
-			memcpy(txn->mt_dbs, parent->mt_dbs, txn->mt_numdbs * sizeof(MDB_db));
-			// Copy parent's mt_dbflags, but clear DB_NEW
-			for (i=0; i<txn->mt_numdbs; i++)
-				txn->mt_dbflags[i] = parent->mt_dbflags[i] & ~DB_NEW;
-			rc = 0;
-			ntxn = (MDB_ntxn *)txn;
-			ntxn->mnt_pgstate = env->me_pgstate; // save parent me_pghead & co
-			if (env->me_pghead) {
-				size = MDB_IDL_SIZEOF(env->me_pghead);
-				env->me_pghead = mdb_midl_alloc(env->me_pghead[0]);
-				if (env->me_pghead)
-					memcpy(env->me_pghead, ntxn->mnt_pgstate.mf_pghead, size);
-				else
-					rc = ENOMEM;
-			}
-			if (!rc)
-				rc = mdb_cursor_shadow(parent, txn);
-			if (rc)
-				mdb_txn_reset0(txn, "beginchild-fail");
-		} else {
-			rc = mdb_txn_renew0(txn);
-		}
-		if (rc)
-			free(txn);
-		else {
-			*ret = txn;
-			DPRINTF(("begin txn %"Z"u%c %p on mdbenv %p, root page %"Z"u",
-				txn->mt_txnid, (txn->mt_flags & MDB_TXN_RDONLY) ? 'r' : 'w',
-				(void *) txn, (void *) env, txn->mt_dbs[MAIN_DBI].md_root));
-		}
-
-		return rc;
-	*/
-	return nil, nil
 }
 
 // Check both meta pages to see which one is newer.

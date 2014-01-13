@@ -1,44 +1,143 @@
 package bolt
 
-// TODO: #define DB_DIRTY	0x01		/**< DB was modified or is DUPSORT data */
-// TODO: #define DB_STALE	0x02		/**< Named-DB record is older than txnID */
-// TODO: #define DB_NEW		0x04		/**< Named-DB handle opened in this txn */
-// TODO: #define DB_VALID	0x08		/**< DB handle is valid, see also #MDB_VALID */
+var TransactionExistingChildError = &Error{"txn already has a child", nil}
+var TransactionReadOnlyChildError = &Error{"read-only txn cannot create a child", nil}
 
-// TODO: #define MDB_TXN_RDONLY		0x01		/**< read-only transaction */
-// TODO: #define MDB_TXN_ERROR		0x02		/**< an error has occurred */
-// TODO: #define MDB_TXN_DIRTY		0x04		/**< must write, even if dirty list is empty */
-// TODO: #define MDB_TXN_SPILLS		0x08		/**< txn or a parent has spilled pages */
+const (
+	txnb_dirty = 0x01 /**< DB was modified or is DUPSORT data */
+	txnb_stale = 0x02 /**< Named-DB record is older than txnID */
+	txnb_new   = 0x04 /**< Named-DB handle opened in this txn */
+	txnb_valid = 0x08 /**< DB handle is valid, see also #MDB_VALID */
+)
 
-type Transaction interface {
-}
+const (
+	ps_modify   = 1
+	ps_rootonly = 2
+	ps_first    = 4
+	ps_last     = 8
+)
 
-type transaction struct {
-	id             int
-	flags          int
-	db             *DB
-	parent         *transaction
-	child          *transaction
-	nextPageNumber int
-	freePages      []int
-	spillPages     []int
-	dirtyList      []int
-	reader         *reader
+type Transaction struct {
+	id       int
+	db       *DB
+	writable bool
+	dirty    bool
+	spilled  bool
+	err      error
+	parent   *Transaction
+	child    *Transaction
+	buckets  []*txnbucket
+
+	pgno       int
+	freePages  []pgno
+	spillPages []pgno
+	dirtyList  []pgno
+	reader     *reader
 	// TODO: bucketxs []*bucketx
-	buckets     []*Bucket
-	bucketFlags []int
-	cursors     []*cursor
 	// Implicit from slices? TODO: MDB_dbi mt_numdbs;
-	mt_dirty_room int
+	dirty_room int
+	pagestate  pagestate
 }
 
-// ntxn represents a nested transaction.
-type ntxn struct {
-	transaction *transaction /**< the transaction */
-	pageState   pageState    /**< parent transaction's saved freestate */
+type txnbucket struct {
+	bucket *Bucket
+	cursor *Cursor
+	flags  int
 }
 
-func (t *transaction) allocPage(num int) *page {
+// Transaction begins a nested child transaction. Child transactions are only
+// available to writable transactions and a transaction can only have one child
+// at a time.
+func (t *Transaction) Transaction() (*Transaction, error) {
+	// Exit if parent already has a child transaction.
+	if t.child != nil {
+		return nil, TransactionExistingChildError
+	}
+	// Exit if using parent for read-only transaction.
+	if !t.writable {
+		return nil, TransactionReadOnlyChildError
+	}
+	// TODO: Exit if parent is in an error state.
+
+	// Create the child transaction and attach the parent.
+	child := &Transaction{
+		id:        t.id,
+		db:        t.db,
+		parent:    t,
+		writable:  true,
+		pgno:      t.pgno,
+		pagestate: t.db.pagestate,
+	}
+	copy(child.buckets, t.buckets)
+
+	// TODO: Remove DB_NEW flag.
+	t.child = child
+
+	// TODO: wtf?
+	// if (env->me_pghead) {
+	//   size = MDB_IDL_SIZEOF(env->me_pghead);
+	//   env->me_pghead = mdb_midl_alloc(env->me_pghead[0]);
+	//   if (env->me_pghead)
+	//     memcpy(env->me_pghead, ntxn->mnt_pgstate.mf_pghead, size);
+	//   else
+	//     rc = ENOMEM;
+	// }
+
+	// TODO: Back up parent transaction's cursors.
+	// if t.shadow(child); err != nil {
+	// 	child.reset0()
+	// 	return err
+	// }
+
+	return child, nil
+}
+
+func (t *Transaction) Cursor(b *Bucket) (*Cursor, error) {
+	// TODO: if !(txn->mt_dbflags[dbi] & DB_VALID) return InvalidBucketError
+	// TODO: if (txn->mt_flags & MDB_TXN_ERROR) return BadTransactionError
+
+	// Allow read access to the freelist
+	// TODO: if (!dbi && !F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
+
+	/*
+		MDB_cursor	*mc;
+		size_t size = sizeof(MDB_cursor);
+
+		// Allow read access to the freelist
+		if (!dbi && !F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
+			return EINVAL;
+
+		if ((mc = malloc(size)) != NULL) {
+			mdb_cursor_init(mc, txn, dbi, (MDB_xcursor *)(mc + 1));
+			if (txn->mt_cursors) {
+				mc->mc_next = txn->mt_cursors[dbi];
+				txn->mt_cursors[dbi] = mc;
+				mc->mc_flags |= C_UNTRACK;
+			}
+		} else {
+			return ENOMEM;
+		}
+
+		*ret = mc;
+
+		return MDB_SUCCESS;
+	*/
+	return nil, nil
+}
+
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONVERTED ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+
+func (t *Transaction) allocPage(num int) *page {
 	/*
 		MDB_env *env = txn->mt_env;
 		MDB_page *ret = env->me_dpages;
@@ -74,7 +173,7 @@ func (t *transaction) allocPage(num int) *page {
 }
 
 // Find oldest txnid still referenced. Expects txn->mt_txnid > 0.
-func (t *transaction) oldest() int {
+func (t *Transaction) oldest() int {
 	/*
 		int i;
 		txnid_t mr, oldest = txn->mt_txnid - 1;
@@ -94,7 +193,7 @@ func (t *transaction) oldest() int {
 }
 
 // Add a page to the txn's dirty list
-func (t *transaction) dirty(p *page) {
+func (t *Transaction) addDirtyPage(p *page) {
 	/*
 		MDB_ID2 mid;
 		int rc, (*insert)(MDB_ID2L, MDB_ID2 *);
@@ -119,7 +218,7 @@ func (t *transaction) dirty(p *page) {
 // @param[in] mp the page being referenced. It must not be dirty.
 // @param[out] ret the writable page, if any. ret is unchanged if
 // mp wasn't spilled.
-func (t *transaction) unspill(p *page) *page {
+func (t *Transaction) unspill(p *page) *page {
 	/*
 		MDB_env *env = txn->mt_env;
 		const MDB_txn *tx2;
@@ -173,7 +272,7 @@ func (t *transaction) unspill(p *page) *page {
 }
 
 // Back up parent txn's cursors, then grab the originals for tracking
-func (t *transaction) shadow(dst *transaction) error {
+func (t *Transaction) shadow(dst *Transaction) error {
 	/*
 		MDB_cursor *mc, *bk;
 		MDB_xcursor *mx;
@@ -214,7 +313,7 @@ func (t *transaction) shadow(dst *transaction) error {
 // @param[in] txn the transaction handle.
 // @param[in] merge true to keep changes to parent cursors, false to revert.
 // @return 0 on success, non-zero on failure.
-func (t *transaction) closeCursors(merge bool) {
+func (t *Transaction) closeCursors(merge bool) {
 	/*
 		MDB_cursor **cursors = txn->mt_cursors, *mc, *next, *bk;
 		MDB_xcursor *mx;
@@ -252,7 +351,7 @@ func (t *transaction) closeCursors(merge bool) {
 // Common code for #mdb_txn_begin() and #mdb_txn_renew().
 // @param[in] txn the transaction handle to initialize
 // @return 0 on success, non-zero on failure.
-func (t *transaction) renew() error {
+func (t *Transaction) renew() error {
 	/*
 			MDB_env *env = txn->mt_env;
 			MDB_txninfo *ti = env->me_txns;
@@ -366,7 +465,7 @@ func (t *transaction) renew() error {
 	return nil
 }
 
-func (t *transaction) Renew() error {
+func (t *Transaction) Renew() error {
 	/*
 		int rc;
 
@@ -389,12 +488,12 @@ func (t *transaction) Renew() error {
 	return nil
 }
 
-func (t *transaction) DB() *DB {
+func (t *Transaction) DB() *DB {
 	return t.db
 }
 
 // Export or close DBI handles opened in this txn.
-func (t *transaction) updateBuckets(keep bool) {
+func (t *Transaction) updateBuckets(keep bool) {
 	/*
 		int i;
 		MDB_dbi n = txn->mt_numdbs;
@@ -423,7 +522,7 @@ func (t *transaction) updateBuckets(keep bool) {
 // May be called twice for readonly txns: First reset it, then abort.
 // @param[in] txn the transaction handle to reset
 // @param[in] act why the transaction is being reset
-func (t *transaction) reset(act string) {
+func (t *Transaction) reset(act string) {
 	/*
 		MDB_env	*env = txn->mt_env;
 
@@ -472,7 +571,7 @@ func (t *transaction) reset(act string) {
 	*/
 }
 
-func (t *transaction) Reset() {
+func (t *Transaction) Reset() {
 	/*
 		if (txn == NULL)
 			return;
@@ -485,7 +584,7 @@ func (t *transaction) Reset() {
 	*/
 }
 
-func (t *transaction) Abort() {
+func (t *Transaction) Abort() {
 	/*
 		if (txn == NULL)
 			return;
@@ -504,7 +603,7 @@ func (t *transaction) Abort() {
 
 // Save the freelist as of this transaction to the freeDB.
 // This changes the freelist. Keep trying until it stabilizes.
-func (t *transaction) saveFreelist() error {
+func (t *Transaction) saveFreelist() error {
 	/*
 			// env->me_pghead[] can grow and shrink during this call.
 			// env->me_pglast and txn->mt_free_pgs[] can only grow.
@@ -662,7 +761,7 @@ func (t *transaction) saveFreelist() error {
 // @param[in] txn the transaction that's being committed
 // @param[in] keep number of initial pages in dirty_list to keep dirty.
 // @return 0 on success, non-zero on failure.
-func (t *transaction) flush(keep bool) error {
+func (t *Transaction) flush(keep bool) error {
 	/*
 			MDB_env		*env = txn->mt_env;
 			MDB_ID2L	dl = txn->mt_u.dirty_list;
@@ -1005,7 +1104,7 @@ func (t *transaction) flush(keep bool) error {
 // Update the environment info to commit a transaction.
 // @param[in] txn the transaction that's being committed
 // @return 0 on success, non-zero on failure.
-func (t *transaction) writeMeta() error {
+func (t *Transaction) writeMeta() error {
 	/*
 			MDB_env *env;
 			MDB_meta	meta, metab, *mp;
@@ -1129,7 +1228,7 @@ func (t *transaction) writeMeta() error {
 // @param[out] ret address of a pointer where the page's address will be stored.
 // @param[out] lvl dirty_list inheritance level of found page. 1=current txn, 0=mapped page.
 // @return 0 on success, non-zero on failure.
-func (t *transaction) getPage(id int) (*page, int, error) {
+func (t *Transaction) getPage(id int) (*page, int, error) {
 	/*
 			MDB_env *env = txn->mt_env;
 			MDB_page *p = NULL;
@@ -1188,7 +1287,7 @@ func (t *transaction) getPage(id int) (*page, int, error) {
 // @param[in] leaf The node being read.
 // @param[out] data Updated to point to the node's data.
 // @return 0 on success, non-zero on failure.
-func (t *transaction) readNode(leaf *node, data []byte) error {
+func (t *Transaction) readNode(leaf *node, data []byte) error {
 	/*
 		MDB_page	*omp;		// overflow page
 		pgno_t		 pgno;
@@ -1214,7 +1313,7 @@ func (t *transaction) readNode(leaf *node, data []byte) error {
 	return nil
 }
 
-func (t *transaction) Get(bucket Bucket, key []byte) ([]byte, error) {
+func (t *Transaction) Get(bucket Bucket, key []byte) ([]byte, error) {
 	/*
 		MDB_cursor	mc;
 		MDB_xcursor	mx;
@@ -1238,43 +1337,7 @@ func (t *transaction) Get(bucket Bucket, key []byte) ([]byte, error) {
 	return nil, nil
 }
 
-func (t *transaction) Cursor(b Bucket) (Cursor, error) {
-	/*
-		MDB_cursor	*mc;
-		size_t size = sizeof(MDB_cursor);
-
-		if (txn == NULL || ret == NULL || dbi >= txn->mt_numdbs || !(txn->mt_dbflags[dbi] & DB_VALID))
-			return EINVAL;
-
-		if (txn->mt_flags & MDB_TXN_ERROR)
-			return MDB_BAD_TXN;
-
-		// Allow read access to the freelist
-		if (!dbi && !F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
-			return EINVAL;
-
-		if (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT)
-			size += sizeof(MDB_xcursor);
-
-		if ((mc = malloc(size)) != NULL) {
-			mdb_cursor_init(mc, txn, dbi, (MDB_xcursor *)(mc + 1));
-			if (txn->mt_cursors) {
-				mc->mc_next = txn->mt_cursors[dbi];
-				txn->mt_cursors[dbi] = mc;
-				mc->mc_flags |= C_UNTRACK;
-			}
-		} else {
-			return ENOMEM;
-		}
-
-		*ret = mc;
-
-		return MDB_SUCCESS;
-	*/
-	return nil, nil
-}
-
-func (t *transaction) Renew1(c Cursor) error {
+func (t *Transaction) Renew1(c Cursor) error {
 	/*
 		if (txn == NULL || mc == NULL || mc->mc_dbi >= txn->mt_numdbs)
 			return EINVAL;
@@ -1288,7 +1351,7 @@ func (t *transaction) Renew1(c Cursor) error {
 	return nil
 }
 
-func (t *transaction) Delete(b *Bucket, key []byte, data []byte) error {
+func (t *Transaction) Delete(b *Bucket, key []byte, data []byte) error {
 	/*
 		MDB_cursor mc;
 		MDB_xcursor mx;
@@ -1343,7 +1406,7 @@ func (t *transaction) Delete(b *Bucket, key []byte, data []byte) error {
 	return nil
 }
 
-func (t *transaction) Put(b Bucket, key []byte, data []byte, flags int) error {
+func (t *Transaction) Put(b Bucket, key []byte, data []byte, flags int) error {
 	/*
 		MDB_cursor mc;
 		MDB_xcursor mx;
@@ -1363,7 +1426,7 @@ func (t *transaction) Put(b Bucket, key []byte, data []byte, flags int) error {
 	return nil
 }
 
-func (t *transaction) Bucket(name string, flags int) (*Bucket, error) {
+func (t *Transaction) Bucket(name string, flags int) (*Bucket, error) {
 	/*
 		MDB_val key, data;
 		MDB_dbi i;
@@ -1467,7 +1530,7 @@ func (t *transaction) Bucket(name string, flags int) (*Bucket, error) {
 	return nil, nil
 }
 
-func (t *transaction) Stat(b Bucket) *stat {
+func (t *Transaction) Stat(b Bucket) *stat {
 	/*
 		if (txn == NULL || arg == NULL || dbi >= txn->mt_numdbs)
 			return EINVAL;
@@ -1483,7 +1546,7 @@ func (t *transaction) Stat(b Bucket) *stat {
 	return nil
 }
 
-func (t *transaction) BucketFlags(b Bucket) (int, error) {
+func (t *Transaction) BucketFlags(b Bucket) (int, error) {
 	/*
 		// We could return the flags for the FREE_DBI too but what's the point?
 		if (txn == NULL || dbi < MAIN_DBI || dbi >= txn->mt_numdbs)
@@ -1494,7 +1557,7 @@ func (t *transaction) BucketFlags(b Bucket) (int, error) {
 	return 0, nil
 }
 
-func (t *transaction) Drop(b *Bucket, del int) error {
+func (t *Transaction) Drop(b *Bucket, del int) error {
 	/*
 			MDB_cursor *mc, *m2;
 			int rc;

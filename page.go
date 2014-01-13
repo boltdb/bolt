@@ -38,10 +38,12 @@ const maxWriteByteCount uint = 0x80000000 // TODO: #define MAX_WRITE 0x80000000U
 // #define MDB_COMMIT_PAGES	IOV_MAX
 // #endif
 
-// TODO: #define MDB_PS_MODIFY	1
-// TODO: #define MDB_PS_ROOTONLY	2
-// TODO: #define MDB_PS_FIRST	4
-// TODO: #define MDB_PS_LAST		8
+const (
+	MDB_PS_MODIFY   = 1
+	MDB_PS_ROOTONLY = 2
+	MDB_PS_FIRST    = 4
+	MDB_PS_LAST     = 8
+)
 
 // TODO: #define MDB_SPLIT_REPLACE	MDB_APPENDDUP	/**< newkey is not new */
 
@@ -58,7 +60,7 @@ type page struct {
 	ptr      int
 }
 
-type pageState struct {
+type pagestate struct {
 	head int /**< Reclaimed freeDB pages, or NULL before use */
 	last int /**< ID of last used record, or 0 if !mf_pghead */
 }

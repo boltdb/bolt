@@ -180,6 +180,41 @@ func TestDBCorruptMeta1(t *testing.T) {
 	})
 }
 
+//--------------------------------------
+// Transaction()
+//--------------------------------------
+
+// Ensure that a database cannot open a transaction when it's not open.
+func TestDBTransactionDatabaseNotOpenError(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		txn, err := db.Transaction(false)
+		assert.Nil(t, txn)
+		assert.Equal(t, err, DatabaseNotOpenError)
+	})
+}
+
+// Ensure that a database cannot open a writable transaction while one is in progress.
+func TestDBTransactionInProgressError(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Transaction(true)
+		txn, err := db.Transaction(true)
+		assert.Nil(t, txn)
+		assert.Equal(t, err, TransactionInProgressError)
+	})
+}
+
+// Ensure that a database can create a new writable transaction.
+func TestDBTransactionWriter(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		txn, err := db.Transaction(true)
+		if assert.NotNil(t, txn) {
+			assert.Equal(t, txn.db, db)
+			assert.Equal(t, txn.writable, true)
+		}
+		assert.NoError(t, err)
+	})
+}
+
 // withDB executes a function with a database reference.
 func withDB(fn func(*DB, string)) {
 	f, _ := ioutil.TempFile("", "bolt-")
@@ -199,4 +234,15 @@ func withMockDB(fn func(*DB, *mockos, *mocksyscall, string)) {
 	db.os = os
 	db.syscall = syscall
 	fn(db, os, syscall, "/mock/db")
+}
+
+// withOpenDB executes a function with an already opened database.
+func withOpenDB(fn func(*DB, string)) {
+	withDB(func(db *DB, path string) {
+		if err := db.Open(path, 0666); err != nil {
+			panic("cannot open db: " + err.Error())
+		}
+		defer db.Close()
+		fn(db, path)
+	})
 }

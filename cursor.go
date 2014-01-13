@@ -2,15 +2,18 @@ package bolt
 
 // TODO: #define CURSOR_STACK		 32
 
-// TODO: #define C_INITIALIZED	0x01	/**< cursor has been initialized and is valid */
-// TODO: #define C_EOF	0x02			/**< No more data */
-// TODO: #define C_SUB	0x04			/**< Cursor is a sub-cursor */
-// TODO: #define C_DEL	0x08			/**< last op was a cursor_del */
-// TODO: #define C_SPLITTING	0x20		/**< Cursor is in page_split */
-// TODO: #define C_UNTRACK	0x40		/**< Un-track cursor when closing */
+const (
+	c_initialized = 0x01 /**< cursor has been initialized and is valid */
+	c_eof         = 0x02 /**< No more data */
+	c_sub         = 0x04 /**< Cursor is a sub-cursor */
+	c_del         = 0x08 /**< last op was a cursor_del */
+	c_splitting   = 0x20 /**< Cursor is in page_split */
+	c_untrack     = 0x40 /**< Un-track cursor when closing */
+)
 
 // TODO: #define MDB_NOSPILL	0x8000 /** Do not spill pages to disk if txn is getting full, may fail instead */
 
+/*
 type Cursor interface {
 	First() error
 	FirstDup() error
@@ -28,29 +31,67 @@ type Cursor interface {
 	Set() ([]byte, []byte, error)
 	SetRange() ([]byte, []byte, error)
 }
+*/
 
-type cursor struct {
+type Cursor struct {
 	flags       int
-	_next       *cursor
-	backup      *cursor
-	xcursor     *xcursor
-	transaction *transaction
+	next        *Cursor
+	backup      *Cursor
+	subcursor   *Cursor
+	transaction *Transaction
 	bucketId    int
-	bucket      *Bucket
-	// bucketx     *bucketx
-	bucketFlag int
-	snum       int
-	top        int
-	page       []*page
-	ki         []int /**< stack of page indices */
+	bucket      *txnbucket
+	subbucket   *Bucket
+	// subbucketx    *bucketx
+	subbucketFlag int
+	snum          int
+	top           int
+	page          []*page
+	ki            []int /**< stack of page indices */
 }
 
-type xcursor struct {
-	cursor cursor
-	bucket *Bucket
-	// bucketx    *bucketx
-	bucketFlag int
+// Initialize a cursor for a given transaction and database.
+func (c *Cursor) init(t *Transaction, b *txnbucket, sub *Cursor) {
+	c.next = nil
+	c.backup = nil
+	c.transaction = t
+	c.bucket = b
+	c.snum = 0
+	c.top = 0
+	// TODO: mc->mc_pg[0] = 0;
+	c.flags = 0
+
+	if (b.flags & MDB_DUPSORT) != 0 {
+		sub.subcursor = nil
+		sub.transaction = t
+		sub.bucket = b
+		sub.snum = 0
+		sub.top = 0
+		sub.flags = c_sub
+		// TODO: mx->mx_dbx.md_name.mv_size = 0;
+		// TODO: mx->mx_dbx.md_name.mv_data = NULL;
+		c.subcursor = sub
+	} else {
+		c.subcursor = nil
+	}
+
+	// Find the root page if the bucket is stale.
+	if (c.bucket.flags & txnb_stale) != 0 {
+		c.findPage(nil, ps_rootonly)
+	}
 }
+
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ CONVERTED ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
+//                                                                            //
 
 // Set or clear P_KEEP in dirty, non-overflow, non-sub pages watched by txn.
 // @param[in] mc A cursor handle for the current operation.
@@ -58,7 +99,7 @@ type xcursor struct {
 // P_DIRTY to set P_KEEP, P_DIRTY|P_KEEP to clear it.
 // @param[in] all No shortcuts. Needed except after a full #mdb_page_flush().
 // @return 0 on success, non-zero on failure.
-func (c *cursor) xkeep(pflags int, all int) error {
+func (c *Cursor) xkeep(pflags int, all int) error {
 	/*
 		enum { Mask = P_SUBP|P_DIRTY|P_KEEP };
 		MDB_txn *txn = mc->mc_txn;
@@ -149,7 +190,7 @@ func (c *cursor) xkeep(pflags int, all int) error {
 // @param[in] key For a put operation, the key being stored.
 // @param[in] data For a put operation, the data being stored.
 // @return 0 on success, non-zero on failure.
-func (c *cursor) spill(key []byte, data []byte) error {
+func (c *Cursor) spill(key []byte, data []byte) error {
 	/*
 			MDB_txn *txn = m0->mc_txn;
 			MDB_page *dp;
@@ -424,7 +465,7 @@ func (p *page) copyTo(dst *page, size int) {
 // Touch a page: make it dirty and re-insert into tree with updated pgno.
 // @param[in] mc cursor pointing to the page to be touched
 // @return 0 on success, non-zero on failure.
-func (c *cursor) page_touch() int {
+func (c *Cursor) page_touch() int {
 	/*
 			MDB_page *mp = mc->mc_pg[mc->mc_top], *np;
 			MDB_txn *txn = mc->mc_txn;
@@ -532,7 +573,7 @@ func (c *cursor) page_touch() int {
 // in *exactp (1 or 0).
 // Updates the cursor index with the index of the found entry.
 // If no entry larger or equal to the key is found, returns NULL.
-func (c *cursor) search(key []byte) (*node, bool) {
+func (c *Cursor) search(key []byte) (*node, bool) {
 	/*
 			unsigned int	 i = 0, nkeys;
 			int		 low, high;
@@ -623,7 +664,7 @@ func (c *cursor) search(key []byte) (*node, bool) {
 	return nil, false
 }
 
-func (c *cursor) pop() {
+func (c *Cursor) pop() {
 	/*
 			if (mc->mc_snum) {
 		#if MDB_DEBUG
@@ -640,7 +681,7 @@ func (c *cursor) pop() {
 }
 
 /** Push a page onto the top of the cursor's stack. */
-func (c *cursor) push(p *page) error {
+func (c *Cursor) push(p *page) error {
 	/*
 		DPRINTF(("pushing page %"Z"u on db %d cursor %p", mp->mp_pgno,
 			DDBI(mc), (void *) mc));
@@ -661,7 +702,7 @@ func (c *cursor) push(p *page) error {
 
 // Finish #mdb_page_search() / #mdb_page_search_lowest().
 // The cursor is at the root page, set up the rest of it.
-func (c *cursor) searchRoot(key []byte, flags int) error {
+func (c *Cursor) searchRoot(key []byte, flags int) error {
 	/*
 		MDB_page	*mp = mc->mc_pg[mc->mc_top];
 		int rc;
@@ -733,7 +774,7 @@ func (c *cursor) searchRoot(key []byte, flags int) error {
 // before calling mdb_page_search_root(), because the callers
 // are all in situations where the current page is known to
 // be underfilled.
-func (c *cursor) searchLowest() error {
+func (c *Cursor) searchLowest() error {
 	/*
 		MDB_page	*mp = mc->mc_pg[mc->mc_top];
 		MDB_node	*node = NODEPTR(mp, 0);
@@ -760,7 +801,7 @@ func (c *cursor) searchLowest() error {
 //   This is used by #mdb_cursor_first() and #mdb_cursor_last().
 //   If MDB_PS_ROOTONLY set, just fetch root node, no further lookups.
 // @return 0 on success, non-zero on failure.
-func (c *cursor) findPage(key []byte, flags int) error {
+func (c *Cursor) findPage(key []byte, flags int) error {
 	/*
 		int		 rc;
 		pgno_t		 root;
@@ -831,7 +872,7 @@ func (c *cursor) findPage(key []byte, flags int) error {
 	return nil
 }
 
-func (c *cursor) freeOverflowPage(p *page) error {
+func (c *Cursor) freeOverflowPage(p *page) error {
 	/*
 			MDB_txn *txn = mc->mc_txn;
 			pgno_t pg = mp->mp_pgno;
@@ -913,7 +954,7 @@ func (c *cursor) freeOverflowPage(p *page) error {
 // @param[in] move_right Non-zero if the right sibling is requested,
 // otherwise the left sibling.
 // @return 0 on success, non-zero on failure.
-func (c *cursor) sibling(moveRight bool) error {
+func (c *Cursor) sibling(moveRight bool) error {
 	/*
 		int		 rc;
 		MDB_node	*indx;
@@ -964,7 +1005,7 @@ func (c *cursor) sibling(moveRight bool) error {
 }
 
 // Move the cursor to the next data item.
-func (c *cursor) next(key []byte, data []byte, op int) error {
+func (c *Cursor) Next(key []byte, data []byte, op int) error {
 	/*
 			MDB_page	*mp;
 			MDB_node	*leaf;
@@ -1046,7 +1087,7 @@ func (c *cursor) next(key []byte, data []byte, op int) error {
 }
 
 // Move the cursor to the previous data item.
-func (c *cursor) prev(key []byte, data []byte, op int) error {
+func (c *Cursor) prev(key []byte, data []byte, op int) error {
 	/*
 		MDB_page	*mp;
 		MDB_node	*leaf;
@@ -1124,7 +1165,7 @@ func (c *cursor) prev(key []byte, data []byte, op int) error {
 
 // Set the cursor on a specific data item.
 // (bool return is whether it is exact).
-func (c *cursor) set(key []byte, data []byte, op int) (error, bool) {
+func (c *Cursor) set(key []byte, data []byte, op int) (error, bool) {
 	/*
 			int		 rc;
 			MDB_page	*mp;
@@ -1310,7 +1351,7 @@ func (c *cursor) set(key []byte, data []byte, op int) (error, bool) {
 }
 
 // Move the cursor to the first item in the database.
-func (c *cursor) first(key []byte, data []byte) error {
+func (c *Cursor) first(key []byte, data []byte) error {
 	/*
 		int		 rc;
 		MDB_node	*leaf;
@@ -1355,7 +1396,7 @@ func (c *cursor) first(key []byte, data []byte) error {
 }
 
 // Move the cursor to the last item in the database.
-func (c *cursor) last() ([]byte, []byte) {
+func (c *Cursor) last() ([]byte, []byte) {
 	/*
 		int		 rc;
 		MDB_node	*leaf;
@@ -1401,7 +1442,7 @@ func (c *cursor) last() ([]byte, []byte) {
 	return nil, nil
 }
 
-func (c *cursor) Get(key []byte, data []byte, op int) ([]byte, []byte, error) {
+func (c *Cursor) Get(key []byte, data []byte, op int) ([]byte, []byte, error) {
 	/*
 			int		 rc;
 			int		 exact = 0;
@@ -1569,7 +1610,7 @@ func (c *cursor) Get(key []byte, data []byte, op int) ([]byte, []byte, error) {
 // Touch all the pages in the cursor stack. Set mc_top.
 //	Makes sure all the pages are writable, before attempting a write operation.
 // @param[in] mc The cursor to operate on.
-func (c *cursor) touch() error {
+func (c *Cursor) touch() error {
 	/*
 			int rc = MDB_SUCCESS;
 
@@ -2072,7 +2113,7 @@ func (c *cursor) touch() error {
 	return nil
 }
 
-func (c *cursor) Del(flags int) error {
+func (c *Cursor) Del(flags int) error {
 	/*
 		MDB_node	*leaf;
 		MDB_page	*mp;
@@ -2152,7 +2193,7 @@ func (c *cursor) Del(flags int) error {
 // unless allocating overflow pages for a large record.
 // @param[out] mp Address of a page, or NULL on failure.
 // @return 0 on success, non-zero on failure.
-func (c *cursor) newPage(flags int, num int) ([]*page, error) {
+func (c *Cursor) newPage(flags int, num int) ([]*page, error) {
 	/*
 		MDB_page	*np;
 		int rc;
@@ -2194,7 +2235,7 @@ func (c *cursor) newPage(flags int, num int) ([]*page, error) {
 //	should never happen since all callers already calculate the
 //	page's free space before calling this function.
 // </ul>
-func (c *cursor) addNode(index int, key []byte, data []byte, pgno int, flags int) error {
+func (c *Cursor) addNode(index int, key []byte, data []byte, pgno int, flags int) error {
 	/*
 			unsigned int	 i;
 			size_t		 node_size = NODESIZE;
@@ -2323,7 +2364,7 @@ func (c *cursor) addNode(index int, key []byte, data []byte, pgno int, flags int
 // @param[in] indx The index of the node to delete.
 // @param[in] ksize The size of a node. Only used if the page is
 // part of a #MDB_DUPFIXED database.
-func (c *cursor) deleteNode(ksize int) {
+func (c *Cursor) deleteNode(ksize int) {
 	/*
 		MDB_page *mp = mc->mc_pg[mc->mc_top];
 		indx_t	indx = mc->mc_ki[mc->mc_top];
@@ -2375,41 +2416,12 @@ func (c *cursor) deleteNode(ksize int) {
 	*/
 }
 
-// Initial setup of a sorted-dups cursor.
-// Sorted duplicates are implemented as a sub-database for the given key.
-// The duplicate data items are actually keys of the sub-database.
-// Operations on the duplicate data items are performed using a sub-cursor
-// initialized when the sub-database is first accessed. This function does
-// the preliminary setup of the sub-cursor, filling in the fields that
-// depend only on the parent DB.
-// @param[in] mc The main cursor whose sorted-dups cursor is to be initialized.
-func (c *cursor) xcursor_init0() {
-	/*
-		MDB_xcursor *mx = mc->mc_xcursor;
-
-		mx->mx_cursor.mc_xcursor = NULL;
-		mx->mx_cursor.mc_txn = mc->mc_txn;
-		mx->mx_cursor.mc_db = &mx->mx_db;
-		mx->mx_cursor.mc_dbx = &mx->mx_dbx;
-		mx->mx_cursor.mc_dbi = mc->mc_dbi;
-		mx->mx_cursor.mc_dbflag = &mx->mx_dbflag;
-		mx->mx_cursor.mc_snum = 0;
-		mx->mx_cursor.mc_top = 0;
-		mx->mx_cursor.mc_flags = C_SUB;
-		mx->mx_dbx.md_name.mv_size = 0;
-		mx->mx_dbx.md_name.mv_data = NULL;
-		mx->mx_dbx.md_cmp = mc->mc_dbx->md_dcmp;
-		mx->mx_dbx.md_dcmp = NULL;
-		mx->mx_dbx.md_rel = mc->mc_dbx->md_rel;
-	*/
-}
-
 // Final setup of a sorted-dups cursor.
 //	Sets up the fields that depend on the data from the main cursor.
 // @param[in] mc The main cursor whose sorted-dups cursor is to be initialized.
 // @param[in] node The data containing the #MDB_db record for the
 // sorted-dup database.
-func (c *cursor) xcursor_init1(n *node) {
+func (c *Cursor) xcursor_init1(n *node) {
 	/*
 			MDB_xcursor *mx = mc->mc_xcursor;
 
@@ -2455,35 +2467,8 @@ func (c *cursor) xcursor_init1(n *node) {
 	*/
 }
 
-// Initialize a cursor for a given transaction and database.
-func (c *cursor) init(t *transaction, bucket *Bucket, mx *xcursor) {
-	/*
-		mc->mc_next = NULL;
-		mc->mc_backup = NULL;
-		mc->mc_dbi = dbi;
-		mc->mc_txn = txn;
-		mc->mc_db = &txn->mt_dbs[dbi];
-		mc->mc_dbx = &txn->mt_dbxs[dbi];
-		mc->mc_dbflag = &txn->mt_dbflags[dbi];
-		mc->mc_snum = 0;
-		mc->mc_top = 0;
-		mc->mc_pg[0] = 0;
-		mc->mc_flags = 0;
-		if (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT) {
-			mdb_tassert(txn, mx != NULL);
-			mc->mc_xcursor = mx;
-			mdb_xcursor_init0(mc);
-		} else {
-			mc->mc_xcursor = NULL;
-		}
-		if (*mc->mc_dbflag & DB_STALE) {
-			mdb_page_search(mc, NULL, MDB_PS_ROOTONLY);
-		}
-	*/
-}
-
 // Return the count of duplicate data items for the current key.
-func (c *cursor) count() (int, error) {
+func (c *Cursor) count() (int, error) {
 	/*
 		MDB_node	*leaf;
 
@@ -2507,7 +2492,7 @@ func (c *cursor) count() (int, error) {
 	return 0, nil
 }
 
-func (c *cursor) Close() {
+func (c *Cursor) Close() {
 	/*
 		if (mc && !mc->mc_backup) {
 			// remove from txn, if tracked
@@ -2522,23 +2507,19 @@ func (c *cursor) Close() {
 	*/
 }
 
-func (c *cursor) Transaction() Transaction {
-	/*
-		if (!mc) return NULL;
-		return mc->mc_txn;
-	*/
-	return nil
+func (c *Cursor) Transaction() *Transaction {
+	return c.transaction
 }
 
-func (c *cursor) Bucket() *Bucket {
-	return c.bucket
+func (c *Cursor) Bucket() *Bucket {
+	return c.bucket.bucket
 }
 
 // Replace the key for a branch node with a new key.
 // @param[in] mc Cursor pointing to the node to operate on.
 // @param[in] key The new key to use.
 // @return 0 on success, non-zero on failure.
-func (c *cursor) updateKey(key []byte) error {
+func (c *Cursor) updateKey(key []byte) error {
 	/*
 			MDB_page		*mp;
 			MDB_node		*node;
@@ -2609,7 +2590,7 @@ func (c *cursor) updateKey(key []byte) error {
 }
 
 // Move a node from csrc to cdst.
-func (c *cursor) moveNodeTo(dst *cursor) error {
+func (c *Cursor) moveNodeTo(dst *Cursor) error {
 	/*
 		MDB_node		*srcnode;
 		MDB_val		 key, data;
@@ -2786,7 +2767,7 @@ func (c *cursor) moveNodeTo(dst *cursor) error {
 //	the \b csrc page will be freed.
 // @param[in] csrc Cursor pointing to the source page.
 // @param[in] cdst Cursor pointing to the destination page.
-func (c *cursor) mergePage(dst *cursor) error {
+func (c *Cursor) mergePage(dst *Cursor) error {
 	/*
 		int			 rc;
 		indx_t			 i, j;
@@ -2901,7 +2882,7 @@ func (c *cursor) mergePage(dst *cursor) error {
 // Copy the contents of a cursor.
 // @param[in] csrc The cursor to copy from.
 // @param[out] cdst The cursor to copy to.
-func (c *cursor) copyTo(dst *cursor) {
+func (c *Cursor) copyTo(dst *Cursor) {
 	/*
 		unsigned int i;
 
@@ -2924,7 +2905,7 @@ func (c *cursor) copyTo(dst *cursor) {
 // @param[in] mc Cursor pointing to the page where rebalancing
 // should begin.
 // @return 0 on success, non-zero on failure.
-func (c *cursor) rebalance() error {
+func (c *Cursor) rebalance() error {
 	/*
 		MDB_node	*node;
 		int rc;
@@ -3079,7 +3060,7 @@ func (c *cursor) rebalance() error {
 }
 
 // Complete a delete operation started by #mdb_cursor_del().
-func (c *cursor) del0(leaf *node) error {
+func (c *Cursor) del0(leaf *node) error {
 	/*
 		int rc;
 		MDB_page *mp;
@@ -3149,7 +3130,7 @@ func (c *cursor) del0(leaf *node) error {
 // @param[in] newpgno The page number, if the new node is a branch node.
 // @param[in] nflags The #NODE_ADD_FLAGS for the new node.
 // @return 0 on success, non-zero on failure.
-func (c *cursor) splitPage(newKey []byte, newData []byte, newpgno int, nflags int) error {
+func (c *Cursor) splitPage(newKey []byte, newData []byte, newpgno int, nflags int) error {
 	/*
 		unsigned int flags;
 		int		 rc = MDB_SUCCESS, new_root = 0, did_split = 0;
@@ -3533,7 +3514,7 @@ func (c *cursor) splitPage(newKey []byte, newData []byte, newpgno int, nflags in
 // @param[in] mc Cursor on the DB to free.
 // @param[in] subs non-Zero to check for sub-DBs in this DB.
 // @return 0 on success, non-zero on failure.
-func (c *cursor) drop0(subs int) error {
+func (c *Cursor) drop0(subs int) error {
 	/*
 		int rc;
 
