@@ -149,7 +149,7 @@ func (db *DB) mmap() error {
 
 	// Determine the map size based on the file size.
 	var size int
-	if info, err := db.os.Stat(db.path); err != nil {
+	if info, err := db.file.Stat(); err != nil {
 		return err
 	} else if info.Size() < int64(db.pageSize*2) {
 		return &Error{"file size too small", nil}
@@ -188,7 +188,7 @@ func (db *DB) init() error {
 	for i := 0; i < 2; i++ {
 		p := db.page(buf[:], i)
 		p.id = pgno(i)
-		p.initMeta(db.pageSize)
+		p.init(db.pageSize)
 	}
 
 	// Write the buffer to our data file.

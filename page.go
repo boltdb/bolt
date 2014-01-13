@@ -78,8 +78,8 @@ func (p *page) meta() (*meta, error) {
 	return m, nil
 }
 
-// initMeta initializes a page as a new meta page.
-func (p *page) initMeta(pageSize int) {
+// init initializes a page as a new meta page.
+func (p *page) init(pageSize int) {
 	p.flags = p_meta
 	m := (*meta)(unsafe.Pointer(&p.ptr))
 	m.magic = magic

@@ -10,9 +10,9 @@ type mockos struct {
 	mock.Mock
 }
 
-func (m *mockos) OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error) {
+func (m *mockos) OpenFile(name string, flag int, perm os.FileMode) (file file, err error) {
 	args := m.Called(name, flag, perm)
-	return args.Get(0).(*os.File), args.Error(1)
+	return args.Get(0).(*mockfile), args.Error(1)
 }
 
 func (m *mockos) Stat(name string) (fi os.FileInfo, err error) {
