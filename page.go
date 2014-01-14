@@ -89,7 +89,7 @@ func (p *page) init(pageSize int) {
 	m.free.pad = uint32(pageSize)
 	m.pgno = 1
 	m.free.root = p_invalid
-	m.main.root = p_invalid
+	m.buckets.root = p_invalid
 }
 
 // nodeCount returns the number of nodes on the page.

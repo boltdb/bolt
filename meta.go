@@ -31,8 +31,8 @@ const version uint32 = 1
 type meta struct {
 	magic   uint32
 	version uint32
-	free    Bucket
-	main    Bucket
+	free    bucket
+	buckets bucket
 	pgno    int
 	txnid   int
 }

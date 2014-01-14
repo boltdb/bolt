@@ -37,10 +37,9 @@ type DB struct {
 	meta0    *meta
 	meta1    *meta
 
-	pageSize int
-	readers  []*reader
-	buckets  []*Bucket
-	// xbuckets       []*bucketx /**< array of static DB info */
+	pageSize        int
+	readers         []*reader
+	buckets         []*Bucket
 	bucketFlags     []int /**< array of flags from MDB_db.md_flags */
 	path            string
 	mmapSize        int /**< size of the data memory map */
@@ -222,8 +221,15 @@ func (db *DB) Transaction(writable bool) (*Transaction, error) {
 	// Create a transaction associated with the database.
 	t := &Transaction{
 		db:       db,
+		meta:     db.meta(),
 		writable: writable,
 	}
+
+	// Save references to the sys•free and sys•buckets buckets.
+	t.sysfree.transaction = t
+	t.sysfree.bucket = &t.meta.free
+	t.sysbuckets.transaction = t
+	t.sysbuckets.bucket = &t.meta.buckets
 
 	// We only allow one writable transaction at a time so save the reference.
 	if writable {
@@ -236,6 +242,14 @@ func (db *DB) Transaction(writable bool) (*Transaction, error) {
 // page retrieves a page reference from a given byte array based on the current page size.
 func (db *DB) page(b []byte, id int) *page {
 	return (*page)(unsafe.Pointer(&b[id*db.pageSize]))
+}
+
+// meta retrieves the current meta page reference.
+func (db *DB) meta() *meta {
+	if db.meta0.txnid > db.meta1.txnid {
+		return db.meta0
+	}
+	return db.meta1
 }
 
 //                                                                            //

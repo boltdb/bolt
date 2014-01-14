@@ -39,46 +39,12 @@ type Cursor struct {
 	backup      *Cursor
 	subcursor   *Cursor
 	transaction *Transaction
-	bucketId    int
-	bucket      *txnbucket
+	bucket      *Bucket
 	subbucket   *Bucket
-	// subbucketx    *bucketx
-	subbucketFlag int
-	snum          int
-	top           int
-	page          []*page
-	ki            []int /**< stack of page indices */
-}
-
-// Initialize a cursor for a given transaction and database.
-func (c *Cursor) init(t *Transaction, b *txnbucket, sub *Cursor) {
-	c.next = nil
-	c.backup = nil
-	c.transaction = t
-	c.bucket = b
-	c.snum = 0
-	c.top = 0
-	// TODO: mc->mc_pg[0] = 0;
-	c.flags = 0
-
-	if (b.flags & MDB_DUPSORT) != 0 {
-		sub.subcursor = nil
-		sub.transaction = t
-		sub.bucket = b
-		sub.snum = 0
-		sub.top = 0
-		sub.flags = c_sub
-		// TODO: mx->mx_dbx.md_name.mv_size = 0;
-		// TODO: mx->mx_dbx.md_name.mv_data = NULL;
-		c.subcursor = sub
-	} else {
-		c.subcursor = nil
-	}
-
-	// Find the root page if the bucket is stale.
-	if (c.bucket.flags & txnb_stale) != 0 {
-		c.findPage(nil, ps_rootonly)
-	}
+	snum        int
+	top         int
+	page        []*page
+	ki          []int /**< stack of page indices */
 }
 
 //                                                                            //
@@ -1442,7 +1408,8 @@ func (c *Cursor) last() ([]byte, []byte) {
 	return nil, nil
 }
 
-func (c *Cursor) Get(key []byte, data []byte, op int) ([]byte, []byte, error) {
+// , data []byte, op int
+func (c *Cursor) Get(key []byte) ([]byte, error) {
 	/*
 			int		 rc;
 			int		 exact = 0;
@@ -1604,7 +1571,7 @@ func (c *Cursor) Get(key []byte, data []byte, op int) ([]byte, []byte, error) {
 
 			return rc;
 	*/
-	return nil, nil, nil
+	return nil, nil
 }
 
 // Touch all the pages in the cursor stack. Set mc_top.
@@ -2512,7 +2479,7 @@ func (c *Cursor) Transaction() *Transaction {
 }
 
 func (c *Cursor) Bucket() *Bucket {
-	return c.bucket.bucket
+	return c.bucket
 }
 
 // Replace the key for a branch node with a new key.

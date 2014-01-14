@@ -1,5 +1,9 @@
 package bolt
 
+import (
+	"strings"
+)
+
 var TransactionExistingChildError = &Error{"txn already has a child", nil}
 var TransactionReadOnlyChildError = &Error{"read-only txn cannot create a child", nil}
 
@@ -18,86 +22,132 @@ const (
 )
 
 type Transaction struct {
-	id       int
-	db       *DB
-	writable bool
-	dirty    bool
-	spilled  bool
-	err      error
-	parent   *Transaction
-	child    *Transaction
-	buckets  []*txnbucket
+	id         int
+	db         *DB
+	writable   bool
+	dirty      bool
+	spilled    bool
+	err        error
+	meta       *meta
+	sysfree    Bucket
+	sysbuckets Bucket
+	buckets    map[string]*Bucket
+	cursors    map[uint32]*Cursor
 
 	pgno       int
 	freePages  []pgno
 	spillPages []pgno
 	dirtyList  []pgno
 	reader     *reader
-	// TODO: bucketxs []*bucketx
 	// Implicit from slices? TODO: MDB_dbi mt_numdbs;
 	dirty_room int
 	pagestate  pagestate
 }
 
-type txnbucket struct {
-	bucket *Bucket
-	cursor *Cursor
-	flags  int
+// CreateBucket creates a new bucket.
+func (t *Transaction) CreateBucket(name string, dupsort bool) (*Bucket, error) {
+	// TODO: Check if bucket already exists.
+	// TODO: Put new entry into system bucket.
+
+	/*
+		MDB_db dummy;
+		data.mv_size = sizeof(MDB_db);
+		data.mv_data = &dummy;
+		memset(&dummy, 0, sizeof(dummy));
+		dummy.md_root = P_INVALID;
+		dummy.md_flags = flags & PERSISTENT_FLAGS;
+		rc = mdb_cursor_put(&mc, &key, &data, F_SUBDATA);
+		dbflag |= DB_DIRTY;
+	*/
+	return nil, nil
 }
 
-// Transaction begins a nested child transaction. Child transactions are only
-// available to writable transactions and a transaction can only have one child
-// at a time.
-func (t *Transaction) Transaction() (*Transaction, error) {
-	// Exit if parent already has a child transaction.
-	if t.child != nil {
-		return nil, TransactionExistingChildError
-	}
-	// Exit if using parent for read-only transaction.
-	if !t.writable {
-		return nil, TransactionReadOnlyChildError
-	}
-	// TODO: Exit if parent is in an error state.
-
-	// Create the child transaction and attach the parent.
-	child := &Transaction{
-		id:        t.id,
-		db:        t.db,
-		parent:    t,
-		writable:  true,
-		pgno:      t.pgno,
-		pagestate: t.db.pagestate,
-	}
-	copy(child.buckets, t.buckets)
-
-	// TODO: Remove DB_NEW flag.
-	t.child = child
-
-	// TODO: wtf?
-	// if (env->me_pghead) {
-	//   size = MDB_IDL_SIZEOF(env->me_pghead);
-	//   env->me_pghead = mdb_midl_alloc(env->me_pghead[0]);
-	//   if (env->me_pghead)
-	//     memcpy(env->me_pghead, ntxn->mnt_pgstate.mf_pghead, size);
-	//   else
-	//     rc = ENOMEM;
-	// }
-
-	// TODO: Back up parent transaction's cursors.
-	// if t.shadow(child); err != nil {
-	// 	child.reset0()
-	// 	return err
-	// }
-
-	return child, nil
+// DropBucket deletes a bucket.
+func (t *Transaction) DeleteBucket(b *Bucket) error {
+	// TODO: Find bucket.
+	// TODO: Remove entry from system bucket.
+	return nil
 }
 
+// Bucket retrieves a bucket by name.
+func (t *Transaction) Bucket(name string) (*Bucket, error) {
+	if strings.HasPrefix(name, "sys*") {
+		return nil, &Error{"system buckets are not available", nil}
+	}
+
+	return t.bucket(name)
+}
+
+func (t *Transaction) bucket(name string) (*Bucket, error) {
+	// TODO: if ((flags & VALID_FLAGS) != flags) return EINVAL;
+	// TODO: if (txn->mt_flags & MDB_TXN_ERROR) return MDB_BAD_TXN;
+
+	// Return bucket if it's already been found.
+	if b := t.buckets[name]; b != nil {
+		return b, nil
+	}
+
+	// Open a cursor for the system bucket.
+	c, err := t.Cursor(&t.sysbuckets)
+	if err != nil {
+		return nil, err
+	}
+
+	// Retrieve bucket data.
+	data, err := c.Get([]byte(name))
+	if err != nil {
+		return nil, err
+	} else if data == nil {
+		return nil, &Error{"bucket not found", nil}
+	}
+
+	// TODO: Verify.
+	// MDB_node *node = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
+	// if (!(node->mn_flags & F_SUBDATA))
+	//   return MDB_INCOMPATIBLE;
+
+	return nil, nil
+}
+
+// Cursor creates a cursor associated with a given bucket.
 func (t *Transaction) Cursor(b *Bucket) (*Cursor, error) {
-	// TODO: if !(txn->mt_dbflags[dbi] & DB_VALID) return InvalidBucketError
-	// TODO: if (txn->mt_flags & MDB_TXN_ERROR) return BadTransactionError
+	if b == nil {
+		return nil, &Error{"bucket required", nil}
+	}
 
 	// Allow read access to the freelist
 	// TODO: if (!dbi && !F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
+
+	return t.cursor(b)
+}
+
+func (t *Transaction) cursor(b *Bucket) (*Cursor, error) {
+	// TODO: if !(txn->mt_dbflags[dbi] & DB_VALID) return InvalidBucketError
+	// TODO: if (txn->mt_flags & MDB_TXN_ERROR) return BadTransactionError
+
+	// Return existing cursor for the bucket if one exists.
+	if b != nil {
+		if c := t.cursors[b.id]; c != nil {
+			return c, nil
+		}
+	}
+
+	// Create a new cursor and associate it with the transaction and bucket.
+	c := &Cursor{
+		transaction: t,
+		bucket:      b,
+	}
+	if (b.flags & MDB_DUPSORT) != 0 {
+		c.subcursor = &Cursor{
+			transaction: t,
+			bucket:      b,
+		}
+	}
+
+	// Find the root page if the bucket is stale.
+	if (c.bucket.flags & txnb_stale) != 0 {
+		c.findPage(nil, ps_rootonly)
+	}
 
 	/*
 		MDB_cursor	*mc;
@@ -1424,110 +1474,6 @@ func (t *Transaction) Put(b Bucket, key []byte, data []byte, flags int) error {
 		return mdb_cursor_put(&mc, key, data, flags);
 	*/
 	return nil
-}
-
-func (t *Transaction) Bucket(name string, flags int) (*Bucket, error) {
-	/*
-		MDB_val key, data;
-		MDB_dbi i;
-		MDB_cursor mc;
-		int rc, dbflag, exact;
-		unsigned int unused = 0;
-		size_t len;
-
-		if (txn->mt_dbxs[FREE_DBI].md_cmp == NULL) {
-			mdb_default_cmp(txn, FREE_DBI);
-		}
-
-		if ((flags & VALID_FLAGS) != flags)
-			return EINVAL;
-		if (txn->mt_flags & MDB_TXN_ERROR)
-			return MDB_BAD_TXN;
-
-		// main DB?
-		if (!name) {
-			*dbi = MAIN_DBI;
-			if (flags & PERSISTENT_FLAGS) {
-				uint16_t f2 = flags & PERSISTENT_FLAGS;
-				// make sure flag changes get committed
-				if ((txn->mt_dbs[MAIN_DBI].md_flags | f2) != txn->mt_dbs[MAIN_DBI].md_flags) {
-					txn->mt_dbs[MAIN_DBI].md_flags |= f2;
-					txn->mt_flags |= MDB_TXN_DIRTY;
-				}
-			}
-			mdb_default_cmp(txn, MAIN_DBI);
-			return MDB_SUCCESS;
-		}
-
-		if (txn->mt_dbxs[MAIN_DBI].md_cmp == NULL) {
-			mdb_default_cmp(txn, MAIN_DBI);
-		}
-
-		// Is the DB already open?
-		len = strlen(name);
-		for (i=2; i<txn->mt_numdbs; i++) {
-			if (!txn->mt_dbxs[i].md_name.mv_size) {
-				// Remember this free slot
-				if (!unused) unused = i;
-				continue;
-			}
-			if (len == txn->mt_dbxs[i].md_name.mv_size &&
-				!strncmp(name, txn->mt_dbxs[i].md_name.mv_data, len)) {
-				*dbi = i;
-				return MDB_SUCCESS;
-			}
-		}
-
-		// If no free slot and max hit, fail
-		if (!unused && txn->mt_numdbs >= txn->mt_env->me_maxdbs)
-			return MDB_DBS_FULL;
-
-		// Cannot mix named databases with some mainDB flags
-		if (txn->mt_dbs[MAIN_DBI].md_flags & (MDB_DUPSORT|MDB_INTEGERKEY))
-			return (flags & MDB_CREATE) ? MDB_INCOMPATIBLE : MDB_NOTFOUND;
-
-		// Find the DB info
-		dbflag = DB_NEW|DB_VALID;
-		exact = 0;
-		key.mv_size = len;
-		key.mv_data = (void *)name;
-		mdb_cursor_init(&mc, txn, MAIN_DBI, NULL);
-		rc = mdb_cursor_set(&mc, &key, &data, MDB_SET, &exact);
-		if (rc == MDB_SUCCESS) {
-			// make sure this is actually a DB
-			MDB_node *node = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
-			if (!(node->mn_flags & F_SUBDATA))
-				return MDB_INCOMPATIBLE;
-		} else if (rc == MDB_NOTFOUND && (flags & MDB_CREATE)) {
-			// Create if requested
-			MDB_db dummy;
-			data.mv_size = sizeof(MDB_db);
-			data.mv_data = &dummy;
-			memset(&dummy, 0, sizeof(dummy));
-			dummy.md_root = P_INVALID;
-			dummy.md_flags = flags & PERSISTENT_FLAGS;
-			rc = mdb_cursor_put(&mc, &key, &data, F_SUBDATA);
-			dbflag |= DB_DIRTY;
-		}
-
-		// OK, got info, add to table
-		if (rc == MDB_SUCCESS) {
-			unsigned int slot = unused ? unused : txn->mt_numdbs;
-			txn->mt_dbxs[slot].md_name.mv_data = strdup(name);
-			txn->mt_dbxs[slot].md_name.mv_size = len;
-			txn->mt_dbxs[slot].md_rel = NULL;
-			txn->mt_dbflags[slot] = dbflag;
-			memcpy(&txn->mt_dbs[slot], data.mv_data, sizeof(MDB_db));
-			*dbi = slot;
-			mdb_default_cmp(txn, slot);
-			if (!unused) {
-				txn->mt_numdbs++;
-			}
-		}
-
-		return rc;
-	*/
-	return nil, nil
 }
 
 func (t *Transaction) Stat(b Bucket) *stat {
