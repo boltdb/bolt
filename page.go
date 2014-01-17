@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"bytes"
 	"unsafe"
 )
 
@@ -53,16 +54,11 @@ type indx uint16
 
 type page struct {
 	id       pgno
-	flags    int
+	flags    uint16
 	lower    indx
 	upper    indx
-	overflow int
-	ptr      int
-}
-
-type pagestate struct {
-	head int /**< Reclaimed freeDB pages, or NULL before use */
-	last int /**< ID of last used record, or 0 if !mf_pghead */
+	overflow uint32
+	ptr      uintptr
 }
 
 // meta returns a pointer to the metadata section of the page.
@@ -92,12 +88,66 @@ func (p *page) init(pageSize int) {
 	m.buckets.root = p_invalid
 }
 
-// nodeCount returns the number of nodes on the page.
-func (p *page) nodeCount() int {
-	return 0 // (p.header.lower - unsafe.Sizeof(p.header) >> 1
+// branchNode retrieves the branch node at the given index within the page.
+func (p *page) branchNode(index indx) *branchNode {
+	b := (*[maxPageSize]byte)(unsafe.Pointer(&p.ptr))
+	return (*branchNode)(unsafe.Pointer(&b[index * indx(unsafe.Sizeof(index))]))
+}
+
+// leafNode retrieves the leaf node at the given index within the page.
+func (p *page) leafNode(index indx) *leafNode {
+	b := (*[maxPageSize]byte)(unsafe.Pointer(&p.ptr))
+	return (*leafNode)(unsafe.Pointer(&b[index * indx(unsafe.Sizeof(index))]))
+}
+
+// numkeys returns the number of nodes in the page.
+func (p *page) numkeys() int {
+	return int((p.lower - indx(pageHeaderSize)) >> 1)
 }
 
 // remainingSize returns the number of bytes left in the page.
 func (p *page) remainingSize() int {
 	return int(p.upper - p.lower)
+}
+
+// find returns the node with the smallest entry larger or equal to the key.
+// This function also returns a boolean stating if an exact match was made.
+func (p *page) find(key []byte, pageSize int) (*node, int, bool) {
+	// TODO: MDB_page *mp = mc->mc_pg[mc->mc_top];
+
+	var node *node
+	nkeys := p.numkeys()
+	low, high := 1, nkeys - 1
+	if (p.flags & p_leaf) != 0 {
+		low = 0
+	}
+
+	// Perform a binary search to find the correct node.
+	var i, rc int
+	for ; low <= high; {
+		i = (low + high) / 2
+
+		node = p.node(indx(i))
+		rc = bytes.Compare(key, node.key())
+		if rc == 0 {
+			break;
+		} else if rc > 0 {
+			low = i + 1
+		} else {
+			high = i - 1
+		}
+	}
+
+	// Found entry is less than key so grab the next one.
+	if rc > 0 {
+		i++
+	}
+
+	// If index is beyond key range then return nil.
+	if i >= nkeys {
+		node = nil
+	}
+
+	exact := (rc == 0 && nkeys > 0)
+	return node, i, exact
 }

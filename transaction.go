@@ -2,10 +2,11 @@ package bolt
 
 import (
 	"strings"
+	"unsafe"
 )
 
-var TransactionExistingChildError = &Error{"txn already has a child", nil}
-var TransactionReadOnlyChildError = &Error{"read-only txn cannot create a child", nil}
+var InvalidTransactionError = &Error{"txn is invalid", nil}
+var BucketAlreadyExistsError = &Error{"bucket already exists", nil}
 
 const (
 	txnb_dirty = 0x01 /**< DB was modified or is DUPSORT data */
@@ -24,7 +25,6 @@ const (
 type Transaction struct {
 	id         int
 	db         *DB
-	writable   bool
 	dirty      bool
 	spilled    bool
 	err        error
@@ -41,25 +41,43 @@ type Transaction struct {
 	reader     *reader
 	// Implicit from slices? TODO: MDB_dbi mt_numdbs;
 	dirty_room int
-	pagestate  pagestate
 }
 
 // CreateBucket creates a new bucket.
 func (t *Transaction) CreateBucket(name string, dupsort bool) (*Bucket, error) {
-	// TODO: Check if bucket already exists.
-	// TODO: Put new entry into system bucket.
+	if t.db == nil {
+		return nil, InvalidTransactionError
+	}
 
-	/*
-		MDB_db dummy;
-		data.mv_size = sizeof(MDB_db);
-		data.mv_data = &dummy;
-		memset(&dummy, 0, sizeof(dummy));
-		dummy.md_root = P_INVALID;
-		dummy.md_flags = flags & PERSISTENT_FLAGS;
-		rc = mdb_cursor_put(&mc, &key, &data, F_SUBDATA);
-		dbflag |= DB_DIRTY;
-	*/
-	return nil, nil
+	// Check if bucket already exists.
+	if b := t.buckets[name]; b != nil {
+		return nil, &Error{"bucket already exists", nil}
+	}
+
+	// Create a new bucket entry.
+	var buf [unsafe.Sizeof(bucket{})]byte
+	var raw = (*bucket)(unsafe.Pointer(&buf[0]))
+	raw.root = p_invalid
+	// TODO: Set dupsort flag.
+
+	// Open cursor to system bucket.
+	c, err := t.Cursor(&t.sysbuckets)
+	if err != nil {
+		return nil, err
+	}
+
+	// Put new entry into system bucket.
+	if err := c.Put([]byte(name), buf[:]); err != nil {
+		return nil, err
+	}
+
+	// Save reference to bucket.
+	b := &Bucket{name: name, bucket: raw, isNew: true}
+	t.buckets[name] = b
+
+	// TODO: dbflag |= DB_DIRTY;
+
+	return b, nil
 }
 
 // DropBucket deletes a bucket.
@@ -113,30 +131,33 @@ func (t *Transaction) bucket(name string) (*Bucket, error) {
 func (t *Transaction) Cursor(b *Bucket) (*Cursor, error) {
 	if b == nil {
 		return nil, &Error{"bucket required", nil}
+	} else if t.db == nil {
+		return nil, InvalidTransactionError
 	}
 
-	// Allow read access to the freelist
-	// TODO: if (!dbi && !F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
-
-	return t.cursor(b)
-}
-
-func (t *Transaction) cursor(b *Bucket) (*Cursor, error) {
 	// TODO: if !(txn->mt_dbflags[dbi] & DB_VALID) return InvalidBucketError
 	// TODO: if (txn->mt_flags & MDB_TXN_ERROR) return BadTransactionError
 
 	// Return existing cursor for the bucket if one exists.
-	if b != nil {
-		if c := t.cursors[b.id]; c != nil {
-			return c, nil
-		}
+	if c := t.cursors[b.id]; c != nil {
+		return c, nil
 	}
 
 	// Create a new cursor and associate it with the transaction and bucket.
 	c := &Cursor{
 		transaction: t,
 		bucket:      b,
+		top:         -1,
+		pages:       []*page{},
 	}
+
+	// Set the first page if available.
+	if b.root != p_invalid {
+		p := t.db.page(t.db.data, int(b.root))
+		c.top = 0
+		c.pages = append(c.pages, p)
+	}
+
 	if (b.flags & MDB_DUPSORT) != 0 {
 		c.subcursor = &Cursor{
 			transaction: t,
@@ -144,34 +165,6 @@ func (t *Transaction) cursor(b *Bucket) (*Cursor, error) {
 		}
 	}
 
-	// Find the root page if the bucket is stale.
-	if (c.bucket.flags & txnb_stale) != 0 {
-		c.findPage(nil, ps_rootonly)
-	}
-
-	/*
-		MDB_cursor	*mc;
-		size_t size = sizeof(MDB_cursor);
-
-		// Allow read access to the freelist
-		if (!dbi && !F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
-			return EINVAL;
-
-		if ((mc = malloc(size)) != NULL) {
-			mdb_cursor_init(mc, txn, dbi, (MDB_xcursor *)(mc + 1));
-			if (txn->mt_cursors) {
-				mc->mc_next = txn->mt_cursors[dbi];
-				txn->mt_cursors[dbi] = mc;
-				mc->mc_flags |= C_UNTRACK;
-			}
-		} else {
-			return ENOMEM;
-		}
-
-		*ret = mc;
-
-		return MDB_SUCCESS;
-	*/
 	return nil, nil
 }
 
