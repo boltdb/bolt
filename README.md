@@ -55,7 +55,7 @@ err := db.DeleteBucket("widgets")
 
 ### Transactions
 
-All access to the bucket data happens through a Transaction.
+Versioning of data in the bucket data happens through a Transaction.
 These transactions can be either be read-only or read/write transactions.
 Transactions are what keeps Bolt consistent and allows data to be rolled back if needed.
 
@@ -69,12 +69,44 @@ Please double check that you are appropriately closing all transactions after yo
 
 ```go
 t, err := db.Transaction()
+t.Close()
+```
 
-// Read/write txn:
+#### Creating and committing a read/write transaction
+
+```
 t, err := db.RWTransaction()
+err := t.Commit()
+```
+
+#### Creating and aborting a read/write transaction
+
+```
+t, err := db.RWTransaction()
+err := t.Abort()
 ```
 
 
+### Cursors
+
+Cursors provide access to a specific bucket within a transaction.
+
+
+#### Creating a read-only cursor
+
+```go
+t, err := db.Transaction()
+b, err := t.Bucket("widgets")
+c, err := b.Cursor()
+```
+
+#### Creating a read/write cursor
+
+```go
+t, err := db.RWTransaction()
+b, err := t.Bucket("widgets")
+c, err := b.RWCursor()
+```
 
 
 
