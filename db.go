@@ -46,11 +46,11 @@ type DB struct {
 	size            int /**< current file size */
 	pbuf            []byte
 	transaction     *RWTransaction /**< current write transaction */
-	maxPageNumber   int          /**< me_mapsize / me_psize */
-	dpages          []*page      /**< list of malloc'd blocks for re-use */
-	freePages       []int        /** IDL of pages that became unused in a write txn */
-	dirtyPages      []int        /** ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
-	maxFreeOnePage  int          /** Max number of freelist items that can fit in a single overflow page */
+	maxPageNumber   int            /**< me_mapsize / me_psize */
+	dpages          []*page        /**< list of malloc'd blocks for re-use */
+	freePages       []int          /** IDL of pages that became unused in a write txn */
+	dirtyPages      []int          /** ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
+	maxFreeOnePage  int            /** Max number of freelist items that can fit in a single overflow page */
 	maxPageDataSize int
 	maxNodeSize     int /** Max size of a node on a page */
 	maxKeySize      int /**< max size of a key */

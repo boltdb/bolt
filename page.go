@@ -20,8 +20,7 @@ const (
 	p_leaf     = 0x02
 	p_overflow = 0x04
 	p_meta     = 0x08
-	p_dirty    = 0x10 /**< dirty page, also set for #P_SUBP pages */
-	p_sub      = 0x40
+	p_dirty    = 0x10   /**< dirty page, also set for #P_SUBP pages */
 	p_keep     = 0x8000 /**< leave this page alone during spill */
 
 	p_invalid = ^pgno(0)
@@ -91,13 +90,13 @@ func (p *page) init(pageSize int) {
 // branchNode retrieves the branch node at the given index within the page.
 func (p *page) branchNode(index indx) *branchNode {
 	b := (*[maxPageSize]byte)(unsafe.Pointer(&p.ptr))
-	return (*branchNode)(unsafe.Pointer(&b[index * indx(unsafe.Sizeof(index))]))
+	return (*branchNode)(unsafe.Pointer(&b[index*indx(unsafe.Sizeof(index))]))
 }
 
 // leafNode retrieves the leaf node at the given index within the page.
 func (p *page) leafNode(index indx) *leafNode {
 	b := (*[maxPageSize]byte)(unsafe.Pointer(&p.ptr))
-	return (*leafNode)(unsafe.Pointer(&b[index * indx(unsafe.Sizeof(index))]))
+	return (*leafNode)(unsafe.Pointer(&b[index*indx(unsafe.Sizeof(index))]))
 }
 
 // numkeys returns the number of nodes in the page.
@@ -117,20 +116,20 @@ func (p *page) find(key []byte, pageSize int) (*node, int, bool) {
 
 	var node *node
 	nkeys := p.numkeys()
-	low, high := 1, nkeys - 1
+	low, high := 1, nkeys-1
 	if (p.flags & p_leaf) != 0 {
 		low = 0
 	}
 
 	// Perform a binary search to find the correct node.
 	var i, rc int
-	for ; low <= high; {
+	for low <= high {
 		i = (low + high) / 2
 
 		node = p.node(indx(i))
 		rc = bytes.Compare(key, node.key())
 		if rc == 0 {
-			break;
+			break
 		} else if rc > 0 {
 			low = i + 1
 		} else {

@@ -5,31 +5,19 @@ package bolt
 const (
 	c_initialized = 0x01 /**< cursor has been initialized and is valid */
 	c_eof         = 0x02 /**< No more data */
-	c_sub         = 0x04 /**< Cursor is a sub-cursor */
 	c_del         = 0x08 /**< last op was a cursor_del */
 	c_splitting   = 0x20 /**< Cursor is in page_split */
 	c_untrack     = 0x40 /**< Un-track cursor when closing */
 )
 
-// TODO: #define MDB_NOSPILL	0x8000 /** Do not spill pages to disk if txn is getting full, may fail instead */
-
 /*
 type Cursor interface {
 	First() error
-	FirstDup() error
-	Get() ([]byte, []byte, error)
-	GetRange() ([]byte, []byte, error)
-	Current() ([]byte, []byte, error)
-	Last()
-	LastDup()
+	Last() error
 	Next() ([]byte, []byte, error)
-	NextDup() ([]byte, []byte, error)
-	NextNoDup() ([]byte, []byte, error)
 	Prev() ([]byte, []byte, error)
-	PrevDup() ([]byte, []byte, error)
-	PrevNoDup() ([]byte, []byte, error)
-	Set() ([]byte, []byte, error)
-	SetRange() ([]byte, []byte, error)
+	Current() ([]byte, []byte, error)
+	Get([]byte) ([]byte, error)
 }
 */
 
@@ -37,13 +25,11 @@ type Cursor struct {
 	flags       int
 	next        *Cursor
 	backup      *Cursor
-	subcursor   *Cursor
 	transaction *Transaction
 	bucket      *Bucket
-	subbucket   *Bucket
 	top         int
 	pages       []*page
-	indices     []int    /* the index of the node for the page at the same level */
+	indices     []int /* the index of the node for the page at the same level */
 }
 
 // , data []byte, op int
@@ -52,12 +38,6 @@ func (c *Cursor) Get(key []byte) ([]byte, error) {
 			int		 rc;
 			int		 exact = 0;
 			int		 (*mfunc)(MDB_cursor *mc, MDB_val *key, MDB_val *data);
-
-			if (mc == NULL)
-				return EINVAL;
-
-			if (mc->mc_txn->mt_flags & MDB_TXN_ERROR)
-				return MDB_BAD_TXN;
 
 			switch (op) {
 			case MDB_GET_CURRENT:
@@ -222,14 +202,14 @@ func (c *Cursor) page(key []byte, flags int) (*page, error) {
 		if (flags & ps_first) != 0 {
 			index = 0
 		} else if (flags & ps_last) != 0 {
-			index = indx(p.numkeys()) - 1;
+			index = indx(p.numkeys()) - 1
 		} else {
-			node, i, exact := p.find(key, c.transaction.db.pageSize);
+			node, i, exact := p.find(key, c.transaction.db.pageSize)
 			if exact {
 				c.indices[c.top] = i
 			}
 			if node == nil {
-				index = indx(p.numkeys()) - 1;
+				index = indx(p.numkeys()) - 1
 			} else {
 				index = indx(c.indices[c.top])
 				if !exact {
@@ -255,7 +235,7 @@ func (c *Cursor) page(key []byte, flags int) (*page, error) {
 	}
 
 	// If we ended up with a non-leaf page by the end then something is wrong.
-	if p.flags & p_leaf == 0 {
+	if p.flags&p_leaf == 0 {
 		return nil, CorruptedError
 	}
 
@@ -267,7 +247,7 @@ func (c *Cursor) page(key []byte, flags int) (*page, error) {
 
 // pop moves the last page off the cursor's page stack.
 func (c *Cursor) pop() {
-	top := len(c.pages)-1
+	top := len(c.pages) - 1
 	c.pages = c.pages[0:c.top]
 	c.indices = c.indices[0:c.top]
 }
@@ -279,8 +259,8 @@ func (c *Cursor) push(p *page) {
 	c.top = len(c.pages) - 1
 }
 
-// page retrieves the last page on the page stack.
-func (c *Cursor) page() *page {
+// currentPage retrieves the last page on the page stack.
+func (c *Cursor) currentPage() *page {
 	top := len(c.pages)
 	if top > 0 {
 		return c.pages[top]
@@ -305,7 +285,6 @@ func (c *Cursor) currentLeafNode() *node {
 	}
 	return nil
 }
-
 
 //                                                                            //
 //                                                                            //
@@ -641,9 +620,6 @@ func (c *Cursor) page_touch() int {
 
 	return 0
 }
-
-
-
 
 // Search for the lowest key under the current branch page.
 // This just bypasses a NUMKEYS check in the current page
@@ -1262,7 +1238,7 @@ func (c *Cursor) touch() error {
 			}
 			return rc;
 		}
-*/
+	*/
 	return nil
 }
 
