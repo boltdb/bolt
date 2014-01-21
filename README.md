@@ -150,3 +150,24 @@ err := c.Delete([]byte("foo"))
 err := c.DeleteString("foo")
 ```
 
+
+## Internals
+
+The Bolt database is meant to be a clean, readable implementation of a fast single-level key/value data store.
+This section gives an overview of the basic concepts and structure of the file format.
+
+### Pages
+
+Bolt stores its data in discrete units called pages.
+The page size can be configured but is typically between 4KB and 32KB.
+
+There are several different types of pages:
+
+* Meta pages - The first two pages in a database are meta pages. These are used to store references to root pages for system buckets as well as keep track of the last transaction identifier.
+
+* Branch pages - These pages store references to the location of deeper branch pages or leaf pages.
+
+* Leaf pages - These pages store the actual key/value data.
+
+* Overflow pages - These are special pages used when a key's data is too large for a leaf page and needs to spill onto additional pages.
+
