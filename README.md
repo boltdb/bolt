@@ -156,6 +156,14 @@ err := c.DeleteString("foo")
 The Bolt database is meant to be a clean, readable implementation of a fast single-level key/value data store.
 This section gives an overview of the basic concepts and structure of the file format.
 
+### B+ Tree
+
+Bolt uses a data structure called an append-only B+ tree to store its data.
+This structure allows for efficient traversal of data.
+
+TODO: Explain better. :)
+
+
 ### Pages
 
 Bolt stores its data in discrete units called pages.
