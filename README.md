@@ -179,3 +179,9 @@ There are several different types of pages:
 
 * Overflow pages - These are special pages used when a key's data is too large for a leaf page and needs to spill onto additional pages.
 
+
+### Nodes
+
+Within each page there are one or more elements called nodes.
+In branch pages, these nodes store references to other child pages in the tree.
+In leaf pages, these nodes store the actual key/value data.
