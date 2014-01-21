@@ -1,4 +1,4 @@
-bolt
+Bolt
 ====
 
 ## Overview
@@ -20,36 +20,6 @@ db := DB()
 err := db.Open("/path/to/db", 0666)
 ...
 err := db.Close()
-```
-
-
-### Buckets
-
-Buckets are where your actual key/value data gets stored.
-You can create new buckets from the database and look them up by name.
-
-#### Creating a bucket
-
-```go
-b, err := db.CreateBucket("widgets")
-```
-
-#### Retrieve an existing bucket
-
-```go
-b, err := db.Bucket("widgets")
-```
-
-#### Retrieve a list of all buckets
-
-```go
-buckets, err := db.Buckets()
-```
-
-#### Deleting a bucket
-
-```go
-err := db.DeleteBucket("widgets")
 ```
 
 
@@ -85,6 +55,48 @@ err := t.Commit()
 t, err := db.RWTransaction()
 err := t.Abort()
 ```
+
+
+### Buckets
+
+Buckets are where your actual key/value data gets stored.
+You can create new buckets from the database and look them up by name.
+
+#### Creating a bucket
+
+```go
+t, err := db.RWTransaction()
+err := t.CreateBucket("widgets")
+```
+
+#### Renaming a bucket
+
+```go
+t, err := db.RWTransaction()
+err := t.RenameBucket("widgets", "woojits")
+```
+
+#### Deleting a bucket
+
+```go
+t, err := db.RWTransaction()
+err := t.DeleteBucket("widgets")
+```
+
+#### Retrieve an existing bucket
+
+```go
+t, err := db.Transaction()
+b, err := t.Bucket("widgets")
+```
+
+#### Retrieve a list of all buckets
+
+```go
+t, err := db.Transaction()
+buckets, err := db.Buckets()
+```
+
 
 
 ### Cursors
