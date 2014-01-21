@@ -96,31 +96,45 @@ Cursors provide access to a specific bucket within a transaction.
 
 ```go
 t, err := db.Transaction()
-b, err := t.Bucket("widgets")
-c, err := b.Cursor()
+c, err := b.Cursor("widgets")
 ```
 
 #### Creating a read/write cursor
 
 ```go
 t, err := db.RWTransaction()
-b, err := t.Bucket("widgets")
-c, err := b.RWCursor()
+c, err := t.RWCursor("widgets")
 ```
 
+#### Iterating over a cursor
 
-
-* Cursor
-
-
+```go
+for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
+	if err != nil {
+		return err
+	}
+	... DO SOMETHING ...
+}
 ```
-DB
-Bucket
-Transaction / RWTransaction
-Cursor / RWCursor
 
-page
-meta
-branchNode
-leafNode
+#### Retrieve a value for a specific key
+
+```go
+value, err := c.Get([]byte("foo"))
+value, err := c.GetString("foo")
 ```
+
+#### Set the value for a key (RWCursor only)
+
+```go
+err := c.Put([]byte("foo"), []byte("bar"))
+err := c.PutString("foo", "bar")
+```
+
+#### Delete a given key
+
+```go
+err := c.Delete([]byte("foo"))
+err := c.DeleteString("foo")
+```
+
