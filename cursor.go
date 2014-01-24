@@ -10,17 +10,6 @@ const (
 	c_untrack     = 0x40 /**< Un-track cursor when closing */
 )
 
-/*
-type Cursor interface {
-	First() error
-	Last() error
-	Next() ([]byte, []byte, error)
-	Prev() ([]byte, []byte, error)
-	Current() ([]byte, []byte, error)
-	Get([]byte) ([]byte, error)
-}
-*/
-
 type Cursor struct {
 	flags       int
 	next        *Cursor

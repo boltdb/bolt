@@ -20,8 +20,7 @@ const (
 	p_leaf     = 0x02
 	p_overflow = 0x04
 	p_meta     = 0x08
-	p_dirty    = 0x10   /**< dirty page, also set for #P_SUBP pages */
-	p_keep     = 0x8000 /**< leave this page alone during spill */
+	p_dirty    = 0x10 /**< dirty page, also set for #P_SUBP pages */
 
 	p_invalid = ^pgno(0)
 )

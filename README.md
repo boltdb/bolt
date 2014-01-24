@@ -185,3 +185,11 @@ There are several different types of pages:
 Within each page there are one or more elements called nodes.
 In branch pages, these nodes store references to other child pages in the tree.
 In leaf pages, these nodes store the actual key/value data.
+
+
+## TODO
+
+The following is a list of items to do on the Bolt project:
+
+1. Resize map. (Make sure there are no reader txns before resizing)
+2. DB.Copy()

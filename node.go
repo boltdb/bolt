@@ -28,3 +28,13 @@ type branchNode struct {
 func (n *leafNode) key() []byte {
 	return (*[MaxKeySize]byte)(unsafe.Pointer(&n.data))[:n.keySize]
 }
+
+func leafNodeSize(key []byte, data []byte) int {
+	// TODO: Return even(sizeof(node) + len(key) + len(data))
+	return 0
+}
+
+func branchNodeSize(key []byte) int {
+	// TODO: Return even(sizeof(node) + len(key))
+	return 0
+}
