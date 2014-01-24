@@ -13,7 +13,7 @@ const (
 )
 
 var (
-	DatabaseNotOpenError = &Error{"db is not open", nil}
+	DatabaseNotOpenError       = &Error{"db is not open", nil}
 	DatabaseAlreadyOpenedError = &Error{"db already open", nil}
 	TransactionInProgressError = &Error{"writable transaction is already in progress", nil}
 )
@@ -22,26 +22,26 @@ type DB struct {
 	sync.Mutex
 	opened bool
 
-	os       _os
-	syscall  _syscall
-	path     string
-	file     file
-	metafile file
-	data     []byte
-	buf      []byte
-	meta0    *meta
-	meta1    *meta
-	pageSize        int
-	rwtransaction   *RWTransaction
-	transactions    []*Transaction
-	maxPageNumber   int            /**< me_mapsize / me_psize */
-	freePages       []int          /** IDL of pages that became unused in a write txn */
-	dirtyPages      []int          /** ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
+	os            _os
+	syscall       _syscall
+	path          string
+	file          file
+	metafile      file
+	data          []byte
+	buf           []byte
+	meta0         *meta
+	meta1         *meta
+	pageSize      int
+	rwtransaction *RWTransaction
+	transactions  []*Transaction
+	maxPageNumber int   /**< me_mapsize / me_psize */
+	freePages     []int /** IDL of pages that became unused in a write txn */
+	dirtyPages    []int /** ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
 
 	// TODO: scratch []*page  // list of temp pages for writing.
 
 	readers         []*reader
-	maxFreeOnePage  int            /** Max number of freelist items that can fit in a single overflow page */
+	maxFreeOnePage  int /** Max number of freelist items that can fit in a single overflow page */
 	maxPageDataSize int
 	maxNodeSize     int /** Max size of a node on a page */
 	maxKeySize      int /**< max size of a key */
@@ -280,9 +280,4 @@ func (db *DB) sync(force bool) error {
 func (db *DB) Stat() *stat {
 	// TODO: Calculate size, depth, page count (by type), entry count, readers, etc.
 	return nil
-}
-
-func (db *DB) minTxnID() txnid {
-	// TODO: Find the oldest transaction id.
-	return 0
 }

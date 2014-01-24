@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	InvalidTransactionError = &Error{"txn is invalid", nil}
+	InvalidTransactionError  = &Error{"txn is invalid", nil}
 	BucketAlreadyExistsError = &Error{"bucket already exists", nil}
 )
 
@@ -16,6 +16,8 @@ const (
 	ps_first    = 4
 	ps_last     = 8
 )
+
+type txnid uint64
 
 type Transaction struct {
 	id         int
@@ -157,166 +159,6 @@ func (t *Transaction) Stat(name string) *stat {
 //                                                                            //
 //                                                                            //
 //                                                                            //
-
-
-// Save the freelist as of this transaction to the freeDB.
-// This changes the freelist. Keep trying until it stabilizes.
-func (t *Transaction) saveFreelist() error {
-	/*
-			// env->me_pghead[] can grow and shrink during this call.
-			// env->me_pglast and txn->mt_free_pgs[] can only grow.
-			// Page numbers cannot disappear from txn->mt_free_pgs[].
-			MDB_cursor mc;
-			MDB_env	*env = txn->mt_env;
-			int rc, maxfree_1pg = env->me_maxfree_1pg, more = 1;
-			txnid_t	pglast = 0, head_id = 0;
-			pgno_t	freecnt = 0, *free_pgs, *mop;
-			ssize_t	head_room = 0, total_room = 0, mop_len, clean_limit;
-
-			mdb_cursor_init(&mc, txn, FREE_DBI, NULL);
-
-			if (env->me_pghead) {
-				// Make sure first page of freeDB is touched and on freelist 
-				rc = mdb_page_search(&mc, NULL, MDB_PS_FIRST|MDB_PS_MODIFY);
-				if (rc && rc != MDB_NOTFOUND)
-					return rc;
-			}
-
-			// MDB_RESERVE cancels meminit in ovpage malloc (when no WRITEMAP)
-			clean_limit = (env->me_flags & (MDB_NOMEMINIT|MDB_WRITEMAP))
-				? SSIZE_MAX : maxfree_1pg;
-
-			for (;;) {
-				// Come back here after each Put() in case freelist changed
-				MDB_val key, data;
-				pgno_t *pgs;
-				ssize_t j;
-
-				// If using records from freeDB which we have not yet
-				// deleted, delete them and any we reserved for me_pghead.
-				while (pglast < env->me_pglast) {
-					rc = mdb_cursor_first(&mc, &key, NULL);
-					if (rc)
-						return rc;
-					pglast = head_id = *(txnid_t *)key.mv_data;
-					total_room = head_room = 0;
-					mdb_tassert(txn, pglast <= env->me_pglast);
-					rc = mdb_cursor_del(&mc, 0);
-					if (rc)
-						return rc;
-				}
-
-				// Save the IDL of pages freed by this txn, to a single record
-				if (freecnt < txn->mt_free_pgs[0]) {
-					if (!freecnt) {
-						// Make sure last page of freeDB is touched and on freelist
-						rc = mdb_page_search(&mc, NULL, MDB_PS_LAST|MDB_PS_MODIFY);
-						if (rc && rc != MDB_NOTFOUND)
-							return rc;
-					}
-					free_pgs = txn->mt_free_pgs;
-					// Write to last page of freeDB
-					key.mv_size = sizeof(txn->mt_txnid);
-					key.mv_data = &txn->mt_txnid;
-					do {
-						freecnt = free_pgs[0];
-						data.mv_size = MDB_IDL_SIZEOF(free_pgs);
-						rc = mdb_cursor_put(&mc, &key, &data, MDB_RESERVE);
-						if (rc)
-							return rc;
-						// Retry if mt_free_pgs[] grew during the Put()
-						free_pgs = txn->mt_free_pgs;
-					} while (freecnt < free_pgs[0]);
-					mdb_midl_sort(free_pgs);
-					memcpy(data.mv_data, free_pgs, data.mv_size);
-		#if (MDB_DEBUG) > 1
-					{
-						unsigned int i = free_pgs[0];
-						DPRINTF(("IDL write txn %"Z"u root %"Z"u num %u",
-							txn->mt_txnid, txn->mt_dbs[FREE_DBI].md_root, i));
-						for (; i; i--)
-							DPRINTF(("IDL %"Z"u", free_pgs[i]));
-					}
-		#endif
-					continue;
-				}
-
-				mop = env->me_pghead;
-				mop_len = mop ? mop[0] : 0;
-
-				// Reserve records for me_pghead[]. Split it if multi-page,
-				// to avoid searching freeDB for a page range. Use keys in
-				// range [1,me_pglast]: Smaller than txnid of oldest reader.
-				if (total_room >= mop_len) {
-					if (total_room == mop_len || --more < 0)
-						break;
-				} else if (head_room >= maxfree_1pg && head_id > 1) {
-					// Keep current record (overflow page), add a new one
-					head_id--;
-					head_room = 0;
-				}
-				// (Re)write {key = head_id, IDL length = head_room}
-				total_room -= head_room;
-				head_room = mop_len - total_room;
-				if (head_room > maxfree_1pg && head_id > 1) {
-					// Overflow multi-page for part of me_pghead
-					head_room /= head_id; // amortize page sizes
-					head_room += maxfree_1pg - head_room % (maxfree_1pg + 1);
-				} else if (head_room < 0) {
-					// Rare case, not bothering to delete this record
-					head_room = 0;
-				}
-				key.mv_size = sizeof(head_id);
-				key.mv_data = &head_id;
-				data.mv_size = (head_room + 1) * sizeof(pgno_t);
-				rc = mdb_cursor_put(&mc, &key, &data, MDB_RESERVE);
-				if (rc)
-					return rc;
-				// IDL is initially empty, zero out at least the length 
-				pgs = (pgno_t *)data.mv_data;
-				j = head_room > clean_limit ? head_room : 0;
-				do {
-					pgs[j] = 0;
-				} while (--j >= 0);
-				total_room += head_room;
-			}
-
-			// Fill in the reserved me_pghead records
-			rc = MDB_SUCCESS;
-			if (mop_len) {
-				MDB_val key, data;
-
-				mop += mop_len;
-				rc = mdb_cursor_first(&mc, &key, &data);
-				for (; !rc; rc = mdb_cursor_next(&mc, &key, &data, MDB_NEXT)) {
-					unsigned flags = MDB_CURRENT;
-					txnid_t id = *(txnid_t *)key.mv_data;
-					ssize_t	len = (ssize_t)(data.mv_size / sizeof(MDB_ID)) - 1;
-					MDB_ID save;
-
-					mdb_tassert(txn, len >= 0 && id <= env->me_pglast);
-					key.mv_data = &id;
-					if (len > mop_len) {
-						len = mop_len;
-						data.mv_size = (len + 1) * sizeof(MDB_ID);
-						flags = 0;
-					}
-					data.mv_data = mop -= len;
-					save = mop[0];
-					mop[0] = len;
-					rc = mdb_cursor_put(&mc, &key, &data, flags);
-					mop[0] = save;
-					if (rc || !(mop_len -= len))
-						break;
-				}
-			}
-			return rc;
-	*/
-	return nil
-}
-
-
-
 
 // Return the data associated with a given node.
 // @param[in] txn The transaction for this operation.

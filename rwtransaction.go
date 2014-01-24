@@ -6,7 +6,7 @@ type RWTransaction struct {
 	Transaction
 
 	dirtyPages map[int]*page
-	freePages map[int]*page
+	freelist   []pgno
 }
 
 // TODO: Allocate scratch meta page.
@@ -95,7 +95,6 @@ func (t *Transaction) Put(name string, key []byte, value []byte) error {
 	return c.Put(key, value)
 }
 
-
 // page returns a reference to the page with a given id.
 // If page has been written to then a temporary bufferred page is returned.
 func (t *Transaction) page(id int) *page {
@@ -126,4 +125,11 @@ func (t *RWTransaction) DeleteBucket(name string) error {
 	// TODO: Remove cursor.
 
 	return nil
+}
+
+// allocate returns a contiguous block of memory starting at a given page.
+func (t *RWTransaction) allocate(count int) (*page, error) {
+	// TODO: Find a continuous block of free pages.
+	// TODO: If no free pages are available, resize the mmap to allocate more.
+	return nil, nil
 }

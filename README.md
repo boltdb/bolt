@@ -191,5 +191,8 @@ In leaf pages, these nodes store the actual key/value data.
 
 The following is a list of items to do on the Bolt project:
 
-1. Resize map. (Make sure there are no reader txns before resizing)
-2. DB.Copy()
+1. Calculate freelist on db.Open(). (Traverse branches, set bitmap index, load free pages into a list -- lazy load in the future).
+2. Resize map. (Make sure there are no reader txns before resizing)
+3. DB.Copy()
+4. Merge pages.
+5. Rebalance (after deletion).
