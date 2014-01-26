@@ -98,10 +98,36 @@ buckets, err := db.Buckets()
 ```
 
 
+### Key/Value Access
+
+#### Retrieve a value for a specific key
+
+```go
+t, err := db.Transaction()
+value, err := t.Get("widgets", []byte("foo"))
+value, err := t.GetString("widgets", "foo")
+```
+
+#### Set the value for a key
+
+```go
+t, err := db.RWTransaction()
+err := t.Put("widgets", []byte("foo"), []byte("bar"))
+err := t.PutString("widgets", "foo", "bar")
+```
+
+#### Delete a given key
+
+```go
+t, err := db.RWTransaction()
+err := t.Delete("widgets", []byte("foo"))
+err := t.DeleteString("widgets", "foo")
+```
+
 
 ### Cursors
 
-Cursors provide access to a specific bucket within a transaction.
+Cursors provide fast read-only access to a specific bucket within a transaction.
 
 
 #### Creating a read-only cursor
@@ -109,13 +135,6 @@ Cursors provide access to a specific bucket within a transaction.
 ```go
 t, err := db.Transaction()
 c, err := b.Cursor("widgets")
-```
-
-#### Creating a read/write cursor
-
-```go
-t, err := db.RWTransaction()
-c, err := t.RWCursor("widgets")
 ```
 
 #### Iterating over a cursor
@@ -127,27 +146,6 @@ for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 	}
 	... DO SOMETHING ...
 }
-```
-
-#### Retrieve a value for a specific key
-
-```go
-value, err := c.Get([]byte("foo"))
-value, err := c.GetString("foo")
-```
-
-#### Set the value for a key (RWCursor only)
-
-```go
-err := c.Put([]byte("foo"), []byte("bar"))
-err := c.PutString("foo", "bar")
-```
-
-#### Delete a given key
-
-```go
-err := c.Delete([]byte("foo"))
-err := c.DeleteString("foo")
 ```
 
 
