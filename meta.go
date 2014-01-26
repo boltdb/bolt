@@ -10,7 +10,7 @@ const version uint32 = 1
 type meta struct {
 	magic    uint32
 	version  uint32
-	buckets  bucket
+	sys      bucket
 	pageSize uint32
 	pgid     pgid
 	txnid    txnid

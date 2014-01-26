@@ -217,18 +217,8 @@ func (db *DB) Transaction() (*Transaction, error) {
 	}
 
 	// Create a transaction associated with the database.
-	t := &Transaction{
-		db:      db,
-		meta:    db.meta(),
-		buckets: make(map[string]*Bucket),
-		cursors: make(map[uint32]*Cursor),
-	}
-
-	// Save references to the sys•free and sys•buckets buckets.
-	t.sysfree.transaction = t
-	t.sysfree.bucket = &t.meta.free
-	t.sysbuckets.transaction = t
-	t.sysbuckets.bucket = &t.meta.buckets
+	t := &Transaction{}
+	t.init(db, db.meta())
 
 	return t, nil
 }
@@ -236,15 +226,20 @@ func (db *DB) Transaction() (*Transaction, error) {
 // RWTransaction creates a read/write transaction.
 // Only one read/write transaction is allowed at a time.
 func (db *DB) RWTransaction() (*RWTransaction, error) {
+	db.Lock()
+	defer db.Unlock()
+
 	// TODO: db.writerMutex.Lock()
 	// TODO: Add unlock to RWTransaction.Commit() / Abort()
 
-	t := &RWTransaction{}
-
-	// Exit if a read-write transaction is currently in progress.
-	if db.transaction != nil {
-		return nil, TransactionInProgressError
+	// Exit if the database is not open yet.
+	if !db.opened {
+		return nil, DatabaseNotOpenError
 	}
+
+	// Create a transaction associated with the database.
+	t := &RWTransaction{}
+	t.init(db, db.meta())
 
 	return t, nil
 }

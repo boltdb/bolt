@@ -1,7 +1,6 @@
 package bolt
 
 import (
-	"bytes"
 	"unsafe"
 )
 

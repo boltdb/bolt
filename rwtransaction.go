@@ -5,8 +5,15 @@ package bolt
 type RWTransaction struct {
 	Transaction
 
-	dirtyPages map[int]*page
-	freelist   []pgno
+	dirtyPages map[pgid]*page
+	freelist   []pgid
+}
+
+// init initializes the transaction and associates it with a database.
+func (t *RWTransaction) init(db *DB, meta *meta) {
+	t.dirtyPages = make(map[pgid]*page)
+	t.freelist = make([]pgid)
+	t.Transaction.init(db, meta)
 }
 
 // TODO: Allocate scratch meta page.
@@ -231,4 +238,13 @@ func (t *RWTransaction) allocate(count int) (*page, error) {
 	// TODO: Find a continuous block of free pages.
 	// TODO: If no free pages are available, resize the mmap to allocate more.
 	return nil, nil
+}
+
+
+func (t *RWTransaction) insert(key []byte, data []byte) error {
+	// TODO: If there is not enough space on page for key+data then split.
+	// TODO: Move remaining data on page forward.
+	// TODO: Write leaf node to current location.	
+	// TODO: Adjust available page size.
+	return nil
 }

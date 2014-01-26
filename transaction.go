@@ -22,31 +22,21 @@ type txnid uint64
 type Transaction struct {
 	id         int
 	db         *DB
-	dirty      bool
-	spilled    bool
-	err        error
 	meta       *meta
-	sysfree    Bucket
-	sysbuckets Bucket
+	sys Bucket
 	buckets    map[string]*Bucket
-	cursors    map[uint32]*Cursor
-
-	pgno       int
-	freePages  []pgno
-	spillPages []pgno
-	dirtyList  []pgno
-	reader     *reader
-	// Implicit from slices? TODO: MDB_dbi mt_numdbs;
-	dirty_room int
 }
 
 // init initializes the transaction and associates it with a database.
-func (t *Transaction) init(db *DB, meta *meta) error {
-
+func (t *Transaction) init(db *DB, meta *meta) {
+	t.db = db
+	t.meta = meta
+	t.buckets = make(map[string]*Bucket)
+	t.sys.transaction = t
+	t.sys.bucket = &t.meta.sys
 }
 
 func (t *Transaction) Close() error {
-	// TODO: Close cursors.
 	// TODO: Close buckets.
 	return nil
 }
@@ -57,66 +47,44 @@ func (t *Transaction) DB() *DB {
 
 // Bucket retrieves a bucket by name.
 func (t *Transaction) Bucket(name string) (*Bucket, error) {
-	if strings.HasPrefix(name, "sys*") {
-		return nil, &Error{"system buckets are not available", nil}
-	}
-
 	return t.bucket(name)
 }
 
 func (t *Transaction) bucket(name string) (*Bucket, error) {
-	// TODO: if ((flags & VALID_FLAGS) != flags) return EINVAL;
-	// TODO: if (txn->mt_flags & MDB_TXN_ERROR) return MDB_BAD_TXN;
-
-	// Return bucket if it's already been found.
+	// Return bucket if it's already been looked up.
 	if b := t.buckets[name]; b != nil {
 		return b, nil
 	}
 
-	// Open a cursor for the system bucket.
-	c, err := t.Cursor(&t.sysbuckets)
-	if err != nil {
-		return nil, err
-	}
-
-	// Retrieve bucket data.
-	data, err := c.Get([]byte(name))
+	// Retrieve bucket data from the system bucket.
+	data, err := c.get(&t.sys, []byte(name))
 	if err != nil {
 		return nil, err
 	} else if data == nil {
 		return nil, &Error{"bucket not found", nil}
 	}
 
-	// TODO: Verify.
-	// MDB_node *node = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
-	// if (!(node->mn_flags & F_SUBDATA))
-	//   return MDB_INCOMPATIBLE;
+	// Create a bucket that overlays the data.
+	b := &Bucket{
+		bucket: (*bucket)(unsafe.Pointer(&data[0])),
+		name: name,
+		transaction: t,
+	}
+	t.buckets[name] = b
 
-	return nil, nil
+	return b, nil
 }
 
 // Cursor creates a cursor associated with a given bucket.
 func (t *Transaction) Cursor(b *Bucket) (*Cursor, error) {
 	if b == nil {
 		return nil, &Error{"bucket required", nil}
-	} else if t.db == nil {
-		return nil, InvalidTransactionError
-	}
-
-	// TODO: if !(txn->mt_dbflags[dbi] & DB_VALID) return InvalidBucketError
-	// TODO: if (txn->mt_flags & MDB_TXN_ERROR) return BadTransactionError
-
-	// Return existing cursor for the bucket if one exists.
-	if c := t.cursors[b.id]; c != nil {
-		return c, nil
-	}
+	} else 
 
 	// Create a new cursor and associate it with the transaction and bucket.
 	c := &Cursor{
 		transaction: t,
 		bucket:      b,
-		top:         -1,
-		pages:       []*page{},
 	}
 
 	// Set the first page if available.
