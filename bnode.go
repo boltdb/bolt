@@ -4,20 +4,16 @@ import (
 	"unsafe"
 )
 
+const bnodeSize = int(unsafe.Sizeof(lnode{}))
+
 // bnode represents a node on a branch page.
 type bnode struct {
-	flags   uint16
-	keySize uint16
-	pgid    pgid
-	data    uintptr // Pointer to the beginning of the data.
+	pos   uint32
+	ksize uint32
+	pgid  pgid
 }
 
-// key returns a byte slice that of the key data.
+// key returns a byte slice of the node key.
 func (n *bnode) key() []byte {
-	return (*[MaxKeySize]byte)(unsafe.Pointer(&n.data))[:n.keySize]
-}
-
-// bnodeSize returns the number of bytes required to store a key as a branch node.
-func bnodeSize(key []byte) int {
-	return int(unsafe.Offsetof((*bnode)(nil)).data) + len(key)
+	return (*[MaxKeySize]byte)(unsafe.Pointer(&n))[n.pos : n.pos+n.ksize]
 }

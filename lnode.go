@@ -4,27 +4,22 @@ import (
 	"unsafe"
 )
 
-type nodeid uint16
+const lnodeSize = int(unsafe.Sizeof(lnode{}))
 
 // lnode represents a node on a leaf page.
 type lnode struct {
-	flags    uint16
-	keySize  uint16
-	dataSize uint32
-	data     uintptr // Pointer to the beginning of the data.
+	flags uint32
+	pos   uint32
+	ksize uint32
+	vsize uint32
 }
 
-// key returns a byte slice that of the node key.
+// key returns a byte slice of the node key.
 func (n *lnode) key() []byte {
-	return (*[MaxKeySize]byte)(unsafe.Pointer(&n.data))[:n.keySize]
+	return (*[MaxKeySize]byte)(unsafe.Pointer(&n))[n.pos : n.pos+n.ksize]
 }
 
-// data returns a byte slice that of the node data.
-func (n *lnode) data() []byte {
-	return (*[MaxKeySize]byte)(unsafe.Pointer(&n.data))[n.keySize : n.keySize+n.dataSize]
-}
-
-// lnodeSize returns the number of bytes required to store a key+data as a leaf node.
-func lnodeSize(key []byte, data []byte) int {
-	return int(unsafe.Offsetof((*lnode)(nil)).data) + len(key) + len(data)
+// value returns a byte slice of the node value.
+func (n *lnode) value() []byte {
+	return (*[MaxKeySize]byte)(unsafe.Pointer(&n))[n.pos+n.ksize : n.pos+n.ksize+n.vsize]
 }

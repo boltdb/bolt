@@ -1,7 +1,9 @@
 package bolt
 
 var (
-	InvalidMetaPageError = &Error{"Invalid meta page", nil}
+	InvalidError         = &Error{"Invalid database", nil}
+	VersionMismatchError = &Error{"version mismatch", nil}
+	InvalidMetaPageError = &Error{"invalid meta page", nil}
 )
 
 const magic uint32 = 0xC0DEC0DE

@@ -2,6 +2,7 @@ package bolt
 
 import (
 	"os"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 )

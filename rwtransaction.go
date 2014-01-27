@@ -1,19 +1,13 @@
 package bolt
 
+import (
+	"unsafe"
+)
+
 // RWTransaction represents a transaction that can read and write data.
 // Only one read/write transaction can be active for a DB at a time.
 type RWTransaction struct {
 	Transaction
-
-	dirtyPages map[pgid]*page
-	freelist   []pgid
-}
-
-// init initializes the transaction and associates it with a database.
-func (t *RWTransaction) init(db *DB, meta *meta) {
-	t.dirtyPages = make(map[pgid]*page)
-	t.freelist = make([]pgid)
-	t.Transaction.init(db, meta)
 }
 
 // TODO: Allocate scratch meta page.
@@ -50,187 +44,91 @@ func (t *RWTransaction) close() error {
 }
 
 // CreateBucket creates a new bucket.
-func (t *RWTransaction) CreateBucket(name string, dupsort bool) (*Bucket, error) {
+func (t *RWTransaction) CreateBucket(name string) error {
 	if t.db == nil {
-		return nil, InvalidTransactionError
+		return InvalidTransactionError
 	}
 
 	// Check if bucket already exists.
-	if b := t.buckets[name]; b != nil {
-		return nil, &Error{"bucket already exists", nil}
+	if b, err := t.Bucket(name); err != nil {
+		return err
+	} else if b != nil {
+		return &Error{"bucket already exists", nil}
 	}
 
 	// Create a new bucket entry.
 	var buf [unsafe.Sizeof(bucket{})]byte
 	var raw = (*bucket)(unsafe.Pointer(&buf[0]))
-	raw.root = p_invalid
-	// TODO: Set dupsort flag.
+	raw.root = 0
 
 	// Open cursor to system bucket.
-	c, err := t.Cursor(&t.sysbuckets)
-	if err != nil {
-		return nil, err
+	c := t.sys.cursor()
+	if c.Goto([]byte(name)) {
+		// TODO: Delete node first.
 	}
 
-	// Put new entry into system bucket.
-	if err := c.Put([]byte(name), buf[:]); err != nil {
-		return nil, err
+	// Insert new node.
+	if err := t.insert([]byte(name), buf[:]); err != nil {
+		return err
 	}
 
-	// Save reference to bucket.
-	b := &Bucket{name: name, bucket: raw, isNew: true}
-	t.buckets[name] = b
-
-	// TODO: dbflag |= DB_DIRTY;
-
-	return b, nil
+	return nil
 }
 
 // DropBucket deletes a bucket.
 func (t *RWTransaction) DeleteBucket(b *Bucket) error {
-	// TODO: Find bucket.
-	// TODO: Remove entry from system bucket.
+	// TODO: Remove from main DB.
+	// TODO: Delete entry from system bucket.
+	// TODO: Free all pages.
+	// TODO: Remove cursor.
 	return nil
-}
-
-// Put sets the value for a key in a given bucket.
-func (t *Transaction) Put(name string, key []byte, value []byte) error {
-	c, err := t.Cursor(name)
-	if err != nil {
-		return nil, err
-	}
-	return c.Put(key, value)
-}
-
-// page returns a reference to the page with a given id.
-// If page has been written to then a temporary bufferred page is returned.
-func (t *Transaction) page(id int) *page {
-	// Check the dirty pages first.
-	if p, ok := t.pages[id]; ok {
-		return p
-	}
-
-	// Otherwise return directly from the mmap.
-	return t.Transaction.page(id)
 }
 
 // Flush (some) dirty pages to the map, after clearing their dirty flag.
 // @param[in] txn the transaction that's being committed
 // @param[in] keep number of initial pages in dirty_list to keep dirty.
 // @return 0 on success, non-zero on failure.
-func (t *Transaction) flush(keep bool) error {
+func (t *RWTransaction) flush(keep bool) error {
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
 
 	// TODO: Loop over each dirty page and write it to disk.
 	return nil
 }
 
-func (t *RWTransaction) DeleteBucket(name string) error {
-	// TODO: Remove from main DB.
-	// TODO: Delete entry from system bucket.
-	// TODO: Free all pages.
-	// TODO: Remove cursor.
-
-	return nil
-}
-
-func (c *RWCursor) Put(key []byte, value []byte) error {
-	// Make sure this cursor was created by a transaction.
-	if c.transaction == nil {
-		return &Error{"invalid cursor", nil}
+func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
+	b := t.Bucket(name)
+	if b == nil {
+		return BucketNotFoundError
 	}
-	db := c.transaction.db
 
-	// Validate the key we're using.
-	if key == nil {
+	// Validate the key and data size.
+	if len(key) == 0 {
 		return &Error{"key required", nil}
-	} else if len(key) > db.maxKeySize {
+	} else if len(key) > MaxKeySize {
 		return &Error{"key too large", nil}
-	}
-
-	// TODO: Validate data size based on MaxKeySize if DUPSORT.
-
-	// Validate the size of our data.
-	if len(data) > MaxDataSize {
+	} else if len(value) > MaxDataSize {
 		return &Error{"data too large", nil}
 	}
 
-	// If we don't have a root page then add one.
-	if c.bucket.root == p_invalid {
-		p, err := c.newLeafPage()
-		if err != nil {
-			return err
-		}
-		c.push(p)
-		c.bucket.root = p.id
-		c.bucket.root++
-		// TODO: *mc->mc_dbflag |= DB_DIRTY;
-		// TODO? mc->mc_flags |= C_INITIALIZED;
-	}
+	// Move cursor to insertion position.
+	c := b.cursor()
+	replace := c.Goto()
+	p, index := c.current()
 
-	// TODO: Move to key.
-	exists, err := c.moveTo(key)
-	if err != nil {
+	// Insert a new node.
+	if err := t.insert(p, index, key, value, replace); err != nil {
 		return err
-	}
-
-	// TODO: spill?
-	if err := c.spill(key, data); err != nil {
-		return err
-	}
-
-	// Make sure all cursor pages are writable
-	if err := c.touch(); err != nil {
-		return err
-	}
-
-	// If key does not exist the
-	if exists {
-		node := c.currentNode()
-
 	}
 
 	return nil
 }
 
-func (c *Cursor) Delete(key []byte) error {
+func (t *RWTransaction) Delete(key []byte) error {
 	// TODO: Traverse to the correct node.
 	// TODO: If missing, exit.
 	// TODO: Remove node from page.
 	// TODO: If page is empty then add it to the freelist.
 	return nil
-}
-
-// newLeafPage allocates and initialize new a new leaf page.
-func (c *RWCursor) newLeafPage() (*page, error) {
-	// Allocate page.
-	p, err := c.allocatePage(1)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set flags and bounds.
-	p.flags = p_leaf | p_dirty
-	p.lower = pageHeaderSize
-	p.upper = c.transaction.db.pageSize
-
-	return p, nil
-}
-
-// newBranchPage allocates and initialize new a new branch page.
-func (b *RWCursor) newBranchPage() (*page, error) {
-	// Allocate page.
-	p, err := c.allocatePage(1)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set flags and bounds.
-	p.flags = p_branch | p_dirty
-	p.lower = pageHeaderSize
-	p.upper = c.transaction.db.pageSize
-
-	return p, nil
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
@@ -240,11 +138,59 @@ func (t *RWTransaction) allocate(count int) (*page, error) {
 	return nil, nil
 }
 
+func (t *RWTransaction) insert(p *page, index int, key []byte, data []byte, replace bool) error {
+	nodes := copy(p.lnodes())
+	if replace {
+		nodes = nodes.replace(index, key, data)
+	} else {
+		nodes = nodes.insert(index, key, data)
+	}
 
-func (t *RWTransaction) insert(key []byte, data []byte) error {
-	// TODO: If there is not enough space on page for key+data then split.
+	// If our page fits in the same size page then just write it.
+	if pageHeaderSize + nodes.size() < p.size() {
+		// TODO: Write new page.
+		// TODO: Update parent branches.
+	}
+
+	// Calculate total page size.
+	size := pageHeaderSize
+	for _, n := range nodes {
+		size += lnodeSize + n.ksize + n.vsize
+	}
+
+	// If our new page fits in our current page size then just write it.
+	if size < t.db.pageSize {
+
+		return t.writeLeafPage(p.id, nodes)
+	}
+
+	var nodesets [][]lnodes
+	if size < t.db.pageSize {
+		nodesets = [][]lnodes{nodes}
+	}
+
+	nodesets := t.split(nodes)
+
 	// TODO: Move remaining data on page forward.
 	// TODO: Write leaf node to current location.	
 	// TODO: Adjust available page size.
 	return nil
+}
+
+// split takes a list of nodes and returns multiple sets of nodes if a
+// page split is required.
+func (t *RWTransaction) split(nodes []lnodes) [][]lnodes {
+
+	// If the size is less than the page size then just return the current set.
+	if size < t.db.pageSize {
+		return [][]lnodes{nodes}
+	}
+
+	// Otherwise loop over nodes and split up into multiple pages.
+	var nodeset []lnodes
+	var nodesets [][]lnodes
+	for _, n := range nodes {
+
+	}
+
 }

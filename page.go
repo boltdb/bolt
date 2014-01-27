@@ -4,12 +4,11 @@ import (
 	"unsafe"
 )
 
+const pageHeaderSize = int(unsafe.Offsetof(((*page)(nil)).ptr))
+
 const maxPageSize = 0x8000
-const minKeyCount = 2
-
-const pageHeaderSize = int(unsafe.Offsetof(((*page)(nil)).data))
-
-const minPageKeys = 2
+const minKeysPerPage = 2
+const maxNodesPerPage = 65535
 const fillThreshold = 250 // 25%
 
 const (
@@ -21,12 +20,11 @@ const (
 type pgid uint64
 
 type page struct {
-	id    pgid
-	flags uint32
-	lower uint16
-	upper uint16
-	count uint32
-	data  uintptr
+	id       pgid
+	flags    uint16
+	count    uint16
+	overflow uint32
+	ptr      uintptr
 }
 
 // meta returns a pointer to the metadata section of the page.
@@ -52,5 +50,10 @@ func (p *page) init(pageSize int) {
 	m.version = version
 	m.pageSize = uint32(pageSize)
 	m.pgid = 1
-	m.buckets.root = 0
+	m.sys.root = 0
+}
+
+// lnode retrieves the leaf node by index
+func (p *page) lnode(index int) *lnode {
+	return &((*[maxNodesPerPage]lnode)(unsafe.Pointer(&p.ptr)))[index]
 }

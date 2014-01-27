@@ -12,6 +12,8 @@ const (
 	db_nometasync
 )
 
+const minPageSize = 0x1000
+
 var (
 	DatabaseNotOpenError       = &Error{"db is not open", nil}
 	DatabaseAlreadyOpenedError = &Error{"db already open", nil}
@@ -28,23 +30,11 @@ type DB struct {
 	file          file
 	metafile      file
 	data          []byte
-	buf           []byte
 	meta0         *meta
 	meta1         *meta
 	pageSize      int
 	rwtransaction *RWTransaction
 	transactions  []*Transaction
-	maxPageNumber int   /**< me_mapsize / me_psize */
-	freePages     []int /** IDL of pages that became unused in a write txn */
-	dirtyPages    []int /** ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
-
-	// TODO: scratch []*page  // list of temp pages for writing.
-
-	readers         []*reader
-	maxFreeOnePage  int /** Max number of freelist items that can fit in a single overflow page */
-	maxPageDataSize int
-	maxNodeSize     int /** Max size of a node on a page */
-	maxKeySize      int /**< max size of a key */
 }
 
 // NewDB creates a new DB instance.
@@ -91,10 +81,10 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 	// Read enough data to get both meta pages.
 	var m, m0, m1 *meta
-	var buf [pageHeaderSize + int(unsafe.Sizeof(meta{}))]byte
+	var buf [minPageSize]byte
 	if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 		if m0, _ = db.pageInBuffer(buf[:], 0).meta(); m0 != nil {
-			db.pageSize = int(m0.free.pad)
+			db.pageSize = int(m0.pageSize)
 		}
 	}
 	if _, err := db.file.ReadAt(buf[:], int64(db.pageSize)); err == nil {
@@ -114,12 +104,6 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 			return err
 		}
 	}
-
-	// Initialize db fields.
-	db.buf = make([]byte, db.pageSize)
-	db.maxPageDataSize = ((db.pageSize - pageHeaderSize) / int(unsafe.Sizeof(pgno(0)))) - 1
-	db.maxNodeSize = (((db.pageSize - pageHeaderSize) / minKeyCount) & -2) - int(unsafe.Sizeof(indx(0)))
-	// TODO?: env->me_maxpg = env->me_mapsize / env->me_psize;
 
 	// Memory map the data file.
 	if err := db.mmap(); err != nil {
@@ -181,8 +165,8 @@ func (db *DB) init() error {
 	// Create two meta pages on a buffer.
 	buf := make([]byte, db.pageSize*2)
 	for i := 0; i < 2; i++ {
-		p := db.pageInBuffer(buf[:], i)
-		p.id = pgno(i)
+		p := db.pageInBuffer(buf[:], pgid(i))
+		p.id = pgid(i)
 		p.init(db.pageSize)
 	}
 
@@ -198,7 +182,7 @@ func (db *DB) init() error {
 func (db *DB) Close() {
 	db.Lock()
 	defer db.Unlock()
-	s.close()
+	db.close()
 }
 
 func (db *DB) close() {
@@ -245,13 +229,13 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 }
 
 // page retrieves a page reference from the mmap based on the current page size.
-func (db *DB) page(id int) *page {
-	return (*page)(unsafe.Pointer(&db.data[id*db.pageSize]))
+func (db *DB) page(id pgid) *page {
+	return (*page)(unsafe.Pointer(&db.data[id*pgid(db.pageSize)]))
 }
 
 // pageInBuffer retrieves a page reference from a given byte array based on the current page size.
-func (db *DB) pageInBuffer(b []byte, id int) *page {
-	return (*page)(unsafe.Pointer(&b[id*db.pageSize]))
+func (db *DB) pageInBuffer(b []byte, id pgid) *page {
+	return (*page)(unsafe.Pointer(&b[id*pgid(db.pageSize)]))
 }
 
 // meta retrieves the current meta page reference.
@@ -262,17 +246,15 @@ func (db *DB) meta() *meta {
 	return db.meta1
 }
 
-// sync flushes the file descriptor to disk unless "no sync" is enabled.
+// sync flushes the file descriptor to disk.
 func (db *DB) sync(force bool) error {
-	if !db.noSync {
-		if err := syscall.Fsync(int(db.file.Fd())); err != nil {
-			return err
-		}
+	if err := syscall.Fsync(int(db.file.Fd())); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (db *DB) Stat() *stat {
+func (db *DB) Stat() *Stat {
 	// TODO: Calculate size, depth, page count (by type), entry count, readers, etc.
 	return nil
 }
