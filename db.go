@@ -79,29 +79,23 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 		return err
 	}
 
-	// Read enough data to get both meta pages.
-	var m, m0, m1 *meta
-	var buf [minPageSize]byte
-	if _, err := db.file.ReadAt(buf[:], 0); err == nil {
-		if m0, _ = db.pageInBuffer(buf[:], 0).meta(); m0 != nil {
-			db.pageSize = int(m0.pageSize)
-		}
-	}
-	if _, err := db.file.ReadAt(buf[:], int64(db.pageSize)); err == nil {
-		m1, _ = db.pageInBuffer(buf[:], 0).meta()
-	}
-	if m0 != nil && m1 != nil {
-		if m0.txnid > m1.txnid {
-			m = m0
-		} else {
-			m = m1
-		}
-	}
-
-	// Initialize the page size for new environments.
-	if m == nil {
+	// Initialize the database if it doesn't exist.
+	if info, err := db.file.Stat(); err != nil {
+		return &Error{"stat error", err}
+	} else if info.Size() == 0 {
+		// Initialize new files with meta pages.
 		if err := db.init(); err != nil {
 			return err
+		}
+	} else {
+		// Read the first meta page to determine the page size.
+		var buf [minPageSize]byte
+		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
+			if m, err := db.pageInBuffer(buf[:], 0).meta(); err != nil {
+				return &Error{"meta bootstrap error", err}
+			} else if m != nil {
+				db.pageSize = int(m.pageSize)
+			}
 		}
 	}
 
@@ -111,14 +105,6 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 		return err
 	}
 
-	// TODO: Initialize meta.
-	// if (newenv) {
-	//   i = mdb_env_init_meta(env, &meta);
-	//   if (i != MDB_SUCCESS) {
-	//     return i;
-	//   }
-	// }
-
 	// Mark the database as opened and return.
 	db.opened = true
 	return nil
@@ -126,17 +112,13 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 // mmap opens the underlying memory-mapped file and initializes the meta references.
 func (db *DB) mmap() error {
-	var err error
-
-	// Determine the map size based on the file size.
-	var size int
-	if info, err := db.file.Stat(); err != nil {
-		return err
-	} else if info.Size() < int64(db.pageSize*2) {
-		return &Error{"file size too small", nil}
-	} else {
-		size = int(info.Size())
+	info, err := db.file.Stat()
+	if err != nil {
+		return &Error{"mmap stat error", err}
+	} else if int(info.Size()) < db.pageSize * 2 {
+		return &Error{"file size too small", err}
 	}
+	size := int(info.Size())
 
 	// Memory-map the data file as a byte slice.
 	if db.data, err = db.syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
