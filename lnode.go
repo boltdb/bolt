@@ -16,10 +16,12 @@ type lnode struct {
 
 // key returns a byte slice of the node key.
 func (n *lnode) key() []byte {
-	return (*[MaxKeySize]byte)(unsafe.Pointer(&n))[n.pos : n.pos+n.ksize]
+	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
+	return buf[n.pos:n.pos+n.ksize]
 }
 
 // value returns a byte slice of the node value.
 func (n *lnode) value() []byte {
-	return (*[MaxKeySize]byte)(unsafe.Pointer(&n))[n.pos+n.ksize : n.pos+n.ksize+n.vsize]
+	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
+	return buf[n.pos+n.ksize:n.pos+n.ksize+n.vsize]
 }

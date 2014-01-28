@@ -33,10 +33,11 @@ func (p *tpage) put(key []byte, value []byte) {
 
 // read initializes the node data from an on-disk page.
 func (p *tpage) read(page *page) {
-	p.nodes = make(tnodes, page.count)
+	ncount := int(page.count)
+	p.nodes = make(tnodes, ncount)
 	lnodes := (*[maxNodesPerPage]lnode)(unsafe.Pointer(&page.ptr))
-	for i := 0; i < int(page.count); i++ {
-		lnode := lnodes[i]
+	for i := 0; i < ncount; i++ {
+		lnode := &lnodes[i]
 		n := &p.nodes[i]
 		n.key = lnode.key()
 		n.value = lnode.value()
@@ -64,7 +65,7 @@ func (p *tpage) write(pageSize int, allocate allocator) ([]*page, error) {
 
 		// Loop over each node and write it to the page.
 		lnodes := (*[maxNodesPerPage]lnode)(unsafe.Pointer(&page.ptr))
-		b := (*[maxPageAllocSize]byte)(unsafe.Pointer(&page.ptr))[lnodeSize*len(nodes):]
+		b := (*[maxAllocSize]byte)(unsafe.Pointer(&page.ptr))[lnodeSize*len(nodes):]
 		for index, node := range nodes {
 			// Write node.
 			lnode := &lnodes[index]
