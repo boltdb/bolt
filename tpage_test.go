@@ -29,7 +29,7 @@ func TestTpageRead(t *testing.T) {
 
 	// Insert 2 leaf nodes at the beginning. sizeof(lnode) == 16
 	nodes := (*[3]lnode)(unsafe.Pointer(&page.ptr))
-	nodes[0] = lnode{flags: 0, pos: 32, ksize: 3, vsize: 4} // pos = sizeof(lnode) * 2
+	nodes[0] = lnode{flags: 0, pos: 32, ksize: 3, vsize: 4}  // pos = sizeof(lnode) * 2
 	nodes[1] = lnode{flags: 0, pos: 23, ksize: 10, vsize: 3} // pos = sizeof(lnode) + 3 + 4
 
 	// Write data for the nodes at the end.

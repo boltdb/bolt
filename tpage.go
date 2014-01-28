@@ -6,7 +6,7 @@ import (
 	"unsafe"
 )
 
-// tpage represents a temporary, in-memory leaf page.
+// tpage represents a temporary in-memory leaf page.
 // It is deserialized from an memory-mapped page and is not restricted by page size.
 type tpage struct {
 	nodes tnodes
