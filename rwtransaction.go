@@ -8,7 +8,7 @@ import (
 // Only one read/write transaction can be active for a DB at a time.
 type RWTransaction struct {
 	Transaction
-	mpages map[pgid]*mpage
+	tpages map[pgid]*tpage
 }
 
 // TODO: Allocate scratch meta page.
@@ -61,7 +61,7 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	// Insert new node.
 	c := t.sys.cursor()
 	c.Goto([]byte(name))
-	t.mpage(c.page().id).put([]byte(name), buf[:])
+	t.tpage(c.page().id).put([]byte(name), buf[:])
 
 	return nil
 }
@@ -104,7 +104,7 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	// Insert a new node.
 	c := b.cursor()
 	c.Goto(key)
-	t.mpage(c.page().id).put(key, value)
+	t.tpage(c.page().id).put(key, value)
 
 	return nil
 }
@@ -124,18 +124,18 @@ func (t *RWTransaction) allocate(size int) (*page, error) {
 	return nil, nil
 }
 
-// mpage returns a deserialized leaf page.
-func (t *RWTransaction) mpage(id pgid) *mpage {
-	if t.mpages != nil {
-		if p := t.mpages[id]; p != nil {
+// tpage returns a deserialized leaf page.
+func (t *RWTransaction) tpage(id pgid) *tpage {
+	if t.tpages != nil {
+		if p := t.tpages[id]; p != nil {
 			return p
 		}
 	}
 
 	// Read raw page and deserialize.
-	p := &mpage{}
+	p := &tpage{}
 	p.read(t.page(id))
-	t.mpages[id] = p
+	t.tpages[id] = p
 
 	return p
 }

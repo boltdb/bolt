@@ -115,7 +115,7 @@ func (db *DB) mmap() error {
 	info, err := db.file.Stat()
 	if err != nil {
 		return &Error{"mmap stat error", err}
-	} else if int(info.Size()) < db.pageSize * 2 {
+	} else if int(info.Size()) < db.pageSize*2 {
 		return &Error{"file size too small", err}
 	}
 	size := int(info.Size())

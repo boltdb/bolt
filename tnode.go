@@ -1,9 +1,8 @@
 package bolt
 
-type mnodes []mnode
+type tnodes []tnode
 
-type mnode struct {
+type tnode struct {
 	key   []byte
 	value []byte
 }
-
