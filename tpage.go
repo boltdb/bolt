@@ -13,7 +13,7 @@ type tpage struct {
 }
 
 // allocator is a function that returns a set of contiguous pages.
-type allocator func(count int) (*page, error)
+type allocator func(size int) (*page, error)
 
 // put inserts or replaces a key on a leaf page.
 func (p *tpage) put(key []byte, value []byte) {
@@ -69,14 +69,14 @@ func (p *tpage) write(pageSize int, allocate allocator) ([]*page, error) {
 		for index, node := range nodes {
 			// Write node.
 			lnode := &lnodes[index]
-			lnode.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(&lnode)))
+			lnode.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(lnode)))
 			lnode.ksize = uint32(len(node.key))
 			lnode.vsize = uint32(len(node.value))
 
 			// Write data to the end of the node.
-			copy(b[:], node.key)
+			copy(b[0:], node.key)
 			b = b[len(node.key):]
-			copy(b[:], node.value)
+			copy(b[0:], node.value)
 			b = b[len(node.value):]
 		}
 

@@ -51,7 +51,32 @@ func TestTpageRead(t *testing.T) {
 
 // Ensure that a temporary page can serialize itself.
 func TestTpageWrite(t *testing.T) {
-	t.Skip("pending")
+	// Create a temp page.
+	p := &tpage{nodes: make(tnodes, 0)}
+	p.put([]byte("susy"), []byte("que"))
+	p.put([]byte("ricki"), []byte("lake"))
+	p.put([]byte("john"), []byte("johnson"))
+
+	// Write it to a page.
+	var buf [4096]byte
+	allocate := func(size int) (*page, error) {
+		return (*page)(unsafe.Pointer(&buf[0])), nil
+	}
+	pages, err := p.write(4096, allocate)
+	assert.NoError(t, err)
+
+	// Read the page back in.
+	p2 := &tpage{}
+	p2.read(pages[0])
+
+	// Check that the two pages are the same.
+	assert.Equal(t, len(p2.nodes), 3)
+	assert.Equal(t, p2.nodes[0].key, []byte("john"))
+	assert.Equal(t, p2.nodes[0].value, []byte("johnson"))
+	assert.Equal(t, p2.nodes[1].key, []byte("ricki"))
+	assert.Equal(t, p2.nodes[1].value, []byte("lake"))
+	assert.Equal(t, p2.nodes[2].key, []byte("susy"))
+	assert.Equal(t, p2.nodes[2].value, []byte("que"))
 }
 
 // Ensure that a temporary page can split into appropriate subgroups.
