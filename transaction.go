@@ -47,45 +47,45 @@ func (t *Transaction) DB() *DB {
 }
 
 // Bucket retrieves a bucket by name.
-func (t *Transaction) Bucket(name string) (*Bucket, error) {
+func (t *Transaction) Bucket(name string) *Bucket {
 	// Return cached reference if it's already been looked up.
 	if b := t.buckets[name]; b != nil {
-		return b, nil
+		return b
 	}
 
 	// Retrieve bucket data from the system bucket.
-	value := t.get(&t.sys, []byte(name))
+	value := t.sys.cursor().Get([]byte(name))
 	if value == nil {
 		return nil
 	}
 
 	// Create a bucket that overlays the data.
 	b := &Bucket{
-		bucket:      (*bucket)(unsafe.Pointer(&data[0])),
+		bucket:      (*bucket)(unsafe.Pointer(&value[0])),
 		name:        name,
 		transaction: t,
 	}
 	t.buckets[name] = b
 
-	return b, nil
+	return b
 }
 
 // Cursor creates a cursor associated with a given bucket.
-func (t *Transaction) Cursor(name string) (*Cursor, error) {
-	b, err := t.Bucket(name)
-	if err != nil {
-		return nil, err
+func (t *Transaction) Cursor(name string) *Cursor {
+	b := t.Bucket(name)
+	if b == nil {
+		return nil
 	}
 	return b.Cursor()
 }
 
 // Get retrieves the value for a key in a named bucket.
-func (t *Transaction) Get(name string, key []byte) ([]byte, error) {
-	b, err := t.Bucket(name)
-	if err != nil {
-		return nil, err
+func (t *Transaction) Get(name string, key []byte) []byte {
+	c := t.Cursor(name)
+	if c == nil {
+		return nil
 	}
-	return b.Get(key)
+	return c.Get(key)
 }
 
 // Stat returns information about a bucket's internal structure.

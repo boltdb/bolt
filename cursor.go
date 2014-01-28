@@ -45,10 +45,15 @@ func (c *Cursor) Goto(key []byte) bool {
 	return false
 }
 
-// current the page and leaf node that the cursor is currently pointing at.
-func (c *Cursor) current() (*page, *lnode) {
+// top returns the page and leaf node that the cursor is currently pointing at.
+func (c *Cursor) top() (*page, *lnode) {
 	elem := c.stack[len(c.stack)-1]
 	return elem.page, elem.page.lnode(elem.index)
+}
+
+// page returns the page that the cursor is currently pointing at.
+func (c *Cursor) page() *page {
+	return c.stack[len(c.stack)-1].page
 }
 
 // node returns the leaf node that the cursor is currently positioned on.

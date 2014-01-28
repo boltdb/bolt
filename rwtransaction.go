@@ -8,6 +8,8 @@ import (
 // Only one read/write transaction can be active for a DB at a time.
 type RWTransaction struct {
 	Transaction
+	bpages map[pgid]*bpage
+	lpages map[pgid]*lpage
 }
 
 // TODO: Allocate scratch meta page.
@@ -45,14 +47,8 @@ func (t *RWTransaction) close() error {
 
 // CreateBucket creates a new bucket.
 func (t *RWTransaction) CreateBucket(name string) error {
-	if t.db == nil {
-		return InvalidTransactionError
-	}
-
 	// Check if bucket already exists.
-	if b, err := t.Bucket(name); err != nil {
-		return err
-	} else if b != nil {
+	if b := t.Bucket(name); b != nil {
 		return &Error{"bucket already exists", nil}
 	}
 
@@ -61,16 +57,12 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	var raw = (*bucket)(unsafe.Pointer(&buf[0]))
 	raw.root = 0
 
-	// Open cursor to system bucket.
-	c := t.sys.cursor()
-	if c.Goto([]byte(name)) {
-		// TODO: Delete node first.
-	}
+	// TODO: Delete node first.
 
 	// Insert new node.
-	if err := t.insert([]byte(name), buf[:]); err != nil {
-		return err
-	}
+	c := t.sys.cursor()
+	c.Goto([]byte(name))
+	t.lpage(c.page().id).put([]byte(name), buf[:])
 
 	return nil
 }
@@ -98,7 +90,7 @@ func (t *RWTransaction) flush(keep bool) error {
 func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	b := t.Bucket(name)
 	if b == nil {
-		return BucketNotFoundError
+		return &Error{"bucket not found", nil}
 	}
 
 	// Validate the key and data size.
@@ -110,15 +102,10 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 		return &Error{"data too large", nil}
 	}
 
-	// Move cursor to insertion position.
-	c := b.cursor()
-	replace := c.Goto()
-	p, index := c.current()
-
 	// Insert a new node.
-	if err := t.insert(p, index, key, value, replace); err != nil {
-		return err
-	}
+	c := b.cursor()
+	c.Goto(key)
+	t.lpage(c.page().id).put(key, value)
 
 	return nil
 }
@@ -132,65 +119,24 @@ func (t *RWTransaction) Delete(key []byte) error {
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
-func (t *RWTransaction) allocate(count int) (*page, error) {
+func (t *RWTransaction) allocate(size int) (*page, error) {
 	// TODO: Find a continuous block of free pages.
 	// TODO: If no free pages are available, resize the mmap to allocate more.
 	return nil, nil
 }
 
-func (t *RWTransaction) insert(p *page, index int, key []byte, data []byte, replace bool) error {
-	nodes := copy(p.lnodes())
-	if replace {
-		nodes = nodes.replace(index, key, data)
-	} else {
-		nodes = nodes.insert(index, key, data)
+// lpage returns a deserialized leaf page.
+func (t *RWTransaction) lpage(id pgid) *lpage {
+	if t.lpages != nil {
+		if p := t.lpages[id]; p != nil {
+			return p
+		}
 	}
 
-	// If our page fits in the same size page then just write it.
-	if pageHeaderSize + nodes.size() < p.size() {
-		// TODO: Write new page.
-		// TODO: Update parent branches.
-	}
+	// Read raw page and deserialize.
+	p := &lpage{}
+	p.read(t.page(id))
+	t.lpages[id] = p
 
-	// Calculate total page size.
-	size := pageHeaderSize
-	for _, n := range nodes {
-		size += lnodeSize + n.ksize + n.vsize
-	}
-
-	// If our new page fits in our current page size then just write it.
-	if size < t.db.pageSize {
-
-		return t.writeLeafPage(p.id, nodes)
-	}
-
-	var nodesets [][]lnodes
-	if size < t.db.pageSize {
-		nodesets = [][]lnodes{nodes}
-	}
-
-	nodesets := t.split(nodes)
-
-	// TODO: Move remaining data on page forward.
-	// TODO: Write leaf node to current location.	
-	// TODO: Adjust available page size.
-	return nil
-}
-
-// split takes a list of nodes and returns multiple sets of nodes if a
-// page split is required.
-func (t *RWTransaction) split(nodes []lnodes) [][]lnodes {
-
-	// If the size is less than the page size then just return the current set.
-	if size < t.db.pageSize {
-		return [][]lnodes{nodes}
-	}
-
-	// Otherwise loop over nodes and split up into multiple pages.
-	var nodeset []lnodes
-	var nodesets [][]lnodes
-	for _, n := range nodes {
-
-	}
-
+	return p
 }

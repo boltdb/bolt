@@ -156,11 +156,8 @@ func (db *DB) mmap() error {
 
 // init creates a new database file and initializes its meta pages.
 func (db *DB) init() error {
-	// Set the page size to the OS page size unless that is larger than max page size.
+	// Set the page size to the OS page size.
 	db.pageSize = db.os.Getpagesize()
-	if db.pageSize > maxPageSize {
-		db.pageSize = maxPageSize
-	}
 
 	// Create two meta pages on a buffer.
 	buf := make([]byte, db.pageSize*2)

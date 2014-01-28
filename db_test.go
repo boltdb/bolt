@@ -53,26 +53,6 @@ func TestDBOpenMetaFileError(t *testing.T) {
 	})
 }
 
-// Ensure that the database limits the upper bound of the page size.
-func TestDBLimitPageSize(t *testing.T) {
-	withMockDB(func(db *DB, mockos *mockos, mocksyscall *mocksyscall, path string) {
-		b := make([]byte, 0x10000)
-		p0, p1 := (*page)(unsafe.Pointer(&b[0x0000])), (*page)(unsafe.Pointer(&b[0x8000]))
-		p0.init(0x8000)
-		p1.init(0x8000)
-		file, metafile := &mockfile{}, &mockfile{}
-		mockos.On("OpenFile", path, os.O_RDWR|os.O_CREATE, os.FileMode(0666)).Return(file, nil)
-		mockos.On("OpenFile", path, os.O_RDWR|os.O_SYNC, os.FileMode(0666)).Return(metafile, nil)
-		mockos.On("Getpagesize").Return(0x10000)
-		file.On("ReadAt", mock.Anything, int64(0)).Return(0, nil)
-		file.On("Stat").Return(&mockfileinfo{"", 0x10000, 0666, time.Now(), false, nil}, nil)
-		metafile.On("WriteAt", mock.Anything, int64(0)).Return(0, nil)
-		mocksyscall.On("Mmap", 0, int64(0), 0x10000, syscall.PROT_READ, syscall.MAP_SHARED).Return(b, nil)
-		db.Open(path, 0666)
-		assert.Equal(t, db.pageSize, maxPageSize)
-	})
-}
-
 // Ensure that write errors to the meta file handler during initialization are returned.
 func TestDBMetaInitWriteError(t *testing.T) {
 	withMockDB(func(db *DB, mockos *mockos, mocksyscall *mocksyscall, path string) {
@@ -187,7 +167,7 @@ func TestDBCorruptMeta1(t *testing.T) {
 // Ensure that a database cannot open a transaction when it's not open.
 func TestDBTransactionDatabaseNotOpenError(t *testing.T) {
 	withDB(func(db *DB, path string) {
-		txn, err := db.Transaction(false)
+		txn, err := db.Transaction()
 		assert.Nil(t, txn)
 		assert.Equal(t, err, DatabaseNotOpenError)
 	})
@@ -196,8 +176,8 @@ func TestDBTransactionDatabaseNotOpenError(t *testing.T) {
 // Ensure that a database cannot open a writable transaction while one is in progress.
 func TestDBTransactionInProgressError(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		db.Transaction(true)
-		txn, err := db.Transaction(true)
+		db.RWTransaction()
+		txn, err := db.RWTransaction()
 		assert.Nil(t, txn)
 		assert.Equal(t, err, TransactionInProgressError)
 	})
@@ -206,10 +186,9 @@ func TestDBTransactionInProgressError(t *testing.T) {
 // Ensure that a database can create a new writable transaction.
 func TestDBTransactionWriter(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		txn, err := db.Transaction(true)
+		txn, err := db.RWTransaction()
 		if assert.NotNil(t, txn) {
 			assert.Equal(t, txn.db, db)
-			assert.Equal(t, txn.writable, true)
 		}
 		assert.NoError(t, err)
 	})

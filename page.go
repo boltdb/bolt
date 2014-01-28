@@ -6,10 +6,9 @@ import (
 
 const pageHeaderSize = int(unsafe.Offsetof(((*page)(nil)).ptr))
 
-const maxPageSize = 0x8000
+const maxPageAllocSize = 0xFFFFFFF
 const minKeysPerPage = 2
 const maxNodesPerPage = 65535
-const fillThreshold = 250 // 25%
 
 const (
 	p_branch = 0x01
