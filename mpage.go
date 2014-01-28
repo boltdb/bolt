@@ -6,26 +6,23 @@ import (
 	"unsafe"
 )
 
-type lpage struct {
-	nodes []lpnode
-}
-
-type lpnode struct {
-	key   []byte
-	value []byte
+// mpage represents a deserialized leaf page.
+// It is deserialized from an memory-mapped page and is not restricted by page size.
+type mpage struct {
+	nodes mnodes
 }
 
 // allocator is a function that returns a set of contiguous pages.
 type allocator func(count int) (*page, error)
 
 // put inserts or replaces a key on a leaf page.
-func (p *lpage) put(key []byte, value []byte) {
+func (p *mpage) put(key []byte, value []byte) {
 	// Find insertion index.
 	index := sort.Search(len(p.nodes), func(i int) bool { return bytes.Compare(p.nodes[i].key, key) != -1 })
 
 	// If there is no existing key then add a new node.
 	if len(p.nodes) == 0 || !bytes.Equal(p.nodes[index].key, key) {
-		p.nodes = append(p.nodes, lpnode{})
+		p.nodes = append(p.nodes, mnode{})
 		copy(p.nodes[index+1:], p.nodes[index:])
 	}
 	p.nodes[index].key = key
@@ -33,8 +30,8 @@ func (p *lpage) put(key []byte, value []byte) {
 }
 
 // read initializes the node data from an on-disk page.
-func (p *lpage) read(page *page) {
-	p.nodes = make([]lpnode, page.count)
+func (p *mpage) read(page *page) {
+	p.nodes = make(mnodes, page.count)
 	lnodes := (*[maxNodesPerPage]lnode)(unsafe.Pointer(&page.ptr))
 	for i := 0; i < int(page.count); i++ {
 		lnode := lnodes[i]
@@ -45,7 +42,7 @@ func (p *lpage) read(page *page) {
 }
 
 // write writes the nodes onto one or more leaf pages.
-func (p *lpage) write(pageSize int, allocate allocator) ([]*page, error) {
+func (p *mpage) write(pageSize int, allocate allocator) ([]*page, error) {
 	var pages []*page
 
 	for _, nodes := range p.split(pageSize) {
@@ -87,10 +84,10 @@ func (p *lpage) write(pageSize int, allocate allocator) ([]*page, error) {
 }
 
 // split divides up the noes in the page into appropriately sized groups.
-func (p *lpage) split(pageSize int) [][]lpnode {
+func (p *mpage) split(pageSize int) []mnodes {
 	// If we only have enough nodes for one page then just return the nodes.
 	if len(p.nodes) <= minKeysPerPage {
-		return [][]lpnode{p.nodes}
+		return []mnodes{p.nodes}
 	}
 
 	// If we're not larger than one page then just return the nodes.
@@ -99,13 +96,13 @@ func (p *lpage) split(pageSize int) [][]lpnode {
 		totalSize += lnodeSize + len(node.key) + len(node.value)
 	}
 	if totalSize < pageSize {
-		return [][]lpnode{p.nodes}
+		return []mnodes{p.nodes}
 	}
 
 	// Otherwise group into smaller pages and target a given fill size.
 	var size int
-	var group []lpnode
-	var groups [][]lpnode
+	var group mnodes
+	var groups []mnodes
 
 	// Set fill threshold to 25%.
 	threshold := pageSize >> 4
@@ -116,7 +113,7 @@ func (p *lpage) split(pageSize int) [][]lpnode {
 		// TODO(benbjohnson): Don't create a new group for just the last node.
 		if group == nil || (len(group) > minKeysPerPage && size+nodeSize > threshold) {
 			size = pageHeaderSize
-			group = make([]lpnode, 0)
+			group = make(mnodes, 0)
 			groups = append(groups, group)
 		}
 
