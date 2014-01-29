@@ -79,7 +79,65 @@ func TestTpageWrite(t *testing.T) {
 	assert.Equal(t, p2.nodes[2].value, []byte("que"))
 }
 
+// Ensure that an error that an allocation error during writing is returned.
+func TestTpageWriteError(t *testing.T) {
+	// Create a temp page.
+	p := &tpage{nodes: make(tnodes, 0)}
+	p.put([]byte("susy"), []byte("que"))
+
+	// Write it to a page.
+	exp := &Error{}
+	allocate := func(size int) (*page, error) {
+		return nil, exp
+	}
+	pages, err := p.write(4096, allocate)
+	assert.Nil(t, pages)
+	assert.Equal(t, err, exp)
+}
+
 // Ensure that a temporary page can split into appropriate subgroups.
 func TestTpageSplit(t *testing.T) {
-	t.Skip("pending")
+	// Create a temp page.
+	p := &tpage{nodes: make(tnodes, 0)}
+	p.put([]byte("00000001"), []byte("0123456701234567"))
+	p.put([]byte("00000002"), []byte("0123456701234567"))
+	p.put([]byte("00000003"), []byte("0123456701234567"))
+	p.put([]byte("00000004"), []byte("0123456701234567"))
+	p.put([]byte("00000005"), []byte("0123456701234567"))
+
+	// Split between 3 & 4.
+	pages := p.split(100)
+
+	assert.Equal(t, len(pages), 2)
+	assert.Equal(t, len(pages[0]), 2)
+	assert.Equal(t, len(pages[1]), 3)
+}
+
+// Ensure that a temporary page with the minimum number of nodes just returns a single split group.
+func TestTpageSplitWithMinKeys(t *testing.T) {
+	// Create a temp page.
+	p := &tpage{nodes: make(tnodes, 0)}
+	p.put([]byte("00000001"), []byte("0123456701234567"))
+	p.put([]byte("00000002"), []byte("0123456701234567"))
+
+	// Split.
+	pages := p.split(20)
+	assert.Equal(t, len(pages), 1)
+	assert.Equal(t, len(pages[0]), 2)
+}
+
+// Ensure that a temporary page that has keys that all fit on a page just returns one split group.
+func TestTpageSplitFitsInPage(t *testing.T) {
+	// Create a temp page.
+	p := &tpage{nodes: make(tnodes, 0)}
+	p.put([]byte("00000001"), []byte("0123456701234567"))
+	p.put([]byte("00000002"), []byte("0123456701234567"))
+	p.put([]byte("00000003"), []byte("0123456701234567"))
+	p.put([]byte("00000004"), []byte("0123456701234567"))
+	p.put([]byte("00000005"), []byte("0123456701234567"))
+
+	// Split.
+	pages := p.split(4096)
+	assert.Equal(t, len(pages), 1)
+	assert.Equal(t, len(pages[0]), 5)
 }

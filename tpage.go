@@ -88,8 +88,8 @@ func (p *tpage) write(pageSize int, allocate allocator) ([]*page, error) {
 
 // split divides up the noes in the page into appropriately sized groups.
 func (p *tpage) split(pageSize int) []tnodes {
-	// If we only have enough nodes for one page then just return the nodes.
-	if len(p.nodes) <= minKeysPerPage {
+	// If we only have enough nodes for multiple pages then just return the nodes.
+	if len(p.nodes) <= (minKeysPerPage * 2) {
 		return []tnodes{p.nodes}
 	}
 
@@ -110,19 +110,22 @@ func (p *tpage) split(pageSize int) []tnodes {
 	// Set fill threshold to 25%.
 	threshold := pageSize >> 4
 
-	for _, node := range p.nodes {
+	for index, node := range p.nodes {
 		nodeSize := lnodeSize + len(node.key) + len(node.value)
 
 		// TODO(benbjohnson): Don't create a new group for just the last node.
-		if group == nil || (len(group) > minKeysPerPage && size+nodeSize > threshold) {
+		if group == nil || (len(group) >= minKeysPerPage && index < len(p.nodes)-minKeysPerPage && size+nodeSize > threshold) {
 			size = pageHeaderSize
+			if group != nil {
+				groups = append(groups, group)
+			}
 			group = make(tnodes, 0)
-			groups = append(groups, group)
 		}
 
 		size += nodeSize
 		group = append(group, node)
 	}
+	groups = append(groups, group)
 
 	return groups
 }
