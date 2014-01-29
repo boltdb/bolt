@@ -2,7 +2,6 @@ package bolt
 
 import (
 	"bytes"
-	"sort"
 	"unsafe"
 )
 
@@ -12,24 +11,23 @@ type branch struct {
 	items branchItems
 }
 
-// insert inserts a new item after a given pgid.
-func (b *branch) insert(key []byte, previd pgid, id pgid) {
-	// Find previous insertion index.
-	index := sort.Search(len(b.items), func(i int) bool { return b.items[i].pgid >= previd })
-
-	// If there is no existing key then add a new item.
-	b.items = append(b.items, branchItem{})
-	if index < len(b.items) {
-		copy(b.items[index+1:], b.items[index:])
+// put adds a new node or replaces an existing node.
+func (b *branch) put(id pgid, newid pgid, key []byte, replace bool) {
+	var index int
+	for ; index < len(b.items); index++ {
+		if b.items[index].pgid == id {
+			break
+		}
 	}
 
-	b.items[index].pgid = id
-	b.items[index].key = key
-}
+	if !replace {
+		index++
+		b.items = append(b.items, branchItem{})
+		if index < len(b.items) {
+			copy(b.items[index+1:], b.items[index:])
+		}
+	}
 
-// replace swaps out an existing node id for a new one id.
-func (b *branch) replace(oldid pgid, newid pgid, key []byte) {
-	index := sort.Search(len(b.items), func(i int) bool { return b.items[i].pgid >= oldid })
 	b.items[index].pgid = newid
 	b.items[index].key = key
 }
