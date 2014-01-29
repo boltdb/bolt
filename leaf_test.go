@@ -59,15 +59,12 @@ func TestLeafWrite(t *testing.T) {
 
 	// Write it to a page.
 	var buf [4096]byte
-	allocate := func(size int) (*page, error) {
-		return (*page)(unsafe.Pointer(&buf[0])), nil
-	}
-	pages, err := l.write(4096, allocate)
-	assert.NoError(t, err)
+	p := (*page)(unsafe.Pointer(&buf[0]))
+	l.write(p)
 
 	// Read the page back in.
 	l2 := &leaf{}
-	l2.read(pages[0])
+	l2.read(p)
 
 	// Check that the two pages are the same.
 	assert.Equal(t, len(l2.items), 3)
@@ -77,22 +74,6 @@ func TestLeafWrite(t *testing.T) {
 	assert.Equal(t, l2.items[1].value, []byte("lake"))
 	assert.Equal(t, l2.items[2].key, []byte("susy"))
 	assert.Equal(t, l2.items[2].value, []byte("que"))
-}
-
-// Ensure that an error that an allocation error during writing is returned.
-func TestLeafWriteError(t *testing.T) {
-	// Create a temp page.
-	l := &leaf{items: make(leafItems, 0)}
-	l.put([]byte("susy"), []byte("que"))
-
-	// Write it to a page.
-	exp := &Error{}
-	allocate := func(size int) (*page, error) {
-		return nil, exp
-	}
-	pages, err := l.write(4096, allocate)
-	assert.Nil(t, pages)
-	assert.Equal(t, err, exp)
 }
 
 // Ensure that a temporary page can split into appropriate subgroups.
@@ -106,11 +87,11 @@ func TestLeafSplit(t *testing.T) {
 	l.put([]byte("00000005"), []byte("0123456701234567"))
 
 	// Split between 3 & 4.
-	groups := l.split(100)
+	leafs := l.split(100)
 
-	assert.Equal(t, len(groups), 2)
-	assert.Equal(t, len(groups[0]), 2)
-	assert.Equal(t, len(groups[1]), 3)
+	assert.Equal(t, len(leafs), 2)
+	assert.Equal(t, len(leafs[0].items), 2)
+	assert.Equal(t, len(leafs[1].items), 3)
 }
 
 // Ensure that a temporary page with the minimum number of items just returns a single split group.
@@ -121,9 +102,9 @@ func TestLeafSplitWithMinKeys(t *testing.T) {
 	l.put([]byte("00000002"), []byte("0123456701234567"))
 
 	// Split.
-	groups := l.split(20)
-	assert.Equal(t, len(groups), 1)
-	assert.Equal(t, len(groups[0]), 2)
+	leafs := l.split(20)
+	assert.Equal(t, len(leafs), 1)
+	assert.Equal(t, len(leafs[0].items), 2)
 }
 
 // Ensure that a temporary page that has keys that all fit on a page just returns one split group.
@@ -137,7 +118,7 @@ func TestLeafSplitFitsInPage(t *testing.T) {
 	l.put([]byte("00000005"), []byte("0123456701234567"))
 
 	// Split.
-	groups := l.split(4096)
-	assert.Equal(t, len(groups), 1)
-	assert.Equal(t, len(groups[0]), 5)
+	leafs := l.split(4096)
+	assert.Equal(t, len(leafs), 1)
+	assert.Equal(t, len(leafs[0].items), 5)
 }

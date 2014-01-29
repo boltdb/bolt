@@ -8,6 +8,7 @@ import (
 // Only one read/write transaction can be active for a DB at a time.
 type RWTransaction struct {
 	Transaction
+	branches map[pgid]*branch
 	leafs map[pgid]*leaf
 }
 
