@@ -8,40 +8,7 @@ import (
 // Only one read/write transaction can be active for a DB at a time.
 type RWTransaction struct {
 	Transaction
-	tpages map[pgid]*tpage
-}
-
-// TODO: Allocate scratch meta page.
-// TODO: Allocate scratch data pages.
-// TODO: Track dirty pages (?)
-
-func (t *RWTransaction) Commit() error {
-	// TODO: Update non-system bucket pointers.
-	// TODO: Save freelist.
-	// TODO: Flush data.
-
-	// TODO: Initialize new meta object, Update system bucket nodes, last pgno, txnid.
-	// meta.mm_dbs[0] = txn->mt_dbs[0];
-	// meta.mm_dbs[1] = txn->mt_dbs[1];
-	// meta.mm_last_pg = txn->mt_next_pgno - 1;
-	// meta.mm_txnid = txn->mt_txnid;
-
-	// TODO: Pick sync or async file descriptor.
-	// TODO: Write meta page to file.
-
-	// TODO(?): Write checksum at the end.
-
-	return nil
-}
-
-func (t *RWTransaction) Rollback() error {
-	return t.close()
-}
-
-func (t *RWTransaction) close() error {
-	// TODO: Free scratch pages.
-	// TODO: Release writer lock.
-	return nil
+	leafs map[pgid]*leaf
 }
 
 // CreateBucket creates a new bucket.
@@ -56,12 +23,10 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	var raw = (*bucket)(unsafe.Pointer(&buf[0]))
 	raw.root = 0
 
-	// TODO: Delete node first.
-
 	// Insert new node.
 	c := t.sys.cursor()
 	c.Goto([]byte(name))
-	t.tpage(c.page().id).put([]byte(name), buf[:])
+	t.leaf(c.page().id).put([]byte(name), buf[:])
 
 	return nil
 }
@@ -72,17 +37,6 @@ func (t *RWTransaction) DeleteBucket(b *Bucket) error {
 	// TODO: Delete entry from system bucket.
 	// TODO: Free all pages.
 	// TODO: Remove cursor.
-	return nil
-}
-
-// Flush (some) dirty pages to the map, after clearing their dirty flag.
-// @param[in] txn the transaction that's being committed
-// @param[in] keep number of initial pages in dirty_list to keep dirty.
-// @return 0 on success, non-zero on failure.
-func (t *RWTransaction) flush(keep bool) error {
-	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
-
-	// TODO: Loop over each dirty page and write it to disk.
 	return nil
 }
 
@@ -104,7 +58,7 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	// Insert a new node.
 	c := b.cursor()
 	c.Goto(key)
-	t.tpage(c.page().id).put(key, value)
+	t.leaf(c.page().id).put(key, value)
 
 	return nil
 }
@@ -117,6 +71,31 @@ func (t *RWTransaction) Delete(key []byte) error {
 	return nil
 }
 
+func (t *RWTransaction) Commit() error {
+	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
+
+
+	// TODO: Flush data.
+
+	// TODO: Update meta.
+	// TODO: Write meta.
+
+	return nil
+}
+
+func (t *RWTransaction) Rollback() error {
+	return t.close()
+}
+
+func (t *RWTransaction) close() error {
+	// Clear temporary pages.
+	t.leafs = nil
+
+	// TODO: Release writer lock.
+
+	return nil
+}
+
 // allocate returns a contiguous block of memory starting at a given page.
 func (t *RWTransaction) allocate(size int) (*page, error) {
 	// TODO: Find a continuous block of free pages.
@@ -124,18 +103,18 @@ func (t *RWTransaction) allocate(size int) (*page, error) {
 	return nil, nil
 }
 
-// tpage returns a deserialized leaf page.
-func (t *RWTransaction) tpage(id pgid) *tpage {
-	if t.tpages != nil {
-		if p := t.tpages[id]; p != nil {
-			return p
+// leaf returns a deserialized leaf page.
+func (t *RWTransaction) leaf(id pgid) *leaf {
+	if t.leafs != nil {
+		if l := t.leafs[id]; l != nil {
+			return l
 		}
 	}
 
 	// Read raw page and deserialize.
-	p := &tpage{}
-	p.read(t.page(id))
-	t.tpages[id] = p
+	l := &leaf{}
+	l.read(t.page(id))
+	t.leafs[id] = l
 
-	return p
+	return l
 }
