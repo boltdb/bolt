@@ -27,32 +27,16 @@ type page struct {
 }
 
 // meta returns a pointer to the metadata section of the page.
-func (p *page) meta() (*meta, error) {
-	// Exit if page is not a meta page.
-	if (p.flags & p_meta) == 0 {
-		return nil, InvalidMetaPageError
-	}
-
-	// Cast the meta section and validate before returning.
-	m := (*meta)(unsafe.Pointer(&p.ptr))
-	if err := m.validate(); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-// init initializes a page as a new meta page.
-func (p *page) init(pageSize int) {
-	p.flags = p_meta
-	m := (*meta)(unsafe.Pointer(&p.ptr))
-	m.magic = magic
-	m.version = version
-	m.pageSize = uint32(pageSize)
-	m.pgid = 1
-	m.sys.root = 0
+func (p *page) meta() *meta {
+	return (*meta)(unsafe.Pointer(&p.ptr))
 }
 
 // lnode retrieves the leaf node by index
 func (p *page) lnode(index int) *lnode {
 	return &((*[maxNodesPerPage]lnode)(unsafe.Pointer(&p.ptr)))[index]
+}
+
+// bnode retrieves the branch node by index
+func (p *page) bnode(index int) *bnode {
+	return &((*[maxNodesPerPage]bnode)(unsafe.Pointer(&p.ptr)))[index]
 }

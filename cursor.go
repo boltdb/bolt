@@ -39,7 +39,6 @@ func (c *Cursor) Get(key []byte) []byte {
 func (c *Cursor) Goto(key []byte) bool {
 	// TODO(benbjohnson): Optimize for specific use cases.
 
-	// TODO: Check if len(key) > 0.
 	// TODO: Start from root page and traverse to correct page.
 
 	return false
