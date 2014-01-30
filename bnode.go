@@ -15,5 +15,6 @@ type bnode struct {
 
 // key returns a byte slice of the node key.
 func (n *bnode) key() []byte {
-	return (*[MaxKeySize]byte)(unsafe.Pointer(&n))[n.pos : n.pos+n.ksize]
+	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
+	return buf[n.pos : n.pos+n.ksize]
 }

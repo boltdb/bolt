@@ -6,11 +6,19 @@ import (
 	"unsafe"
 )
 
-// leaf represents a temporary in-memory leaf page.
-// It is deserialized from an memory-mapped page and is not restricted by page size.
+// leaf represents an in-memory, deserialized leaf page.
 type leaf struct {
 	parent *branch
 	items leafItems
+}
+
+// size returns the size of the leaf after serialization.
+func (l *leaf) size() int {
+	var size int = pageHeaderSize
+	for _, item := range l.items {
+		size += lnodeSize + len(item.key) + len(item.value)
+	}
+	return size
 }
 
 // put inserts or replaces a key on a leaf page.
@@ -27,15 +35,6 @@ func (l *leaf) put(key []byte, value []byte) {
 	}
 	l.items[index].key = key
 	l.items[index].value = value
-}
-
-// size returns the size of the leaf after serialization.
-func (l *leaf) size() int {
-	var size int = pageHeaderSize
-	for _, item := range l.items {
-		size += lnodeSize + len(item.key) + len(item.value)
-	}
-	return size
 }
 
 // read initializes the item data from an on-disk page.
@@ -83,8 +82,8 @@ func (l *leaf) split(pageSize int) []*leaf {
 		return []*leaf{l}
 	}
 
-	// Set fill threshold to 25%.
-	threshold := pageSize >> 4
+	// Set fill threshold to 50%.
+	threshold := pageSize / 2
 
 	// Otherwise group into smaller pages and target a given fill size.
 	size := 0

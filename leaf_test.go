@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Ensure that a temporary page can insert a key/value.
+// Ensure that a leaf can insert a key/value.
 func TestLeafPut(t *testing.T) {
 	l := &leaf{items: make(leafItems, 0)}
 	l.put([]byte("baz"), []byte("2"))
@@ -20,7 +20,7 @@ func TestLeafPut(t *testing.T) {
 	assert.Equal(t, l.items[2], leafItem{[]byte("foo"), []byte("3")})
 }
 
-// Ensure that a temporary page can deserialize from a page.
+// Ensure that a leaf can deserialize from a page.
 func TestLeafRead(t *testing.T) {
 	// Create a page.
 	var buf [4096]byte
@@ -37,7 +37,7 @@ func TestLeafRead(t *testing.T) {
 	copy(data[:], []byte("barfooz"))
 	copy(data[7:], []byte("helloworldbye"))
 
-	// Deserialize page into a temporary page.
+	// Deserialize page into a leaf.
 	l := &leaf{}
 	l.read(page)
 
@@ -49,9 +49,9 @@ func TestLeafRead(t *testing.T) {
 	assert.Equal(t, l.items[1].value, []byte("bye"))
 }
 
-// Ensure that a temporary page can serialize itself.
+// Ensure that a leaf can serialize itself.
 func TestLeafWrite(t *testing.T) {
-	// Create a temp page.
+	// Create a leaf.
 	l := &leaf{items: make(leafItems, 0)}
 	l.put([]byte("susy"), []byte("que"))
 	l.put([]byte("ricki"), []byte("lake"))
@@ -76,9 +76,9 @@ func TestLeafWrite(t *testing.T) {
 	assert.Equal(t, l2.items[2].value, []byte("que"))
 }
 
-// Ensure that a temporary page can split into appropriate subgroups.
+// Ensure that a leaf can split into appropriate subgroups.
 func TestLeafSplit(t *testing.T) {
-	// Create a temp page.
+	// Create a leaf.
 	l := &leaf{items: make(leafItems, 0)}
 	l.put([]byte("00000001"), []byte("0123456701234567"))
 	l.put([]byte("00000002"), []byte("0123456701234567"))
@@ -94,9 +94,9 @@ func TestLeafSplit(t *testing.T) {
 	assert.Equal(t, len(leafs[1].items), 3)
 }
 
-// Ensure that a temporary page with the minimum number of items just returns a single split group.
+// Ensure that a leaf with the minimum number of items just returns a single leaf.
 func TestLeafSplitWithMinKeys(t *testing.T) {
-	// Create a temp page.
+	// Create a leaf.
 	l := &leaf{items: make(leafItems, 0)}
 	l.put([]byte("00000001"), []byte("0123456701234567"))
 	l.put([]byte("00000002"), []byte("0123456701234567"))
@@ -107,9 +107,9 @@ func TestLeafSplitWithMinKeys(t *testing.T) {
 	assert.Equal(t, len(leafs[0].items), 2)
 }
 
-// Ensure that a temporary page that has keys that all fit on a page just returns one split group.
+// Ensure that a leaf that has keys that all fit on a page just returns one leaf.
 func TestLeafSplitFitsInPage(t *testing.T) {
-	// Create a temp page.
+	// Create a leaf.
 	l := &leaf{items: make(leafItems, 0)}
 	l.put([]byte("00000001"), []byte("0123456701234567"))
 	l.put([]byte("00000002"), []byte("0123456701234567"))
