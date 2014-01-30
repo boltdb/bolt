@@ -11,9 +11,10 @@ const minKeysPerPage = 2
 const maxNodesPerPage = 65535
 
 const (
-	p_branch = 0x01
-	p_leaf   = 0x02
-	p_meta   = 0x04
+	p_branch   = 0x01
+	p_leaf     = 0x02
+	p_meta     = 0x04
+	p_freelist = 0x08
 )
 
 type pgid uint64
@@ -39,4 +40,9 @@ func (p *page) lnode(index int) *lnode {
 // bnode retrieves the branch node by index
 func (p *page) bnode(index int) *bnode {
 	return &((*[maxNodesPerPage]bnode)(unsafe.Pointer(&p.ptr)))[index]
+}
+
+// freelist retrieves a list of page ids from a freelist page.
+func (p *page) freelist() []pgid {
+	return ((*[maxNodesPerPage]pgid)(unsafe.Pointer(&p.ptr)))[0:p.count]
 }

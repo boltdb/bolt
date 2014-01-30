@@ -14,6 +14,7 @@ type meta struct {
 	pageSize uint32
 	pgid     pgid
 	txnid    txnid
+	free     pgid
 	sys      bucket
 }
 

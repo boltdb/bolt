@@ -1,11 +1,5 @@
 package bolt
 
-var (
-	InvalidBucketError = &Error{"invalid bucket", nil}
-)
-
-type bucketid uint32
-
 type Bucket struct {
 	*bucket
 	name        string
@@ -14,8 +8,6 @@ type Bucket struct {
 }
 
 type bucket struct {
-	id    bucketid
-	flags uint32
 	root  pgid
 }
 

@@ -146,17 +146,33 @@ func (db *DB) init() error {
 	db.pageSize = db.os.Getpagesize()
 
 	// Create two meta pages on a buffer.
-	buf := make([]byte, db.pageSize*2)
+	buf := make([]byte, db.pageSize*4)
 	for i := 0; i < 2; i++ {
 		p := db.pageInBuffer(buf[:], pgid(i))
 		p.id = pgid(i)
 		p.flags = p_meta
 
+		// Initialize the meta page.
 		m := p.meta()
 		m.magic = magic
 		m.version = Version
 		m.pageSize = uint32(db.pageSize)
+		m.version = Version
+		m.free = 3
+		m.sys.root = 4
 	}
+
+	// Write an empty freelist at page 3.
+	p := db.pageInBuffer(buf[:], pgid(2))
+	p.id = pgid(3)
+	p.flags = p_freelist
+	p.count = 0
+
+	// Write an empty leaf page at page 4.
+	p = db.pageInBuffer(buf[:], pgid(3))
+	p.id = pgid(4)
+	p.flags = p_leaf
+	p.count = 0
 
 	// Write the buffer to our data file.
 	if _, err := db.metafile.WriteAt(buf, 0); err != nil {
