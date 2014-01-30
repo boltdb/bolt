@@ -3,7 +3,18 @@ Bolt
 
 ## Overview
 
-A low-level key/value database for Go.
+Bolt is a low-level key/value store written in pure Go. The goal of the project is to provide a simple, fast, and reliable database for projects that don't require a full database server such as Postgres or MySQL. It is also meant to be educational. Most of us use tools without understanding how the underlying data really works.
+
+Since Bolt is meant to be used as such a low-level piece of functionality, simplicity is key. The API will be small and only center around getting values and setting values. That's it. If you want to see additional functionality added then we encourage you submit a Github issue and we can discuss developing it as a separate fork.
+
+> Simple is the new beautiful.
+>
+> — [Tobias Lütke](https://twitter.com/tobi)
+
+
+## Project Status
+
+Bolt is currently in development and is currently not functional.
 
 
 ## API
