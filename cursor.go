@@ -7,8 +7,8 @@ import (
 
 type Cursor struct {
 	transaction *Transaction
-	root   pgid
-	stack  []elem
+	root        pgid
+	stack       []elem
 }
 
 // elem represents a node on a page that's on the cursor's stack.
@@ -72,7 +72,7 @@ func (c *Cursor) nsearch(key []byte, p *page) {
 
 	// Binary search for the correct leaf node index.
 	nodes := p.lnodes()
-	e.index = sort.Search(int(p.count), func(i int) bool { 
+	e.index = sort.Search(int(p.count), func(i int) bool {
 		return bytes.Compare(nodes[i].key(), key) != -1
 	})
 }

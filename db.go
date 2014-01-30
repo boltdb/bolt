@@ -228,7 +228,7 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 	// Create a transaction associated with the database.
 	t := &RWTransaction{
 		branches: make(map[pgid]*branch),
-		leafs: make(map[pgid]*leaf),
+		leafs:    make(map[pgid]*leaf),
 	}
 	t.init(db, db.meta())
 

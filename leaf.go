@@ -9,7 +9,7 @@ import (
 // leaf represents an in-memory, deserialized leaf page.
 type leaf struct {
 	parent *branch
-	items leafItems
+	items  leafItems
 }
 
 // size returns the size of the leaf after serialization.
@@ -78,7 +78,7 @@ func (l *leaf) write(p *page) {
 func (l *leaf) split(pageSize int) []*leaf {
 	// Ignore the split if the page doesn't have at least enough nodes for
 	// multiple pages or if the data can fit on a single page.
-	if len(l.items) <= (minKeysPerPage * 2) || l.size() < pageSize {
+	if len(l.items) <= (minKeysPerPage*2) || l.size() < pageSize {
 		return []*leaf{l}
 	}
 
@@ -93,7 +93,7 @@ func (l *leaf) split(pageSize int) []*leaf {
 	for index, item := range l.items {
 		nodeSize := lnodeSize + len(item.key) + len(item.value)
 
-		if (len(current.items) >= minKeysPerPage && index < len(l.items)-minKeysPerPage && size+nodeSize > threshold) {
+		if len(current.items) >= minKeysPerPage && index < len(l.items)-minKeysPerPage && size+nodeSize > threshold {
 			size = pageHeaderSize
 			leafs = append(leafs, current)
 			current = &leaf{}
@@ -117,4 +117,3 @@ type leafItem struct {
 func (s leafItems) Len() int           { return len(s) }
 func (s leafItems) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s leafItems) Less(i, j int) bool { return bytes.Compare(s[i].key, s[j].key) == -1 }
-

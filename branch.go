@@ -8,7 +8,7 @@ import (
 // branch represents a temporary in-memory branch page.
 type branch struct {
 	parent *branch
-	items branchItems
+	items  branchItems
 }
 
 // size returns the size of the branch after serialization.
@@ -80,7 +80,7 @@ func (b *branch) write(p *page) {
 func (b *branch) split(pageSize int) []*branch {
 	// Ignore the split if the page doesn't have at least enough nodes for
 	// multiple pages or if the data can fit on a single page.
-	if len(b.items) <= (minKeysPerPage * 2) || b.size() < pageSize {
+	if len(b.items) <= (minKeysPerPage*2) || b.size() < pageSize {
 		return []*branch{b}
 	}
 
@@ -95,7 +95,7 @@ func (b *branch) split(pageSize int) []*branch {
 	for index, item := range b.items {
 		nodeSize := bnodeSize + len(item.key)
 
-		if (len(current.items) >= minKeysPerPage && index < len(b.items)-minKeysPerPage && size+nodeSize > threshold) {
+		if len(current.items) >= minKeysPerPage && index < len(b.items)-minKeysPerPage && size+nodeSize > threshold {
 			size = pageHeaderSize
 			branches = append(branches, current)
 			current = &branch{}
@@ -113,10 +113,9 @@ type branchItems []branchItem
 
 type branchItem struct {
 	pgid pgid
-	key   []byte
+	key  []byte
 }
 
 func (s branchItems) Len() int           { return len(s) }
 func (s branchItems) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s branchItems) Less(i, j int) bool { return bytes.Compare(s[i].key, s[j].key) == -1 }
-
