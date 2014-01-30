@@ -37,9 +37,19 @@ func (p *page) lnode(index int) *lnode {
 	return &((*[maxNodesPerPage]lnode)(unsafe.Pointer(&p.ptr)))[index]
 }
 
+// lnodes retrieves a list of leaf nodes.
+func (p *page) lnodes() []lnode {
+	return ((*[maxNodesPerPage]lnode)(unsafe.Pointer(&p.ptr)))[:]
+}
+
 // bnode retrieves the branch node by index
 func (p *page) bnode(index int) *bnode {
 	return &((*[maxNodesPerPage]bnode)(unsafe.Pointer(&p.ptr)))[index]
+}
+
+// bnodes retrieves a list of branch nodes.
+func (p *page) bnodes() []bnode {
+	return ((*[maxNodesPerPage]bnode)(unsafe.Pointer(&p.ptr)))[:]
 }
 
 // freelist retrieves a list of page ids from a freelist page.

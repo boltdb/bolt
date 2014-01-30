@@ -158,19 +158,19 @@ func (db *DB) init() error {
 		m.version = Version
 		m.pageSize = uint32(db.pageSize)
 		m.version = Version
-		m.free = 3
-		m.sys.root = 4
+		m.free = 2
+		m.sys.root = 3
 	}
 
 	// Write an empty freelist at page 3.
 	p := db.pageInBuffer(buf[:], pgid(2))
-	p.id = pgid(3)
+	p.id = pgid(2)
 	p.flags = p_freelist
 	p.count = 0
 
 	// Write an empty leaf page at page 4.
 	p = db.pageInBuffer(buf[:], pgid(3))
-	p.id = pgid(4)
+	p.id = pgid(3)
 	p.flags = p_leaf
 	p.count = 0
 
@@ -226,7 +226,10 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 	}
 
 	// Create a transaction associated with the database.
-	t := &RWTransaction{}
+	t := &RWTransaction{
+		branches: make(map[pgid]*branch),
+		leafs: make(map[pgid]*leaf),
+	}
 	t.init(db, db.meta())
 
 	return t, nil

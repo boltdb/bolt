@@ -146,7 +146,6 @@ func TestDBCorruptMeta0(t *testing.T) {
 
 		// Open the database.
 		err := db.Open(path, 0666)
-		warn(err)
 		assert.Equal(t, err, &Error{"meta error", InvalidError})
 	})
 }

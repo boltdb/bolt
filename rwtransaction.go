@@ -24,10 +24,12 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	var raw = (*bucket)(unsafe.Pointer(&buf[0]))
 	raw.root = 0
 
-	// Insert new node.
-	c := t.sys.cursor()
+	// Move cursor to insertion location.
+	c := t.sys.Cursor()
 	c.Goto([]byte(name))
-	t.leaf(c.page().id).put([]byte(name), buf[:])
+
+	// Load the leaf node from the cursor and insert the key/value.
+	t.leaf(c).put([]byte(name), buf[:])
 
 	return nil
 }
@@ -57,9 +59,9 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	}
 
 	// Insert a new node.
-	c := b.cursor()
+	c := b.Cursor()
 	c.Goto(key)
-	t.leaf(c.page().id).put(key, value)
+	t.leaf(c).put(key, value)
 
 	return nil
 }
@@ -74,7 +76,6 @@ func (t *RWTransaction) Delete(key []byte) error {
 
 func (t *RWTransaction) Commit() error {
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
-
 
 	// TODO: Flush data.
 
@@ -104,18 +105,44 @@ func (t *RWTransaction) allocate(size int) (*page, error) {
 	return nil, nil
 }
 
-// leaf returns a deserialized leaf page.
-func (t *RWTransaction) leaf(id pgid) *leaf {
-	if t.leafs != nil {
-		if l := t.leafs[id]; l != nil {
-			return l
-		}
+// leaf retrieves a leaf object based on the current position of a cursor.
+func (t *RWTransaction) leaf(c *Cursor) *leaf {
+	e := c.stack[len(c.stack)-1]
+	id := e.page.id
+
+	// Retrieve leaf if it has already been fetched.
+	if l := t.leafs[id]; l != nil {
+		return l
 	}
 
-	// Read raw page and deserialize.
+	// Otherwise create a leaf and cache it.
 	l := &leaf{}
 	l.read(t.page(id))
+	l.parent = t.branch(c.stack[:len(c.stack)-1])
 	t.leafs[id] = l
 
 	return l
+}
+
+// branch retrieves a branch object based a cursor stack.
+// This should only be called from leaf().
+func (t *RWTransaction) branch(stack []elem) *branch {
+	if len(stack) == 0 {
+		return nil
+	}
+
+	// Retrieve branch if it has already been fetched.
+	e := &stack[len(stack)-1]
+	id := e.page.id
+	if b := t.branches[id]; b != nil {
+		return b
+	}
+
+	// Otherwise create a branch and cache it.
+	b := &branch{}
+	b.read(t.page(id))
+	b.parent = t.branch(stack[:len(stack)-1])
+	t.branches[id] = b
+
+	return b
 }

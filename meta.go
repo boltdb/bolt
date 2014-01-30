@@ -5,7 +5,7 @@ var (
 	VersionMismatchError = &Error{"version mismatch", nil}
 )
 
-const magic uint32 = 0xC0DEC0DE
+const magic uint32 = 0xDEADC0DE
 const version uint32 = 1
 
 type meta struct {
@@ -13,8 +13,8 @@ type meta struct {
 	version  uint32
 	pageSize uint32
 	pgid     pgid
-	txnid    txnid
 	free     pgid
+	txnid    txnid
 	sys      bucket
 }
 

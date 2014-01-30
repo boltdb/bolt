@@ -54,7 +54,7 @@ func (t *Transaction) Bucket(name string) *Bucket {
 	}
 
 	// Retrieve bucket data from the system bucket.
-	value := t.sys.cursor().Get([]byte(name))
+	value := t.sys.Cursor().Get([]byte(name))
 	if value == nil {
 		return nil
 	}

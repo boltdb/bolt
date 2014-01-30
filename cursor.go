@@ -1,7 +1,13 @@
 package bolt
 
+import (
+	"bytes"
+	"sort"
+)
+
 type Cursor struct {
-	bucket *Bucket
+	transaction *Transaction
+	root   pgid
 	stack  []elem
 }
 
@@ -9,10 +15,6 @@ type Cursor struct {
 type elem struct {
 	page  *page
 	index int
-}
-
-func (c *Cursor) Bucket() *Bucket {
-	return c.bucket
 }
 
 // First moves the cursor to the first item in the bucket and returns its key and data.
@@ -39,9 +41,40 @@ func (c *Cursor) Get(key []byte) []byte {
 func (c *Cursor) Goto(key []byte) bool {
 	// TODO(benbjohnson): Optimize for specific use cases.
 
-	// TODO: Start from root page and traverse to correct page.
+	// Start from root page and traverse to correct page.
+	c.stack = c.stack[:0]
+	c.search(key, c.transaction.page(c.root))
 
 	return false
+}
+
+func (c *Cursor) search(key []byte, p *page) {
+	e := elem{page: p}
+	c.stack = append(c.stack, e)
+
+	// If we're on a leaf page then find the specific node.
+	if (p.flags & p_leaf) != 0 {
+		c.nsearch(key, p)
+		return
+	}
+
+	// Binary search for the correct branch node.
+	nodes := p.bnodes()
+	e.index = sort.Search(int(p.count)-1, func(i int) bool { return bytes.Compare(nodes[i+1].key(), key) != -1 })
+
+	// Recursively search to the next page.
+	c.search(key, c.transaction.page(nodes[e.index].pgid))
+}
+
+// nsearch searches a leaf node for the index of the node that matches key.
+func (c *Cursor) nsearch(key []byte, p *page) {
+	e := &c.stack[len(c.stack)-1]
+
+	// Binary search for the correct leaf node index.
+	nodes := p.lnodes()
+	e.index = sort.Search(int(p.count), func(i int) bool { 
+		return bytes.Compare(nodes[i].key(), key) != -1
+	})
 }
 
 // top returns the page and leaf node that the cursor is currently pointing at.
