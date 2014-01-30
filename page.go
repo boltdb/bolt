@@ -14,7 +14,8 @@ const (
 	p_branch   = 0x01
 	p_leaf     = 0x02
 	p_meta     = 0x04
-	p_freelist = 0x08
+	p_sys      = 0x08
+	p_freelist = 0x10
 )
 
 type pgid uint64
@@ -56,3 +57,9 @@ func (p *page) bnodes() []bnode {
 func (p *page) freelist() []pgid {
 	return ((*[maxNodesPerPage]pgid)(unsafe.Pointer(&p.ptr)))[0:p.count]
 }
+
+type pages []*page
+
+func (s pages) Len() int           { return len(s) }
+func (s pages) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s pages) Less(i, j int) bool { return s[i].id < s[j].id }

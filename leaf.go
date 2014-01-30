@@ -8,6 +8,7 @@ import (
 
 // leaf represents an in-memory, deserialized leaf page.
 type leaf struct {
+	pgid   pgid
 	parent *branch
 	items  leafItems
 }
@@ -39,10 +40,10 @@ func (l *leaf) put(key []byte, value []byte) {
 
 // read initializes the item data from an on-disk page.
 func (l *leaf) read(p *page) {
-	ncount := int(p.count)
-	l.items = make(leafItems, ncount)
+	l.pgid = p.id
+	l.items = make(leafItems, int(p.count))
 	lnodes := (*[maxNodesPerPage]lnode)(unsafe.Pointer(&p.ptr))
-	for i := 0; i < ncount; i++ {
+	for i := 0; i < int(p.count); i++ {
 		lnode := &lnodes[i]
 		item := &l.items[i]
 		item.key = lnode.key()

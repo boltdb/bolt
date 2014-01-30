@@ -1,9 +1,5 @@
 package bolt
 
-import (
-	"unsafe"
-)
-
 var (
 	InvalidTransactionError  = &Error{"txn is invalid", nil}
 	BucketAlreadyExistsError = &Error{"bucket already exists", nil}
@@ -19,22 +15,21 @@ const (
 type txnid uint64
 
 type Transaction struct {
-	id      int
-	db      *DB
-	meta    *meta
-	sys     Bucket
-	buckets map[string]*Bucket
-	pages   map[pgid]*page
+	id    int
+	db    *DB
+	meta  *meta
+	sys   *sys
+	pages map[pgid]*page
 }
 
 // init initializes the transaction and associates it with a database.
-func (t *Transaction) init(db *DB, meta *meta) {
+func (t *Transaction) init(db *DB) {
 	t.db = db
-	t.meta = meta
-	t.buckets = make(map[string]*Bucket)
+	t.meta = db.meta()
 	t.pages = nil
-	t.sys.transaction = t
-	t.sys.bucket = &t.meta.sys
+
+	t.sys = &sys{}
+	t.sys.read(t.page(t.meta.sys))
 }
 
 func (t *Transaction) Close() error {
@@ -48,26 +43,17 @@ func (t *Transaction) DB() *DB {
 
 // Bucket retrieves a bucket by name.
 func (t *Transaction) Bucket(name string) *Bucket {
-	// Return cached reference if it's already been looked up.
-	if b := t.buckets[name]; b != nil {
-		return b
-	}
-
-	// Retrieve bucket data from the system bucket.
-	value := t.sys.Cursor().Get([]byte(name))
-	if value == nil {
+	// Lookup bucket from the system page.
+	b := t.sys.get(name)
+	if b == nil {
 		return nil
 	}
 
-	// Create a bucket that overlays the data.
-	b := &Bucket{
-		bucket:      (*bucket)(unsafe.Pointer(&value[0])),
+	return &Bucket{
+		bucket:      b,
 		name:        name,
 		transaction: t,
 	}
-	t.buckets[name] = b
-
-	return b
 }
 
 // Cursor creates a cursor associated with a given bucket.
