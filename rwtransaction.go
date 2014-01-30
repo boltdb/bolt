@@ -9,7 +9,7 @@ import (
 type RWTransaction struct {
 	Transaction
 	branches map[pgid]*branch
-	leafs map[pgid]*leaf
+	leafs    map[pgid]*leaf
 }
 
 // CreateBucket creates a new bucket.

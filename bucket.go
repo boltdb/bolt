@@ -7,7 +7,7 @@ type Bucket struct {
 }
 
 type bucket struct {
-	root  pgid
+	root pgid
 }
 
 // Name returns the name of the bucket.
@@ -24,7 +24,7 @@ func (b *Bucket) Get(key []byte) []byte {
 func (b *Bucket) Cursor() *Cursor {
 	return &Cursor{
 		transaction: b.transaction,
-		root:   b.root,
-		stack:  make([]elem, 0),
+		root:        b.root,
+		stack:       make([]elem, 0),
 	}
 }
