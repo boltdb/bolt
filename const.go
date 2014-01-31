@@ -1,8 +1,9 @@
 package bolt
 
-const Version = 1
+const version = 1
 
 const (
-	MaxKeySize  = 0x8000
-	MaxDataSize = 0xffffffff
+	MaxBucketNameSize = 255
+	MaxKeySize        = 32768
+	MaxDataSize       = 4294967295
 )

@@ -1,7 +1,5 @@
 package bolt
 
-const MaxBucketNameSize = 255
-
 type Bucket struct {
 	*bucket
 	name        string

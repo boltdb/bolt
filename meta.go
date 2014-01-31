@@ -1,12 +1,6 @@
 package bolt
 
-var (
-	InvalidError         = &Error{"Invalid database", nil}
-	VersionMismatchError = &Error{"version mismatch", nil}
-)
-
 const magic uint32 = 0xDEADC0DE
-const version uint32 = 1
 
 type meta struct {
 	magic    uint32
@@ -22,7 +16,7 @@ type meta struct {
 func (m *meta) validate() error {
 	if m.magic != magic {
 		return InvalidError
-	} else if m.version != Version {
+	} else if m.version != version {
 		return VersionMismatchError
 	}
 	return nil
