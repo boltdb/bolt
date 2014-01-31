@@ -1,10 +1,5 @@
 package bolt
 
-var (
-	InvalidTransactionError  = &Error{"txn is invalid", nil}
-	BucketAlreadyExistsError = &Error{"bucket already exists", nil}
-)
-
 const (
 	ps_modify   = 1
 	ps_rootonly = 2
@@ -32,9 +27,8 @@ func (t *Transaction) init(db *DB) {
 	t.sys.read(t.page(t.meta.sys))
 }
 
-func (t *Transaction) Close() error {
+func (t *Transaction) Close() {
 	// TODO: Close buckets.
-	return nil
 }
 
 func (t *Transaction) DB() *DB {
@@ -56,6 +50,12 @@ func (t *Transaction) Bucket(name string) *Bucket {
 	}
 }
 
+// Buckets retrieves a list of all buckets.
+func (t *Transaction) Buckets() []*Bucket {
+	warn("[pending] Transaction.Buckets()") // TODO
+	return nil
+}
+
 // Cursor creates a cursor associated with a given bucket.
 func (t *Transaction) Cursor(name string) *Cursor {
 	b := t.Bucket(name)
@@ -74,8 +74,8 @@ func (t *Transaction) Get(name string, key []byte) []byte {
 	return c.Get(key)
 }
 
-// Stat returns information about a bucket's internal structure.
-func (t *Transaction) Stat(name string) *Stat {
+// stat returns information about a bucket's internal structure.
+func (t *Transaction) stat(name string) *Stat {
 	// TODO
 	return nil
 }

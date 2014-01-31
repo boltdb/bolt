@@ -123,16 +123,16 @@ func TestDBCorruptMeta0(t *testing.T) {
 	withMockDB(func(db *DB, mockos *mockos, mocksyscall *mocksyscall, path string) {
 		var m meta
 		m.magic = magic
-		m.version = Version
+		m.version = version
 		m.pageSize = 0x8000
 
 		// Create a file with bad magic.
 		b := make([]byte, 0x10000)
 		p0, p1 := (*page)(unsafe.Pointer(&b[0x0000])), (*page)(unsafe.Pointer(&b[0x8000]))
 		p0.meta().magic = 0
-		p0.meta().version = Version
+		p0.meta().version = version
 		p1.meta().magic = magic
-		p1.meta().version = Version
+		p1.meta().version = version
 
 		// Mock file access.
 		file, metafile := &mockfile{}, &mockfile{}

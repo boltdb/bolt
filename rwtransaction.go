@@ -79,7 +79,7 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	return nil
 }
 
-func (t *RWTransaction) Delete(key []byte) error {
+func (t *RWTransaction) Delete(name string, key []byte) error {
 	// TODO: Traverse to the correct node.
 	// TODO: If missing, exit.
 	// TODO: Remove node from page.
@@ -116,17 +116,15 @@ func (t *RWTransaction) Commit() error {
 	return nil
 }
 
-func (t *RWTransaction) Rollback() error {
-	return t.close()
+func (t *RWTransaction) Rollback() {
+	t.close()
 }
 
-func (t *RWTransaction) close() error {
+func (t *RWTransaction) close() {
 	// Clear temporary pages.
 	t.leafs = nil
 
 	// TODO: Release writer lock.
-
-	return nil
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
