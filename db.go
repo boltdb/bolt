@@ -118,7 +118,9 @@ func (db *DB) mmap() error {
 	} else if int(info.Size()) < db.pageSize*2 {
 		return &Error{"file size too small", err}
 	}
-	size := int(info.Size())
+
+	// TEMP(benbjohnson): Set max size to 1MB.
+	size := 2 << 20
 
 	// Memory-map the data file as a byte slice.
 	if db.data, err = db.syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
@@ -159,7 +161,9 @@ func (db *DB) init() error {
 		m.pageSize = uint32(db.pageSize)
 		m.version = Version
 		m.free = 2
-		m.sys.root = 3
+		m.sys = 3
+		m.pgid = 4
+		m.txnid = txnid(i)
 	}
 
 	// Write an empty freelist at page 3.
@@ -171,7 +175,7 @@ func (db *DB) init() error {
 	// Write an empty leaf page at page 4.
 	p = db.pageInBuffer(buf[:], pgid(3))
 	p.id = pgid(3)
-	p.flags = p_leaf
+	p.flags = p_sys
 	p.count = 0
 
 	// Write the buffer to our data file.
@@ -206,7 +210,7 @@ func (db *DB) Transaction() (*Transaction, error) {
 
 	// Create a transaction associated with the database.
 	t := &Transaction{}
-	t.init(db, db.meta())
+	t.init(db)
 
 	return t, nil
 }
@@ -230,7 +234,7 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 		branches: make(map[pgid]*branch),
 		leafs:    make(map[pgid]*leaf),
 	}
-	t.init(db, db.meta())
+	t.init(db)
 
 	return t, nil
 }

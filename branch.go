@@ -7,6 +7,8 @@ import (
 
 // branch represents a temporary in-memory branch page.
 type branch struct {
+	pgid   pgid
+	depth  int
 	parent *branch
 	items  branchItems
 }
@@ -42,11 +44,11 @@ func (b *branch) put(id pgid, newid pgid, key []byte, replace bool) {
 }
 
 // read initializes the item data from an on-disk page.
-func (b *branch) read(page *page) {
-	ncount := int(page.count)
-	b.items = make(branchItems, ncount)
-	bnodes := (*[maxNodesPerPage]bnode)(unsafe.Pointer(&page.ptr))
-	for i := 0; i < ncount; i++ {
+func (b *branch) read(p *page) {
+	b.pgid = p.id
+	b.items = make(branchItems, int(p.count))
+	bnodes := (*[maxNodesPerPage]bnode)(unsafe.Pointer(&p.ptr))
+	for i := 0; i < int(p.count); i++ {
 		bnode := &bnodes[i]
 		item := &b.items[i]
 		item.pgid = bnode.pgid
@@ -108,6 +110,12 @@ func (b *branch) split(pageSize int) []*branch {
 
 	return branches
 }
+
+type branches []*branch
+
+func (s branches) Len() int           { return len(s) }
+func (s branches) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s branches) Less(i, j int) bool { return s[i].depth < s[j].depth }
 
 type branchItems []branchItem
 

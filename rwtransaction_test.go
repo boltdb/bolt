@@ -27,18 +27,16 @@ func TestTransactionCreateBucket(t *testing.T) {
 		err = txn.Commit()
 		assert.NoError(t, err)
 
-		/*
-			// Open a separate read-only transaction.
-			rtxn, err := db.Transaction()
-			assert.NotNil(t, txn)
-			assert.NoError(t, err)
+		// Open a separate read-only transaction.
+		rtxn, err := db.Transaction()
+		assert.NotNil(t, txn)
+		assert.NoError(t, err)
 
-			b, err := rtxn.Bucket("widgets")
-			assert.NoError(t, err)
-			if assert.NotNil(t, b) {
-				assert.Equal(t, b.Name(), "widgets")
-			}
-		*/
+		b := rtxn.Bucket("widgets")
+		assert.NoError(t, err)
+		if assert.NotNil(t, b) {
+			assert.Equal(t, b.Name(), "widgets")
+		}
 	})
 }
 
