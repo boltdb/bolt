@@ -9,8 +9,7 @@ import (
 // Only one read/write transaction can be active for a DB at a time.
 type RWTransaction struct {
 	Transaction
-	branches map[pgid]*branch
-	leafs    map[pgid]*leaf
+	nodes map[pgid]*node
 }
 
 // init initializes the transaction.
@@ -21,7 +20,7 @@ func (t *RWTransaction) init(db *DB) {
 	// Copy the meta and increase the transaction id. 
 	t.meta = &meta{}
 	db.meta().copy(t.meta)
-	t.meta.txnid += txnid(2)
+	t.meta.txnid += txnid(1)
 }
 
 // CreateBucket creates a new bucket.
@@ -32,7 +31,7 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	} else if len(name) == 0 {
 		return &Error{"bucket name cannot be blank", nil}
 	} else if len(name) > MaxBucketNameSize {
-		return &Error{"bucket name too large", nil}
+		return &Error{"bucket name too long", nil}
 	}
 
 	// Create a blank root leaf page.
@@ -72,9 +71,9 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	}
 
 	// Insert a new node.
-	c := b.Cursor()
-	c.Goto(key)
-	t.leaf(c).put(key, value)
+	c := b.cursor()
+	c.Get(key)
+	t.node(c.stack).put(key, key, value, 0)
 
 	return nil
 }
@@ -121,8 +120,8 @@ func (t *RWTransaction) Rollback() {
 }
 
 func (t *RWTransaction) close() {
-	// Clear temporary pages.
-	t.leafs = nil
+	// Clear nodes.
+	t.nodes = nil
 
 	// TODO: Release writer lock.
 }
@@ -146,55 +145,81 @@ func (t *RWTransaction) allocate(count int) *page {
 	return p
 }
 
-// spill writes all the leafs and branches to dirty pages.
+// spill writes all the nodes to dirty pages.
 func (t *RWTransaction) spill() {
-	// Spill leafs first.
-	for _, l := range t.leafs {
-		t.spillLeaf(l)
+	// Keep track of the current root nodes.
+	// We will update this at the end once all nodes are created.
+	type root struct {
+		node *node
+		pgid pgid
 	}
+	var roots []root
 
-	// Sort branches by highest depth first.
-	branches := make(branches, 0, len(t.branches))
-	for _, b := range t.branches {
-		branches = append(branches, b)
+	// Sort nodes by highest depth first.
+	nodes := make(nodesByDepth, 0, len(t.nodes))
+	for _, n := range t.nodes {
+		nodes = append(nodes, n)
 	}
-	sort.Sort(branches)
+	sort.Sort(nodes)
 
-	// Spill branches by deepest first.
-	for _, b := range branches {
-		t.spillBranch(b)
-	}
-}
+	// Spill nodes by deepest first.
+	for i := 0; i < len(nodes); i++ {
+		n := nodes[i]
 
-// spillLeaf writes a leaf to one or more dirty pages.
-func (t *RWTransaction) spillLeaf(l *leaf) {
-	parent := l.parent
+		// Save existing root buckets for later.
+		if n.parent == nil && n.pgid != 0 {
+			roots = append(roots, root{n, n.pgid})
+		}
 
-	// Split leaf, if necessary.
-	leafs := l.split(t.db.pageSize)
+		// Split nodes and write them.
+		newNodes := n.split(t.db.pageSize)
 
-	// TODO: If this is a root leaf and we split then add a parent branch.
+		// If this is a root node that split then create a parent node.
+		if n.parent == nil && len(newNodes) > 1 {
+			n.parent = &node{
+				isLeaf: false,
+				key:    newNodes[0].inodes[0].key,
+				depth:  n.depth - 1,
+				inodes: make(inodes, 0),
+			}
+			nodes = append(nodes, n.parent)
+			sort.Sort(nodes)
+		}
 
-	// Process each resulting leaf.
-	previd := leafs[0].pgid
-	for index, l := range leafs {
-		// Allocate contiguous space for the leaf.
-		p := t.allocate((l.size() / t.db.pageSize) + 1)
+		// Write nodes to dirty pages.
+		for i, newNode := range newNodes {
+			// Allocate contiguous space for the node.
+			p := t.allocate((newNode.size() / t.db.pageSize) + 1)
 
-		// Write the leaf to the page.
-		l.write(p)
+			// Write the node to the page.
+			newNode.write(p)
+			newNode.pgid = p.id
+			newNode.parent = n.parent
 
-		// Insert or replace the node in the parent branch with the new pgid.
-		if parent != nil {
-			parent.put(previd, p.id, l.items[0].key, (index == 0))
-			previd = l.pgid
+			// The first node should use the existing entry, other nodes are inserts.
+			var oldKey []byte
+			if i == 0 {
+				oldKey = n.key
+			} else {
+				oldKey = newNode.inodes[0].key
+			}
+
+			// Update the parent entry.
+			if newNode.parent != nil {
+				newNode.parent.put(oldKey, newNode.inodes[0].key, nil, newNode.pgid)
+			}
 		}
 	}
-}
 
-// spillBranch writes a branch to one or more dirty pages.
-func (t *RWTransaction) spillBranch(l *branch) {
-	warn("[pending] RWTransaction.spillBranch()") // TODO
+	// Update roots with new roots.
+	for _, root := range roots {
+		for _, b := range t.sys.buckets {
+			if b.root == root.pgid {
+				b.root = root.node.root().pgid
+				break
+			}
+		}
+	}
 }
 
 // write writes any dirty pages to disk.
@@ -231,28 +256,8 @@ func (t *RWTransaction) writeMeta() error {
 	return nil
 }
 
-// leaf retrieves a leaf object based on the current position of a cursor.
-func (t *RWTransaction) leaf(c *Cursor) *leaf {
-	e := c.stack[len(c.stack)-1]
-	id := e.page.id
-
-	// Retrieve leaf if it has already been fetched.
-	if l := t.leafs[id]; l != nil {
-		return l
-	}
-
-	// Otherwise create a leaf and cache it.
-	l := &leaf{}
-	l.read(t.page(id))
-	l.parent = t.branch(c.stack[:len(c.stack)-1])
-	t.leafs[id] = l
-
-	return l
-}
-
-// branch retrieves a branch object based a cursor stack.
-// This should only be called from leaf().
-func (t *RWTransaction) branch(stack []elem) *branch {
+// node retrieves a node based a cursor stack.
+func (t *RWTransaction) node(stack []elem) *node {
 	if len(stack) == 0 {
 		return nil
 	}
@@ -260,16 +265,16 @@ func (t *RWTransaction) branch(stack []elem) *branch {
 	// Retrieve branch if it has already been fetched.
 	e := &stack[len(stack)-1]
 	id := e.page.id
-	if b := t.branches[id]; b != nil {
-		return b
+	if n := t.nodes[id]; n != nil {
+		return n
 	}
 
 	// Otherwise create a branch and cache it.
-	b := &branch{}
-	b.read(t.page(id))
-	b.depth = len(stack) - 1
-	b.parent = t.branch(stack[:len(stack)-1])
-	t.branches[id] = b
+	n := &node{}
+	n.read(t.page(id))
+	n.depth = len(stack) - 1
+	n.parent = t.node(stack[:len(stack)-1])
+	t.nodes[id] = n
 
-	return b
+	return n
 }

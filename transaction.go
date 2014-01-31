@@ -62,7 +62,7 @@ func (t *Transaction) Cursor(name string) *Cursor {
 	if b == nil {
 		return nil
 	}
-	return b.Cursor()
+	return b.cursor()
 }
 
 // Get retrieves the value for a key in a named bucket.

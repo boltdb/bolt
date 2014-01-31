@@ -10,5 +10,5 @@ func warn(v ...interface{}) {
 }
 
 func warnf(msg string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, msg, v...)
+	fmt.Fprintf(os.Stderr, msg+"\n", v...)
 }

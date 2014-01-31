@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"io"
 	"os"
 	"sync"
 	"syscall"
@@ -114,7 +115,7 @@ func (db *DB) mmap() error {
 	}
 
 	// TEMP(benbjohnson): Set max size to 1MB.
-	size := 2 << 20
+	size := 2 << 30
 
 	// Memory-map the data file as a byte slice.
 	if db.data, err = db.syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
@@ -224,10 +225,7 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 	}
 
 	// Create a transaction associated with the database.
-	t := &RWTransaction{
-		branches: make(map[pgid]*branch),
-		leafs:    make(map[pgid]*leaf),
-	}
+	t := &RWTransaction{nodes: make(map[pgid]*node)}
 	t.init(db)
 
 	return t, nil
@@ -317,6 +315,44 @@ func (db *DB) Delete(name string, key []byte) error {
 		return err
 	}
 	return t.Commit()
+}
+
+// Copy writes the entire database to a writer.
+func (db *DB) Copy(w io.Writer) error {
+	if !db.opened {
+		return DatabaseNotOpenError
+	}
+
+	// Maintain a reader transaction so pages don't get reclaimed.
+	t, err := db.Transaction()
+	if err != nil {
+		return err
+	}
+	defer t.Close()
+
+	// Open reader on the database.
+	f, err := os.Open(db.path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Copy everything.
+	if _, err := io.Copy(w, f); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CopyFile copies the entire database to file at the given path.
+func (db *DB) CopyFile(path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return db.Copy(f)
 }
 
 // page retrieves a page reference from the mmap based on the current page size.

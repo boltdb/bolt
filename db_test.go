@@ -1,11 +1,14 @@
 package bolt
 
 import (
+	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"syscall"
 	"testing"
+	"testing/quick"
 	"time"
 	"unsafe"
 
@@ -99,25 +102,6 @@ func TestDBMmapStatError(t *testing.T) {
 	})
 }
 
-// Ensure that mmap errors get returned.
-/*
-func TestDBMmapError(t *testing.T) {
-	withMockDB(func(db *DB, mockos *mockos, mocksyscall *mocksyscall, path string) {
-		exp := errors.New("")
-		file, metafile := &mockfile{}, &mockfile{}
-		mockos.On("OpenFile", path, os.O_RDWR|os.O_CREATE, os.FileMode(0666)).Return(file, nil)
-		mockos.On("OpenFile", path, os.O_RDWR|os.O_SYNC, os.FileMode(0666)).Return(metafile, nil)
-		mockos.On("Getpagesize").Return(0x1000)
-		file.On("ReadAt", mock.Anything, int64(0)).Return(0, nil)
-		file.On("Stat").Return(&mockfileinfo{"", 0x2000, 0666, time.Now(), false, nil}, nil)
-		metafile.On("WriteAt", mock.Anything, int64(0)).Return(0, nil)
-		mocksyscall.On("Mmap", 0, int64(0), 0x2000, syscall.PROT_READ, syscall.MAP_SHARED).Return(([]byte)(nil), exp)
-		err := db.Open(path, 0666)
-		assert.Equal(t, err, exp)
-	})
-}
-*/
-
 // Ensure that corrupt meta0 page errors get returned.
 func TestDBCorruptMeta0(t *testing.T) {
 	withMockDB(func(db *DB, mockos *mockos, mocksyscall *mocksyscall, path string) {
@@ -150,10 +134,6 @@ func TestDBCorruptMeta0(t *testing.T) {
 	})
 }
 
-//--------------------------------------
-// Transaction()
-//--------------------------------------
-
 // Ensure that a database cannot open a transaction when it's not open.
 func TestDBTransactionDatabaseNotOpenError(t *testing.T) {
 	withDB(func(db *DB, path string) {
@@ -161,6 +141,54 @@ func TestDBTransactionDatabaseNotOpenError(t *testing.T) {
 		assert.Nil(t, txn)
 		assert.Equal(t, err, DatabaseNotOpenError)
 	})
+}
+
+// Ensure that a bucket can write a key/value.
+func TestDBPut(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		err := db.Put("widgets", []byte("foo"), []byte("bar"))
+		assert.NoError(t, err)
+		value, err := db.Get("widgets", []byte("foo"))
+		if assert.NoError(t, err) {
+			assert.Equal(t, value, []byte("bar"))
+		}
+	})
+}
+
+// Ensure that a bucket can write random keys and values across multiple txns.
+func TestDBPutRandom(t *testing.T) {
+	f := func(items testKeyValuePairs) bool {
+		withOpenDB(func(db *DB, path string) {
+			db.CreateBucket("widgets")
+			for _, item := range items {
+				if len(item.Key) == 0 {
+					continue
+				}
+				if err := db.Put("widgets", item.Key, item.Value); err != nil {
+					panic("put error: " + err.Error())
+				}
+			}
+			for _, item := range items {
+				if len(item.Key) == 0 {
+					continue
+				}
+				value, err := db.Get("widgets", item.Key)
+				if err != nil {
+					panic("get error: " + err.Error())
+				}
+				if !bytes.Equal(value, []byte(item.Value)) {
+					// db.CopyFile("/tmp/bolt.random.db")
+					t.Fatalf("value mismatch:\n%x\n%x", item.Value, value)
+				}
+			}
+			fmt.Fprint(os.Stderr, ".")
+		})
+		return true
+	}
+	if err := quick.Check(f, qc()); err != nil {
+		t.Error(err)
+	}
 }
 
 // withDB executes a function with a database reference.
