@@ -25,6 +25,16 @@ func (s *sys) get(key string) *bucket {
 	return s.buckets[key]
 }
 
+// getByRoot retrieves a bucket by root page id.
+func (s *sys) getByRoot(pgid pgid) *bucket {
+	for _, b := range s.buckets {
+		if b.root == pgid {
+			return b
+		}
+	}
+	panic("root not found")
+}
+
 // put sets a new value for a bucket.
 func (s *sys) put(key string, b *bucket) {
 	s.buckets[key] = b
@@ -32,7 +42,9 @@ func (s *sys) put(key string, b *bucket) {
 
 // del deletes a bucket by name.
 func (s *sys) del(key string) {
-	delete(s.buckets, key)
+	if b := s.buckets[key]; b != nil {
+		delete(s.buckets, key)
+	}
 }
 
 // read initializes the data from an on-disk page.
@@ -61,7 +73,8 @@ func (s *sys) read(p *page) {
 
 	// Associate keys and buckets.
 	for index, key := range keys {
-		s.buckets[key] = buckets[index]
+		b := &bucket{buckets[index].root}
+		s.buckets[key] = b
 	}
 }
 

@@ -2,7 +2,7 @@ TODO
 ====
 X Open DB.
 X Initialize transaction.
-- Cursor First, Goto(key), Next
+- Cursor First, Get(key), Next
 - RWTransaction.insert()
   - rebalance
   - adjust cursors

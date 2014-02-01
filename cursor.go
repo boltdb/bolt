@@ -14,7 +14,7 @@ type Cursor struct {
 // elem represents a node on a page that's on the cursor's stack.
 type elem struct {
 	page  *page
-	index int
+	index uint16
 }
 
 // First moves the cursor to the first item in the bucket and returns its key and data.
@@ -30,25 +30,29 @@ func (c *Cursor) Next() ([]byte, []byte) {
 
 // Get positions the cursor at a specific key and returns the its value.
 func (c *Cursor) Get(key []byte) []byte {
-	if c.Goto(key) {
-		return c.node().value()
-	}
-	return nil
-}
-
-// Goto positions the cursor at a specific key.
-// Returns true if an exact match or false if positioned after the closest match.
-func (c *Cursor) Goto(key []byte) bool {
-	// TODO(benbjohnson): Optimize for specific use cases.
-
 	// Start from root page and traverse to correct page.
 	c.stack = c.stack[:0]
 	c.search(key, c.transaction.page(c.root))
+	p, index := c.top()
 
-	return false
+	// If the cursor is pointing to the end of page then return nil.
+	if index == p.count {
+		return nil
+	}
+
+	// If our target node isn't the same key as what's passed in then return nil.
+	// c.page().hexdump(512)
+	if !bytes.Equal(key, c.node().key()) {
+		return nil
+	}
+
+	return c.node().value()
 }
 
 func (c *Cursor) search(key []byte, p *page) {
+	if (p.flags & (p_branch | p_leaf)) == 0 {
+		panic("invalid page type: " + p.typ())
+	}
 	e := elem{page: p}
 	c.stack = append(c.stack, e)
 
@@ -58,12 +62,26 @@ func (c *Cursor) search(key []byte, p *page) {
 		return
 	}
 
-	// Binary search for the correct branch node.
-	nodes := p.bnodes()
-	e.index = sort.Search(int(p.count)-1, func(i int) bool { return bytes.Compare(nodes[i+1].key(), key) != -1 })
+	// Binary search for the correct range.
+	inodes := p.branchPageElements()
+
+	var exact bool
+	index := sort.Search(int(p.count), func(i int) bool {
+		// TODO(benbjohnson): Optimize this range search. It's a bit hacky right now.
+		// sort.Search() finds the lowest index where f() != -1 but we need the highest index.
+		ret := bytes.Compare(inodes[i].key(), key)
+		if ret == 0 {
+			exact = true
+		}
+		return ret != -1
+	})
+	if !exact && index > 0 {
+		index--
+	}
+	e.index = uint16(index)
 
 	// Recursively search to the next page.
-	c.search(key, c.transaction.page(nodes[e.index].pgid))
+	c.search(key, c.transaction.page(inodes[e.index].pgid))
 }
 
 // nsearch searches a leaf node for the index of the node that matches key.
@@ -71,16 +89,17 @@ func (c *Cursor) nsearch(key []byte, p *page) {
 	e := &c.stack[len(c.stack)-1]
 
 	// Binary search for the correct leaf node index.
-	nodes := p.lnodes()
-	e.index = sort.Search(int(p.count), func(i int) bool {
-		return bytes.Compare(nodes[i].key(), key) != -1
+	inodes := p.leafPageElements()
+	index := sort.Search(int(p.count), func(i int) bool {
+		return bytes.Compare(inodes[i].key(), key) != -1
 	})
+	e.index = uint16(index)
 }
 
 // top returns the page and leaf node that the cursor is currently pointing at.
-func (c *Cursor) top() (*page, *lnode) {
+func (c *Cursor) top() (*page, uint16) {
 	elem := c.stack[len(c.stack)-1]
-	return elem.page, elem.page.lnode(elem.index)
+	return elem.page, elem.index
 }
 
 // page returns the page that the cursor is currently pointing at.
@@ -89,7 +108,7 @@ func (c *Cursor) page() *page {
 }
 
 // node returns the leaf node that the cursor is currently positioned on.
-func (c *Cursor) node() *lnode {
+func (c *Cursor) node() *leafPageElement {
 	elem := c.stack[len(c.stack)-1]
-	return elem.page.lnode(elem.index)
+	return elem.page.leafPageElement(elem.index)
 }
