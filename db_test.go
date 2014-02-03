@@ -191,6 +191,20 @@ func TestDBPutRandom(t *testing.T) {
 	}
 }
 
+// Ensure that a bucket can delete an existing key.
+func TestDBDelete(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Put("widgets", []byte("foo"), []byte("bar"))
+		err := db.Delete("widgets", []byte("foo"))
+		assert.NoError(t, err)
+		value, err := db.Get("widgets", []byte("foo"))
+		if assert.NoError(t, err) {
+			assert.Nil(t, value)
+		}
+	})
+}
+
 // withDB executes a function with a database reference.
 func withDB(fn func(*DB, string)) {
 	f, _ := ioutil.TempFile("", "bolt-")

@@ -61,6 +61,20 @@ func (n *node) put(oldKey, newKey, value []byte, pgid pgid) {
 	inode.pgid = pgid
 }
 
+// del removes a key from the node.
+func (n *node) del(key []byte) {
+	// Find index of key.
+	index := sort.Search(len(n.inodes), func(i int) bool { return bytes.Compare(n.inodes[i].key, key) != -1 })
+
+	// Exit if the key isn't found.
+	if !bytes.Equal(n.inodes[index].key, key) {
+		return
+	}
+
+	// Delete inode from the node.
+	n.inodes = append(n.inodes[:index], n.inodes[index+1:]...)
+}
+
 // read initializes the node from a page.
 func (n *node) read(p *page) {
 	n.pgid = p.id
