@@ -247,7 +247,10 @@ func (t *RWTransaction) write() error {
 	for _, p := range pages {
 		size := (int(p.overflow) + 1) * t.db.pageSize
 		buf := (*[maxAllocSize]byte)(unsafe.Pointer(p))[:size]
-		t.db.file.WriteAt(buf, int64(p.id)*int64(t.db.pageSize))
+		offset := int64(p.id) * int64(t.db.pageSize)
+		if _, err := t.db.file.WriteAt(buf, offset); err != nil {
+			return err
+		}
 	}
 
 	return nil

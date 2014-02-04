@@ -1,14 +1,11 @@
 package bolt
 
 import (
-	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"syscall"
 	"testing"
-	"testing/quick"
 	"time"
 	"unsafe"
 
@@ -154,41 +151,6 @@ func TestDBPut(t *testing.T) {
 			assert.Equal(t, value, []byte("bar"))
 		}
 	})
-}
-
-// Ensure that a bucket can write random keys and values across multiple txns.
-func TestDBPutRandom(t *testing.T) {
-	f := func(items testKeyValuePairs) bool {
-		withOpenDB(func(db *DB, path string) {
-			db.CreateBucket("widgets")
-			for _, item := range items {
-				if len(item.Key) == 0 {
-					continue
-				}
-				if err := db.Put("widgets", item.Key, item.Value); err != nil {
-					panic("put error: " + err.Error())
-				}
-			}
-			for _, item := range items {
-				if len(item.Key) == 0 {
-					continue
-				}
-				value, err := db.Get("widgets", item.Key)
-				if err != nil {
-					panic("get error: " + err.Error())
-				}
-				if !bytes.Equal(value, []byte(item.Value)) {
-					// db.CopyFile("/tmp/bolt.random.db")
-					t.Fatalf("value mismatch:\n%x\n%x", item.Value, value)
-				}
-			}
-			fmt.Fprint(os.Stderr, ".")
-		})
-		return true
-	}
-	if err := quick.Check(f, qc()); err != nil {
-		t.Error(err)
-	}
 }
 
 // Ensure that a bucket can delete an existing key.

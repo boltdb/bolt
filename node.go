@@ -148,14 +148,16 @@ func (n *node) split(pageSize int) []*node {
 	threshold := pageSize / 2
 
 	// Group into smaller pages and target a given fill size.
-	size := 0
-	current := &node{isLeaf: n.isLeaf}
-	nodes := make([]*node, 0)
+	size := pageHeaderSize
+	inodes := n.inodes
+	current := n
+	current.inodes = nil
+	var nodes []*node
 
-	for i, inode := range n.inodes {
+	for i, inode := range inodes {
 		elemSize := n.pageElementSize() + len(inode.key) + len(inode.value)
 
-		if len(current.inodes) >= minKeysPerPage && i < len(n.inodes)-minKeysPerPage && size+elemSize > threshold {
+		if len(current.inodes) >= minKeysPerPage && i < len(inodes)-minKeysPerPage && size+elemSize > threshold {
 			size = pageHeaderSize
 			nodes = append(nodes, current)
 			current = &node{isLeaf: n.isLeaf}

@@ -41,7 +41,6 @@ func (c *Cursor) Get(key []byte) []byte {
 	}
 
 	// If our target node isn't the same key as what's passed in then return nil.
-	// c.page().hexdump(512)
 	if !bytes.Equal(key, c.node().key()) {
 		return nil
 	}

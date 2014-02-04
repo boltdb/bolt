@@ -25,16 +25,6 @@ func (s *sys) get(key string) *bucket {
 	return s.buckets[key]
 }
 
-// getByRoot retrieves a bucket by root page id.
-func (s *sys) getByRoot(pgid pgid) *bucket {
-	for _, b := range s.buckets {
-		if b.root == pgid {
-			return b
-		}
-	}
-	panic("root not found")
-}
-
 // put sets a new value for a bucket.
 func (s *sys) put(key string, b *bucket) {
 	s.buckets[key] = b

@@ -91,7 +91,7 @@ func TestNodeSplit(t *testing.T) {
 	n.put([]byte("00000004"), []byte("00000004"), []byte("0123456701234567"), 0)
 	n.put([]byte("00000005"), []byte("00000005"), []byte("0123456701234567"), 0)
 
-	// Split between 3 & 4.
+	// Split between 2 & 3.
 	nodes := n.split(100)
 
 	assert.Equal(t, len(nodes), 2)
