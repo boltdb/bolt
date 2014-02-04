@@ -3,7 +3,7 @@ Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https
 
 ## Overview
 
-Bolt is a low-level key/value store written in pure Go. The goal of the project is to provide a simple, fast, and reliable database for projects that don't require a full database server such as Postgres or MySQL. It is also meant to be educational. Most of us use tools without understanding how the underlying data really works.
+Bolt is a pure Go key/value store inspired by [Howard Chu](https://twitter.com/hyc_symas) and the [LMDB project](http://symas.com/mdb/). The goal of the project is to provide a simple, fast, and reliable database for projects that don't require a full database server such as Postgres or MySQL. It is also meant to be educational. Most of us use tools without understanding how the underlying data really works.
 
 Since Bolt is meant to be used as such a low-level piece of functionality, simplicity is key. The API will be small and only center around getting values and setting values. That's it. If you want to see additional functionality added then we encourage you submit a Github issue and we can discuss developing it as a separate fork.
 
@@ -15,6 +15,31 @@ Since Bolt is meant to be used as such a low-level piece of functionality, simpl
 ## Project Status
 
 Bolt is currently in development and is currently not functional.
+
+
+## Comparing Bolt vs LMDB
+
+Bolt is inspired by [LMDB](http://symas.com/mdb/) so there are many similarities between the two:
+
+1. Both use a [B+Tree](http://en.wikipedia.org/wiki/B%2B_tree) data structure.
+
+2. ACID semantics with fully [serializable transactions](http://en.wikipedia.org/wiki/Isolation_(database_systems)#Serializable).
+
+3. Lock-free MVCC support using a single writer and multiple readers.
+
+
+There are also several differences between Bolt and LMDB:
+
+1. LMDB supports more additional features such as multi-value keys, fixed length keys, multi-key insert, direct writes, and bi-directional cursors. Bolt only supports basic `Get()`, `Put()`, and `Delete()` operations and unidirectional cursors.
+
+2. LMDB databases can be shared between processes. Bolt only allows a single process to use a database at a time.
+
+3. LMDB is written in C and extremely fast. Bolt is written in pure Go and, while it's fast, it is not as fast as LMDB.
+
+4. LMDB is a more mature library and is used heavily in projects such as [OpenLDAP](http://www.openldap.org/).
+
+
+So why use Bolt? The goal of Bolt is provide a simple, fast data store that is easily integrated into Go projects. The library does not require CGO so it is compatible with `go get` and you can easily build static binaries with it. We are not accepting additional functionality into the library so the API and file format are stable. Bolt also has near 100% unit test coverage and also includes heavy black box testing using the [testing/quick](http://golang.org/pkg/testing/quick/) package.
 
 
 ## API
