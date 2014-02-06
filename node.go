@@ -40,7 +40,7 @@ func (n *node) root() *node {
 	if n.parent == nil {
 		return n
 	}
-	return n.parent
+	return n.parent.root()
 }
 
 // put inserts a key/value.
