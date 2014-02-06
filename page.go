@@ -19,7 +19,7 @@ const (
 	p_branch   = 0x01
 	p_leaf     = 0x02
 	p_meta     = 0x04
-	p_sys      = 0x08
+	p_buckets  = 0x08
 	p_freelist = 0x10
 )
 
@@ -41,8 +41,8 @@ func (p *page) typ() string {
 		return "leaf"
 	} else if (p.flags & p_meta) != 0 {
 		return "meta"
-	} else if (p.flags & p_sys) != 0 {
-		return "system"
+	} else if (p.flags & p_buckets) != 0 {
+		return "buckets"
 	} else if (p.flags & p_freelist) != 0 {
 		return "freelist"
 	}

@@ -156,7 +156,7 @@ func (db *DB) init() error {
 		m.pageSize = uint32(db.pageSize)
 		m.version = version
 		m.free = 2
-		m.sys = 3
+		m.buckets = 3
 		m.pgid = 4
 		m.txnid = txnid(i)
 	}
@@ -170,7 +170,7 @@ func (db *DB) init() error {
 	// Write an empty leaf page at page 4.
 	p = db.pageInBuffer(buf[:], pgid(3))
 	p.id = pgid(3)
-	p.flags = p_sys
+	p.flags = p_buckets
 	p.count = 0
 
 	// Write the buffer to our data file.
@@ -384,4 +384,13 @@ func (db *DB) sync(force bool) error {
 func (db *DB) Stat() *Stat {
 	// TODO: Calculate size, depth, page count (by type), entry count, readers, etc.
 	return nil
+}
+
+type Stat struct {
+	PageSize          int
+	Depth             int
+	BranchPageCount   int
+	LeafPageCount     int
+	OverflowPageCount int
+	EntryCount        int
 }

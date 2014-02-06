@@ -38,18 +38,17 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	p := t.allocate(1)
 	p.flags = p_leaf
 
-	// Add bucket to system page.
-	t.sys.put(name, &bucket{root: p.id})
+	// Add bucket to buckets page.
+	t.buckets.put(name, &bucket{root: p.id})
 
 	return nil
 }
 
 // DropBucket deletes a bucket.
 func (t *RWTransaction) DeleteBucket(name string) error {
-	// Remove from system page.
-	t.sys.del(name)
+	// Remove from buckets page.
+	t.buckets.del(name)
 
-	// TODO: Delete entry from system bucket.
 	// TODO: Free all pages.
 	// TODO: Remove cursor.
 	return nil
@@ -105,9 +104,9 @@ func (t *RWTransaction) Commit() error {
 	// Spill data onto dirty pages.
 	t.spill()
 
-	// Spill system page.
-	p := t.allocate((t.sys.size() / t.db.pageSize) + 1)
-	t.sys.write(p)
+	// Spill buckets page.
+	p := t.allocate((t.buckets.size() / t.db.pageSize) + 1)
+	t.buckets.write(p)
 
 	// Write dirty pages to disk.
 	if err := t.write(); err != nil {
@@ -115,7 +114,7 @@ func (t *RWTransaction) Commit() error {
 	}
 
 	// Update the meta.
-	t.meta.sys = p.id
+	t.meta.buckets = p.id
 
 	// Write meta to disk.
 	if err := t.writeMeta(); err != nil {
@@ -223,12 +222,7 @@ func (t *RWTransaction) spill() {
 
 	// Update roots with new roots.
 	for _, root := range roots {
-		for _, b := range t.sys.buckets {
-			if b.root == root.pgid {
-				b.root = root.node.root().pgid
-				break
-			}
-		}
+		t.buckets.updateRoot(root.pgid, root.node.root().pgid)
 	}
 }
 

@@ -13,7 +13,7 @@ type Transaction struct {
 	id    int
 	db    *DB
 	meta  *meta
-	sys   *sys
+	buckets   *buckets
 	pages map[pgid]*page
 }
 
@@ -23,8 +23,8 @@ func (t *Transaction) init(db *DB) {
 	t.meta = db.meta()
 	t.pages = nil
 
-	t.sys = &sys{}
-	t.sys.read(t.page(t.meta.sys))
+	t.buckets = &buckets{}
+	t.buckets.read(t.page(t.meta.buckets))
 }
 
 func (t *Transaction) Close() {
@@ -37,8 +37,7 @@ func (t *Transaction) DB() *DB {
 
 // Bucket retrieves a bucket by name.
 func (t *Transaction) Bucket(name string) *Bucket {
-	// Lookup bucket from the system page.
-	b := t.sys.get(name)
+	b := t.buckets.get(name)
 	if b == nil {
 		return nil
 	}

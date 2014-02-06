@@ -7,7 +7,7 @@ type meta struct {
 	version  uint32
 	pageSize uint32
 	flags    uint32
-	sys      pgid
+	buckets  pgid
 	free     pgid
 	pgid     pgid
 	txnid    txnid
@@ -31,7 +31,7 @@ func (m *meta) copy(dest *meta) {
 	dest.pgid = m.pgid
 	dest.free = m.free
 	dest.txnid = m.txnid
-	dest.sys = m.sys
+	dest.buckets = m.buckets
 }
 
 // write writes the meta onto a page.
