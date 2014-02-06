@@ -204,7 +204,7 @@ func (t *RWTransaction) spill() {
 			newNode.write(p)
 			newNode.pgid = p.id
 			newNode.parent = n.parent
-
+			
 			// The first node should use the existing entry, other nodes are inserts.
 			var oldKey []byte
 			if i == 0 {
