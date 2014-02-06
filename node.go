@@ -61,6 +61,20 @@ func (n *node) put(oldKey, newKey, value []byte, pgid pgid) {
 	inode.pgid = pgid
 }
 
+// del removes a key from the node.
+func (n *node) del(key []byte) {
+	// Find index of key.
+	index := sort.Search(len(n.inodes), func(i int) bool { return bytes.Compare(n.inodes[i].key, key) != -1 })
+
+	// Exit if the key isn't found.
+	if !bytes.Equal(n.inodes[index].key, key) {
+		return
+	}
+
+	// Delete inode from the node.
+	n.inodes = append(n.inodes[:index], n.inodes[index+1:]...)
+}
+
 // read initializes the node from a page.
 func (n *node) read(p *page) {
 	n.pgid = p.id
@@ -134,14 +148,16 @@ func (n *node) split(pageSize int) []*node {
 	threshold := pageSize / 2
 
 	// Group into smaller pages and target a given fill size.
-	size := 0
-	current := &node{isLeaf: n.isLeaf}
-	nodes := make([]*node, 0)
+	size := pageHeaderSize
+	inodes := n.inodes
+	current := n
+	current.inodes = nil
+	var nodes []*node
 
-	for i, inode := range n.inodes {
+	for i, inode := range inodes {
 		elemSize := n.pageElementSize() + len(inode.key) + len(inode.value)
 
-		if len(current.inodes) >= minKeysPerPage && i < len(n.inodes)-minKeysPerPage && size+elemSize > threshold {
+		if len(current.inodes) >= minKeysPerPage && i < len(inodes)-minKeysPerPage && size+elemSize > threshold {
 			size = pageHeaderSize
 			nodes = append(nodes, current)
 			current = &node{isLeaf: n.isLeaf}

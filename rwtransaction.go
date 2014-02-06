@@ -70,19 +70,29 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 		return &Error{"data too large", nil}
 	}
 
-	// Insert a new node.
+	// Move cursor to correct position.
 	c := b.cursor()
 	c.Get(key)
+
+	// Insert the key/value.
 	t.node(c.stack).put(key, key, value, 0)
 
 	return nil
 }
 
 func (t *RWTransaction) Delete(name string, key []byte) error {
-	// TODO: Traverse to the correct node.
-	// TODO: If missing, exit.
-	// TODO: Remove node from page.
-	// TODO: If page is empty then add it to the freelist.
+	b := t.Bucket(name)
+	if b == nil {
+		return &Error{"bucket not found", nil}
+	}
+
+	// Move cursor to correct position.
+	c := b.cursor()
+	c.Get(key)
+
+	// Delete the node if we have a matching key.
+	t.node(c.stack).del(key)
+
 	return nil
 }
 
@@ -237,7 +247,10 @@ func (t *RWTransaction) write() error {
 	for _, p := range pages {
 		size := (int(p.overflow) + 1) * t.db.pageSize
 		buf := (*[maxAllocSize]byte)(unsafe.Pointer(p))[:size]
-		t.db.file.WriteAt(buf, int64(p.id)*int64(t.db.pageSize))
+		offset := int64(p.id) * int64(t.db.pageSize)
+		if _, err := t.db.file.WriteAt(buf, offset); err != nil {
+			return err
+		}
 	}
 
 	return nil

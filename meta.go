@@ -1,6 +1,6 @@
 package bolt
 
-const magic uint32 = 0xDEADC0DE
+const magic uint32 = 0xED0CDAED
 
 type meta struct {
 	magic    uint32
