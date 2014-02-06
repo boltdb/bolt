@@ -10,11 +10,11 @@ const (
 type txnid uint64
 
 type Transaction struct {
-	id    int
-	db    *DB
-	meta  *meta
-	buckets   *buckets
-	pages map[pgid]*page
+	id      int
+	db      *DB
+	meta    *meta
+	buckets *buckets
+	pages   map[pgid]*page
 }
 
 // init initializes the transaction and associates it with a database.

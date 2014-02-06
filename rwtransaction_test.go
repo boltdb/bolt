@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
 // Ensure that a RWTransaction can be retrieved.
 func TestRWTransaction(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {

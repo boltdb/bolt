@@ -180,19 +180,14 @@ func (t *RWTransaction) spill() {
 			roots = append(roots, root{n, n.pgid})
 		}
 
-		// Split nodes and write them.
+		// Split nodes into appropriate sized nodes.
+		// The first node in this list will be a reference to n to preserve ancestry.
 		newNodes := n.split(t.db.pageSize)
 
 		// If this is a root node that split then create a parent node.
 		if n.parent == nil && len(newNodes) > 1 {
-			n.parent = &node{
-				isLeaf: false,
-				key:    newNodes[0].inodes[0].key,
-				depth:  n.depth - 1,
-				inodes: make(inodes, 0),
-			}
+			n.parent = &node{isLeaf: false}
 			nodes = append(nodes, n.parent)
-			sort.Sort(nodes)
 		}
 
 		// Write nodes to dirty pages.
@@ -204,7 +199,7 @@ func (t *RWTransaction) spill() {
 			newNode.write(p)
 			newNode.pgid = p.id
 			newNode.parent = n.parent
-			
+
 			// The first node should use the existing entry, other nodes are inserts.
 			var oldKey []byte
 			if i == 0 {
@@ -224,6 +219,9 @@ func (t *RWTransaction) spill() {
 	for _, root := range roots {
 		t.buckets.updateRoot(root.pgid, root.node.root().pgid)
 	}
+
+	// Clear out nodes now that they are all spilled.
+	t.nodes = make(map[pgid]*node)
 }
 
 // write writes any dirty pages to disk.

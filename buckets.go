@@ -7,7 +7,7 @@ import (
 
 // buckets represents a in-memory buckets page.
 type buckets struct {
-	pgid    pgid
+	pgid  pgid
 	items map[string]*bucket
 }
 
