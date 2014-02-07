@@ -74,7 +74,7 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	c.Get(key)
 
 	// Insert the key/value.
-	t.node(c.stack).put(key, key, value, 0)
+	c.node(t).put(key, key, value, 0)
 
 	return nil
 }
@@ -90,7 +90,7 @@ func (t *RWTransaction) Delete(name string, key []byte) error {
 	c.Get(key)
 
 	// Delete the node if we have a matching key.
-	t.node(c.stack).del(key)
+	c.node(t).del(key)
 
 	return nil
 }
@@ -186,7 +186,7 @@ func (t *RWTransaction) spill() {
 
 		// If this is a root node that split then create a parent node.
 		if n.parent == nil && len(newNodes) > 1 {
-			n.parent = &node{isLeaf: false}
+			n.parent = &node{transaction: t, isLeaf: false}
 			nodes = append(nodes, n.parent)
 		}
 
@@ -261,25 +261,24 @@ func (t *RWTransaction) writeMeta() error {
 	return nil
 }
 
-// node retrieves a node based a cursor stack.
-func (t *RWTransaction) node(stack []elem) *node {
-	if len(stack) == 0 {
-		return nil
-	}
+// TODO(benbjohnson): Look up node by page id instead of by stack. Determine depth recursively by parent.
+// TODO(benbjohnson): prevSibling()
+// TODO(benbjohnson): nextSibling()
 
-	// Retrieve branch if it has already been fetched.
-	e := &stack[len(stack)-1]
-	id := e.page.id
-	if n := t.nodes[id]; n != nil {
+// node creates a node from a page and associates it with a given parent.
+func (t *RWTransaction) node(pgid pgid, parent *node) *node {
+	// Retrieve node if it has already been fetched.
+	if n := t.nodes[pgid]; n != nil {
 		return n
 	}
 
 	// Otherwise create a branch and cache it.
-	n := &node{}
-	n.read(t.page(id))
-	n.depth = len(stack) - 1
-	n.parent = t.node(stack[:len(stack)-1])
-	t.nodes[id] = n
+	n := &node{transaction: t, parent: parent}
+	if n.parent != nil {
+		n.depth = n.parent.depth + 1
+	}
+	n.read(t.page(pgid))
+	t.nodes[pgid] = n
 
 	return n
 }

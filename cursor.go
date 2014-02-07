@@ -8,13 +8,7 @@ import (
 type Cursor struct {
 	transaction *Transaction
 	root        pgid
-	stack       []elem
-}
-
-// elem represents a node on a page that's on the cursor's stack.
-type elem struct {
-	page  *page
-	index uint16
+	stack       []pageElementRef
 }
 
 // First moves the cursor to the first item in the bucket and returns its key and data.
@@ -41,18 +35,18 @@ func (c *Cursor) Get(key []byte) []byte {
 	}
 
 	// If our target node isn't the same key as what's passed in then return nil.
-	if !bytes.Equal(key, c.node().key()) {
+	if !bytes.Equal(key, c.element().key()) {
 		return nil
 	}
 
-	return c.node().value()
+	return c.element().value()
 }
 
 func (c *Cursor) search(key []byte, p *page) {
 	if (p.flags & (p_branch | p_leaf)) == 0 {
 		panic("invalid page type: " + p.typ())
 	}
-	e := elem{page: p}
+	e := pageElementRef{page: p}
 	c.stack = append(c.stack, e)
 
 	// If we're on a leaf page then find the specific node.
@@ -77,10 +71,10 @@ func (c *Cursor) search(key []byte, p *page) {
 	if !exact && index > 0 {
 		index--
 	}
-	e.index = uint16(index)
+	c.stack[len(c.stack)-1].index = uint16(index)
 
 	// Recursively search to the next page.
-	c.search(key, c.transaction.page(inodes[e.index].pgid))
+	c.search(key, c.transaction.page(inodes[index].pgid))
 }
 
 // nsearch searches a leaf node for the index of the node that matches key.
@@ -97,8 +91,8 @@ func (c *Cursor) nsearch(key []byte, p *page) {
 
 // top returns the page and leaf node that the cursor is currently pointing at.
 func (c *Cursor) top() (*page, uint16) {
-	elem := c.stack[len(c.stack)-1]
-	return elem.page, elem.index
+	ptr := c.stack[len(c.stack)-1]
+	return ptr.page, ptr.index
 }
 
 // page returns the page that the cursor is currently pointing at.
@@ -106,8 +100,27 @@ func (c *Cursor) page() *page {
 	return c.stack[len(c.stack)-1].page
 }
 
-// node returns the leaf node that the cursor is currently positioned on.
-func (c *Cursor) node() *leafPageElement {
-	elem := c.stack[len(c.stack)-1]
-	return elem.page.leafPageElement(elem.index)
+// element returns the leaf element that the cursor is currently positioned on.
+func (c *Cursor) element() *leafPageElement {
+	ref := c.stack[len(c.stack)-1]
+	return ref.page.leafPageElement(ref.index)
 }
+
+// node returns the node that the cursor is currently positioned on.
+func (c *Cursor) node(t *RWTransaction) *node {
+	if len(c.stack) == 0 {
+		return nil
+	}
+
+	// Start from root and traverse down the hierarchy.
+	n := t.node(c.stack[0].page.id, nil)
+	for _, ref := range c.stack[:len(c.stack)-1] {
+		__assert__(!n.isLeaf, "expected branch node")
+		__assert__(ref.page.id == n.pgid, "node/page mismatch a: %d != %d", ref.page.id, n.childAt(ref.index).pgid)
+		n = n.childAt(ref.index)
+	}
+	__assert__(n.isLeaf, "expected leaf node")
+	__assert__(n.pgid == c.stack[len(c.stack)-1].page.id, "node/page mismatch b: %d != %d", n.pgid, c.stack[len(c.stack)-1].page.id)
+	return n
+}
+
