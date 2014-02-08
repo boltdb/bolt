@@ -115,12 +115,12 @@ func (c *Cursor) node(t *RWTransaction) *node {
 	// Start from root and traverse down the hierarchy.
 	n := t.node(c.stack[0].page.id, nil)
 	for _, ref := range c.stack[:len(c.stack)-1] {
-		__assert__(!n.isLeaf, "expected branch node")
-		__assert__(ref.page.id == n.pgid, "node/page mismatch a: %d != %d", ref.page.id, n.childAt(ref.index).pgid)
-		n = n.childAt(ref.index)
+		_assert(!n.isLeaf, "expected branch node")
+		_assert(ref.page.id == n.pgid, "node/page mismatch a: %d != %d", ref.page.id, n.childAt(int(ref.index)).pgid)
+		n = n.childAt(int(ref.index))
 	}
-	__assert__(n.isLeaf, "expected leaf node")
-	__assert__(n.pgid == c.stack[len(c.stack)-1].page.id, "node/page mismatch b: %d != %d", n.pgid, c.stack[len(c.stack)-1].page.id)
+	_assert(n.isLeaf, "expected leaf node")
+	_assert(n.pgid == c.stack[len(c.stack)-1].page.id, "node/page mismatch b: %d != %d", n.pgid, c.stack[len(c.stack)-1].page.id)
 	return n
 }
 
