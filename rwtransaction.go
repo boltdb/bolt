@@ -99,9 +99,8 @@ func (t *RWTransaction) Delete(name string, key []byte) error {
 func (t *RWTransaction) Commit() error {
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
 
-	// TODO: Rebalance.
-
-	// Spill data onto dirty pages.
+	// Rebalance and spill data onto dirty pages.
+	t.rebalance()
 	t.spill()
 
 	// Spill buckets page.
@@ -152,6 +151,13 @@ func (t *RWTransaction) allocate(count int) *page {
 	t.pages[p.id] = p
 
 	return p
+}
+
+// rebalance attempts to balance all nodes.
+func (t *RWTransaction) rebalance() {
+	for _, n := range t.nodes {
+		n.rebalance()
+	}
 }
 
 // spill writes all the nodes to dirty pages.

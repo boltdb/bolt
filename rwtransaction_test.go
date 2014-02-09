@@ -136,3 +136,44 @@ func TestRWTransactionPutMultiple(t *testing.T) {
 	}
 	fmt.Fprint(os.Stderr, "\n")
 }
+
+// Ensure that a transaction can delete all key/value pairs and return to a single leaf page.
+func TestRWTransactionDelete(t *testing.T) {
+	f := func(items testdata) bool {
+		withOpenDB(func(db *DB, path string) {
+			// Bulk insert all values.
+			db.CreateBucket("widgets")
+			rwtxn, _ := db.RWTransaction()
+			for _, item := range items {
+				assert.NoError(t, rwtxn.Put("widgets", item.Key, item.Value))
+			}
+			assert.NoError(t, rwtxn.Commit())
+
+			// Remove items one at a time and check consistency.
+			for i, item := range items {
+				assert.NoError(t, db.Delete("widgets", item.Key))
+
+				// Anything before our deletion index should be nil.
+				txn, _ := db.Transaction()
+				for j, exp := range items {
+					if j > i {
+						if !assert.Equal(t, exp.Value, txn.Get("widgets", exp.Key)) {
+							t.FailNow()
+						}
+					} else {
+						if !assert.Nil(t, txn.Get("widgets", exp.Key)) {
+							t.FailNow()
+						}
+					}
+				}
+				txn.Close()
+			}
+		})
+		fmt.Fprint(os.Stderr, ".")
+		return true
+	}
+	if err := quick.Check(f, qconfig()); err != nil {
+		t.Error(err)
+	}
+	fmt.Fprint(os.Stderr, "\n")
+}

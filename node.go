@@ -10,11 +10,20 @@ import (
 type node struct {
 	transaction *RWTransaction
 	isLeaf bool
+	unbalanced bool
 	key    []byte
 	depth  int
 	pgid   pgid
 	parent *node
 	inodes inodes
+}
+
+// minKeys returns the minimum number of inodes this node should have.
+func (n *node) minKeys() int {
+	if n.isLeaf {
+		return 1
+	}
+	return 2
 }
 
 // size returns the size of the node after serialization.
@@ -45,9 +54,44 @@ func (n *node) root() *node {
 }
 
 // childAt returns the child node at a given index.
-func (n *node) childAt(index uint16) *node {
-	__assert__(!n.isLeaf, "invalid childAt(%d) on a leaf node", index)
+func (n *node) childAt(index int) *node {
+	_assert(!n.isLeaf, "invalid childAt(%d) on a leaf node", index)
 	return n.transaction.node(n.inodes[index].pgid, n)
+}
+
+// childIndex returns the index of a given child node.
+func (n *node) childIndex(child *node) int {
+	index := sort.Search(len(n.inodes), func(i int) bool { return bytes.Compare(n.inodes[i].key, child.key) != -1 })
+	return index
+}
+
+// numChildren returns the number of children.
+func (n *node) numChildren() int {
+	return len(n.inodes)
+}
+
+// nextSibling returns the next node with the same parent.
+func (n *node) nextSibling() *node {
+	if n.parent == nil {
+		return nil
+	}
+	index := n.parent.childIndex(n)
+	if index >= n.parent.numChildren() - 1 {
+		return nil
+	}
+	return n.parent.childAt(index + 1)
+}
+
+// prevSibling returns the previous node with the same parent.
+func (n *node) prevSibling() *node {
+	if n.parent == nil {
+		return nil
+	}
+	index := n.parent.childIndex(n)
+	if index == 0 {
+		return nil
+	}
+	return n.parent.childAt(index - 1)
 }
 
 // put inserts a key/value.
@@ -80,6 +124,9 @@ func (n *node) del(key []byte) {
 
 	// Delete inode from the node.
 	n.inodes = append(n.inodes[:index], n.inodes[index+1:]...)
+
+	// Mark the node as needing rebalancing.
+	n.unbalanced = true
 }
 
 // read initializes the node from a page.
@@ -176,6 +223,118 @@ func (n *node) split(pageSize int) []*node {
 	nodes = append(nodes, current)
 
 	return nodes
+}
+
+// rebalance attempts to combine the node with sibling nodes if the node fill
+// size is below a threshold or if there are not enough keys.
+func (n *node) rebalance() {
+	if !n.unbalanced {
+		return
+	}
+	n.unbalanced = false
+
+	// Ignore if node is above threshold (25%) and has enough keys.
+	var threshold = n.transaction.db.pageSize / 4
+	if n.size() > threshold && len(n.inodes) > n.minKeys() {
+		return
+	}
+
+	// Root node has special handling.
+	if n.parent == nil {
+		// If root node is a branch and only has one node then collapse it.
+		if !n.isLeaf && len(n.inodes) == 1 {
+			// Move child's children up.
+			child := n.transaction.nodes[n.inodes[0].pgid]
+			n.isLeaf = child.isLeaf
+			n.inodes = child.inodes[:]
+
+			// Reparent all child nodes being moved.
+			for _, inode := range n.inodes {
+				if child, ok := n.transaction.nodes[inode.pgid]; ok {
+					child.parent = n
+				}
+			}
+
+			// Remove old child.
+			child.parent = nil
+			delete(n.transaction.nodes, child.pgid)
+		}
+
+		return
+	}
+
+	_assert(n.parent.numChildren() > 1, "parent must have at least 2 children")
+
+	// Destination node is right sibling if idx == 0, otherwise left sibling.
+	var target *node
+	var useNextSibling = (n.parent.childIndex(n) == 0)
+	if useNextSibling {
+		target = n.nextSibling()
+	} else {
+		target = n.prevSibling()
+	}
+
+	// If target node has extra nodes then just move one over.
+	if target.numChildren() > target.minKeys() {
+		if useNextSibling {
+			// Reparent and move node.
+			if child, ok := n.transaction.nodes[target.inodes[0].pgid]; ok {
+				child.parent = n
+			}
+			n.inodes = append(n.inodes, target.inodes[0])
+			target.inodes = target.inodes[1:]
+
+			// Update target key on parent.
+			target.parent.put(target.key, target.inodes[0].key, nil, target.pgid)
+			target.key = target.inodes[0].key
+		} else {
+			// Reparent and move node.
+			if child, ok := n.transaction.nodes[target.inodes[len(target.inodes)-1].pgid]; ok {
+				child.parent = n
+			}
+			n.inodes = append(n.inodes, inode{})
+			copy(n.inodes[1:], n.inodes)
+			n.inodes[0] = target.inodes[len(target.inodes)-1]
+			target.inodes = target.inodes[:len(target.inodes)-1]
+		}
+
+		// Update parent key for node.
+		n.parent.put(n.key, n.inodes[0].key, nil, n.pgid)
+		n.key = n.inodes[0].key
+
+		return
+	}
+
+	// If both this node and the target node are too small then merge them.
+	if useNextSibling {
+		// Reparent all child nodes being moved.
+		for _, inode := range target.inodes {
+			if child, ok := n.transaction.nodes[inode.pgid]; ok {
+				child.parent = n
+			}
+		}
+
+		// Copy over inodes from target and remove target.
+		n.inodes = append(n.inodes, target.inodes...)
+		n.parent.del(target.key)
+		delete(n.transaction.nodes, target.pgid)
+	} else {
+		// Reparent all child nodes being moved.
+		for _, inode := range n.inodes {
+			if child, ok := n.transaction.nodes[inode.pgid]; ok {
+				child.parent = target
+			}
+		}
+
+		// Copy over inodes to target and remove node.
+		target.inodes = append(target.inodes, n.inodes...)
+		n.parent.del(n.key)
+		n.parent.put(target.key, target.inodes[0].key, nil, target.pgid)
+		delete(n.transaction.nodes, n.pgid)
+	}
+
+	// Either this node or the target node was deleted from the parent so rebalance it.
+	n.parent.rebalance()
 }
 
 // nodesByDepth sorts a list of branches by deepest first.
