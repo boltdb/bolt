@@ -16,9 +16,6 @@ const (
 const minPageSize = 0x1000
 
 type DB struct {
-	sync.Mutex
-	opened bool
-
 	os            _os
 	syscall       _syscall
 	path          string
@@ -28,6 +25,8 @@ type DB struct {
 	meta0         *meta
 	meta1         *meta
 	pageSize      int
+	opened bool
+	mutex sync.Mutex
 	rwtransaction *RWTransaction
 	transactions  []*Transaction
 }
@@ -46,8 +45,8 @@ func (db *DB) Path() string {
 // If the file does not exist then it will be created automatically.
 func (db *DB) Open(path string, mode os.FileMode) error {
 	var err error
-	db.Lock()
-	defer db.Unlock()
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 
 	// Initialize OS/Syscall references.
 	// These are overridden by mocks during some tests.
@@ -183,8 +182,8 @@ func (db *DB) init() error {
 
 // Close releases all resources related to the database.
 func (db *DB) Close() {
-	db.Lock()
-	defer db.Unlock()
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 	db.close()
 }
 
@@ -195,8 +194,8 @@ func (db *DB) close() {
 // Transaction creates a read-only transaction.
 // Multiple read-only transactions can be used concurrently.
 func (db *DB) Transaction() (*Transaction, error) {
-	db.Lock()
-	defer db.Unlock()
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 
 	// Exit if the database is not open yet.
 	if !db.opened {
@@ -213,8 +212,8 @@ func (db *DB) Transaction() (*Transaction, error) {
 // RWTransaction creates a read/write transaction.
 // Only one read/write transaction is allowed at a time.
 func (db *DB) RWTransaction() (*RWTransaction, error) {
-	db.Lock()
-	defer db.Unlock()
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 
 	// TODO: db.writerMutex.Lock()
 	// TODO: Add unlock to RWTransaction.Commit() / Abort()
@@ -379,18 +378,4 @@ func (db *DB) sync(force bool) error {
 		return err
 	}
 	return nil
-}
-
-func (db *DB) Stat() *Stat {
-	// TODO: Calculate size, depth, page count (by type), entry count, readers, etc.
-	return nil
-}
-
-type Stat struct {
-	PageSize          int
-	Depth             int
-	BranchPageCount   int
-	LeafPageCount     int
-	OverflowPageCount int
-	EntryCount        int
 }

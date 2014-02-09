@@ -23,3 +23,17 @@ func (b *Bucket) cursor() *Cursor {
 		stack:       make([]pageElementRef, 0),
 	}
 }
+
+func (b *Bucket) Stat() *Stat {
+	// TODO: Calculate size, depth, page count (by type), entry count, readers, etc.
+	return nil
+}
+
+type Stat struct {
+	PageSize          int
+	Depth             int
+	BranchPageCount   int
+	LeafPageCount     int
+	OverflowPageCount int
+	EntryCount        int
+}
