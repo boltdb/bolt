@@ -10,7 +10,6 @@ const (
 type txnid uint64
 
 type Transaction struct {
-	id      int
 	db      *DB
 	meta    *meta
 	buckets *buckets
@@ -27,8 +26,13 @@ func (t *Transaction) init(db *DB) {
 	t.buckets.read(t.page(t.meta.buckets))
 }
 
+// id returns the transaction id.
+func (t *Transaction) id() txnid {
+	return t.meta.txnid
+}
+
 func (t *Transaction) Close() {
-	// TODO: Close buckets.
+	t.db.removeTransaction(t)
 }
 
 func (t *Transaction) DB() *DB {
@@ -71,12 +75,6 @@ func (t *Transaction) Get(name string, key []byte) []byte {
 		return nil
 	}
 	return c.Get(key)
-}
-
-// stat returns information about a bucket's internal structure.
-func (t *Transaction) stat(name string) *Stat {
-	// TODO
-	return nil
 }
 
 // page returns a reference to the page with a given id.

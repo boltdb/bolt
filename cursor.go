@@ -43,9 +43,7 @@ func (c *Cursor) Get(key []byte) []byte {
 }
 
 func (c *Cursor) search(key []byte, p *page) {
-	if (p.flags & (p_branch | p_leaf)) == 0 {
-		panic("invalid page type: " + p.typ())
-	}
+	_assert((p.flags&(p_branch|p_leaf)) != 0, "invalid page type: "+p.typ())
 	e := pageElementRef{page: p}
 	c.stack = append(c.stack, e)
 
@@ -95,11 +93,6 @@ func (c *Cursor) top() (*page, uint16) {
 	return ptr.page, ptr.index
 }
 
-// page returns the page that the cursor is currently pointing at.
-func (c *Cursor) page() *page {
-	return c.stack[len(c.stack)-1].page
-}
-
 // element returns the leaf element that the cursor is currently positioned on.
 func (c *Cursor) element() *leafPageElement {
 	ref := c.stack[len(c.stack)-1]
@@ -123,4 +116,3 @@ func (c *Cursor) node(t *RWTransaction) *node {
 	_assert(n.pgid == c.stack[len(c.stack)-1].page.id, "node/page mismatch b: %d != %d", n.pgid, c.stack[len(c.stack)-1].page.id)
 	return n
 }
-
