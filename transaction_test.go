@@ -6,6 +6,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Ensure that the database can retrieve a list of buckets.
+func TestTransactionBuckets(t *testing.T) {
+	t.Skip("pending") // TODO(benbjohnson)
+}
+
 // Ensure that a Transaction can retrieve a bucket.
 func TestTransactionBucketMissing(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -19,7 +24,7 @@ func TestTransactionBucketMissing(t *testing.T) {
 }
 
 // Ensure that a Transaction retrieving a non-existent key returns nil.
-func TestTransactionGetMising(t *testing.T) {
+func TestTransactionGetMissing(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		db.Put("widgets", []byte("foo"), []byte("bar"))

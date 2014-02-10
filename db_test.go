@@ -167,6 +167,26 @@ func TestDBDelete(t *testing.T) {
 	})
 }
 
+// Ensure that the database can be copied to a writer.
+func TestDBCopy(t *testing.T) {
+	t.Skip("pending") // TODO(benbjohnson)
+}
+
+// Ensure that the database can be copied to a file path.
+func TestDBCopyFile(t *testing.T) {
+	t.Skip("pending") // TODO(benbjohnson)
+}
+
+// Ensure that the database can sync to the file system.
+func TestDBSync(t *testing.T) {
+	t.Skip("pending") // TODO(benbjohnson)
+}
+
+// Ensure that an error is returned when a database write fails.
+func TestDBWriteFail(t *testing.T) {
+	t.Skip("pending") // TODO(benbjohnson)
+}
+
 // withDB executes a function with a database reference.
 func withDB(fn func(*DB, string)) {
 	f, _ := ioutil.TempFile("", "bolt-")

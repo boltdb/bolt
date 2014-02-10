@@ -81,11 +81,6 @@ func (p *page) branchPageElements() []branchPageElement {
 	return ((*[maxNodesPerPage]branchPageElement)(unsafe.Pointer(&p.ptr)))[:]
 }
 
-// freelist retrieves a list of page ids from a freelist page.
-func (p *page) freelist() []pgid {
-	return ((*[maxNodesPerPage]pgid)(unsafe.Pointer(&p.ptr)))[0:p.count]
-}
-
 // dump writes n bytes of the page to STDERR as hex output.
 func (p *page) hexdump(n int) {
 	buf := (*[maxAllocSize]byte)(unsafe.Pointer(p))[:n]

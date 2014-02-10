@@ -9,13 +9,13 @@ import (
 // node represents an in-memory, deserialized page.
 type node struct {
 	transaction *RWTransaction
-	isLeaf bool
-	unbalanced bool
-	key    []byte
-	depth  int
-	pgid   pgid
-	parent *node
-	inodes inodes
+	isLeaf      bool
+	unbalanced  bool
+	key         []byte
+	depth       int
+	pgid        pgid
+	parent      *node
+	inodes      inodes
 }
 
 // minKeys returns the minimum number of inodes this node should have.
@@ -76,7 +76,7 @@ func (n *node) nextSibling() *node {
 		return nil
 	}
 	index := n.parent.childIndex(n)
-	if index >= n.parent.numChildren() - 1 {
+	if index >= n.parent.numChildren()-1 {
 		return nil
 	}
 	return n.parent.childAt(index + 1)
@@ -354,7 +354,3 @@ type inode struct {
 }
 
 type inodes []inode
-
-func (s inodes) Len() int           { return len(s) }
-func (s inodes) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s inodes) Less(i, j int) bool { return bytes.Compare(s[i].key, s[j].key) == -1 }

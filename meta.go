@@ -8,7 +8,7 @@ type meta struct {
 	pageSize uint32
 	flags    uint32
 	buckets  pgid
-	free     pgid
+	freelist pgid
 	pgid     pgid
 	txnid    txnid
 }
@@ -28,10 +28,10 @@ func (m *meta) copy(dest *meta) {
 	dest.magic = m.magic
 	dest.version = m.version
 	dest.pageSize = m.pageSize
-	dest.pgid = m.pgid
-	dest.free = m.free
-	dest.txnid = m.txnid
 	dest.buckets = m.buckets
+	dest.freelist = m.freelist
+	dest.pgid = m.pgid
+	dest.txnid = m.txnid
 }
 
 // write writes the meta onto a page.
