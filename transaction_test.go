@@ -95,6 +95,32 @@ func TestTransactionCursorLeafRoot(t *testing.T) {
 	})
 }
 
+// Ensure that a Transaction cursor can restart from the beginning.
+func TestTransactionCursorRestart(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Put("widgets", []byte("bar"), []byte{})
+		db.Put("widgets", []byte("foo"), []byte{})
+
+		txn, _ := db.Transaction()
+		c := txn.Cursor("widgets")
+
+		k, _ := c.First()
+		assert.Equal(t, string(k), "bar")
+
+		k, _ = c.Next()
+		assert.Equal(t, string(k), "foo")
+
+		k, _ = c.First()
+		assert.Equal(t, string(k), "bar")
+
+		k, _ = c.Next()
+		assert.Equal(t, string(k), "foo")
+
+		txn.Close()
+	})
+}
+
 // Ensure that a transaction can iterate over all elements in a bucket.
 func TestTransactionCursorIterate(t *testing.T) {
 	f := func(items testdata) bool {
