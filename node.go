@@ -161,8 +161,10 @@ func (n *node) write(p *page) {
 	// Initialize page.
 	if n.isLeaf {
 		p.flags |= p_leaf
+		// warn("∑", p.id, "leaf")
 	} else {
 		p.flags |= p_branch
+		// warn("∑", p.id, "branch")
 	}
 	p.count = uint16(len(n.inodes))
 
@@ -175,11 +177,13 @@ func (n *node) write(p *page) {
 			elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
 			elem.ksize = uint32(len(item.key))
 			elem.vsize = uint32(len(item.value))
+			// warn("  »", string(item.key), "->", string(item.value))
 		} else {
 			elem := p.branchPageElement(uint16(i))
 			elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
 			elem.ksize = uint32(len(item.key))
 			elem.pgid = item.pgid
+			// warn("  »", string(item.key))
 		}
 
 		// Write data for the element to the end of the page.

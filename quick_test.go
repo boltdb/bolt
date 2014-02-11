@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"bytes"
 	"flag"
 	"math/rand"
 	"reflect"
@@ -38,6 +39,10 @@ func qconfig() *quick.Config {
 }
 
 type testdata []testdataitem
+
+func (t testdata) Len() int           { return len(t) }
+func (t testdata) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
+func (t testdata) Less(i, j int) bool { return bytes.Compare(t[i].Key, t[j].Key) == -1 }
 
 func (t testdata) Generate(rand *rand.Rand, size int) reflect.Value {
 	n := rand.Intn(qmaxitems-1) + 1
