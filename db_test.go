@@ -187,6 +187,18 @@ func TestDBWriteFail(t *testing.T) {
 	t.Skip("pending") // TODO(benbjohnson)
 }
 
+// Ensure that the mmap grows appropriately.
+func TestDBMmapSize(t *testing.T) {
+	db := &DB{pageSize: 4096}
+	assert.Equal(t, db.mmapSize(0), minMmapSize)
+	assert.Equal(t, db.mmapSize(16384), minMmapSize)
+	assert.Equal(t, db.mmapSize(minMmapSize-1), minMmapSize)
+	assert.Equal(t, db.mmapSize(minMmapSize), minMmapSize*2)
+	assert.Equal(t, db.mmapSize(10000000), 20000768)
+	assert.Equal(t, db.mmapSize((1<<30)-1), 2147483648)
+	assert.Equal(t, db.mmapSize(1<<30), 1<<31)
+}
+
 // withDB executes a function with a database reference.
 func withDB(fn func(*DB, string)) {
 	f, _ := ioutil.TempFile("", "bolt-")
