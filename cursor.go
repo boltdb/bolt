@@ -13,13 +13,35 @@ type Cursor struct {
 
 // First moves the cursor to the first item in the bucket and returns its key and data.
 func (c *Cursor) First() ([]byte, []byte) {
-	// TODO: Traverse to the first key.
-	return nil, nil
+	if len(c.stack) > 0 {
+		c.stack = c.stack[:0]
+	}
+	c.stack = append(c.stack, pageElementRef{page: c.transaction.page(c.root), index: 0})
+	c.first()
+	return c.keyValue()
 }
 
 // Move the cursor to the next key/value.
 func (c *Cursor) Next() ([]byte, []byte) {
-	return nil, nil
+	// Attempt to move over one element until we're successful.
+	// Move up the stack as we hit the end of each page in our stack.
+	for i := len(c.stack) - 1; i >= 0; i-- {
+		elem := &c.stack[i]
+		if elem.index < elem.page.count-1 {
+			elem.index++
+			break
+		}
+		c.stack = c.stack[:i]
+	}
+
+	// If we've hit the end then return nil.
+	if len(c.stack) == 0 {
+		return nil, nil
+	}
+
+	// Move down the stack to find the first element of the first leaf under this branch.
+	c.first()
+	return c.keyValue()
 }
 
 // Get positions the cursor at a specific key and returns the its value.
@@ -40,6 +62,21 @@ func (c *Cursor) Get(key []byte) []byte {
 	}
 
 	return c.element().value()
+}
+
+// first moves the cursor to the first leaf element under a page.
+func (c *Cursor) first() {
+	p := c.stack[len(c.stack)-1].page
+	for {
+		// Exit when we hit a leaf page. 
+		if (p.flags & p_leaf) != 0 {
+			break
+		}
+
+		// Keep adding pages pointing to the first element to the stack.
+		p = c.transaction.page(p.branchPageElement(c.stack[len(c.stack)-1].index).pgid)
+		c.stack = append(c.stack, pageElementRef{page: p, index: 0})
+	}
 }
 
 func (c *Cursor) search(key []byte, p *page) {
@@ -97,6 +134,16 @@ func (c *Cursor) top() (*page, uint16) {
 func (c *Cursor) element() *leafPageElement {
 	ref := c.stack[len(c.stack)-1]
 	return ref.page.leafPageElement(ref.index)
+}
+
+// keyValue returns the key and value of the current leaf element.
+func (c *Cursor) keyValue() ([]byte, []byte) {
+	ref := &c.stack[len(c.stack)-1]
+	if ref.index >= ref.page.count {
+		return nil, nil
+	}
+	e := ref.page.leafPageElement(ref.index)
+	return e.key(), e.value()
 }
 
 // node returns the node that the cursor is currently positioned on.
