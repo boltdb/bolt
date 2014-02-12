@@ -38,7 +38,7 @@ func (m *meta) copy(dest *meta) {
 func (m *meta) write(p *page) {
 	// Page id is either going to be 0 or 1 which we can determine by the Txn ID.
 	p.id = pgid(m.txnid % 2)
-	p.flags |= p_meta
+	p.flags |= metaPageFlag
 
 	m.copy(p.meta())
 }

@@ -8,16 +8,15 @@ import (
 	"unsafe"
 )
 
-const (
-	db_nosync = iota
-	db_nometasync
-)
-
-const minPageSize = 0x1000
-
+// The smallest size that the mmap can be.
 const minMmapSize = 1 << 22 // 4MB
+
+// The largest step that can be taken when remapping the mmap.
 const maxMmapStep = 1 << 30 // 1GB
 
+// DB represents a collection of buckets persisted to a file on disk.
+// All data access is performed through transactions which can be obtained through the DB.
+// All the functions on DB will return a DatabaseNotOpenError if accessed before Open() is called.
 type DB struct {
 	os            _os
 	syscall       _syscall
@@ -66,7 +65,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 	// Exit if the database is currently open.
 	if db.opened {
-		return DatabaseAlreadyOpenedError
+		return DatabaseOpenError
 	}
 
 	// Open data file and separate sync handler for metadata writes.
@@ -90,7 +89,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 		}
 	} else {
 		// Read the first meta page to determine the page size.
-		var buf [minPageSize]byte
+		var buf [0x1000]byte
 		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 			m := db.pageInBuffer(buf[:], 0).meta()
 			if err := m.validate(); err != nil {
@@ -202,7 +201,7 @@ func (db *DB) init() error {
 	for i := 0; i < 2; i++ {
 		p := db.pageInBuffer(buf[:], pgid(i))
 		p.id = pgid(i)
-		p.flags = p_meta
+		p.flags = metaPageFlag
 
 		// Initialize the meta page.
 		m := p.meta()
@@ -219,13 +218,13 @@ func (db *DB) init() error {
 	// Write an empty freelist at page 3.
 	p := db.pageInBuffer(buf[:], pgid(2))
 	p.id = pgid(2)
-	p.flags = p_freelist
+	p.flags = freelistPageFlag
 	p.count = 0
 
 	// Write an empty leaf page at page 4.
 	p = db.pageInBuffer(buf[:], pgid(3))
 	p.id = pgid(3)
-	p.flags = p_buckets
+	p.flags = bucketsPageFlag
 	p.count = 0
 
 	// Write the buffer to our data file.
@@ -236,7 +235,8 @@ func (db *DB) init() error {
 	return nil
 }
 
-// Close releases all resources related to the database.
+// Close releases all database resources.
+// All transactions must be closed before closing the database.
 func (db *DB) Close() {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
@@ -250,12 +250,15 @@ func (db *DB) close() {
 
 	// TODO(benbjohnson): Undo everything in Open().
 	db.freelist = nil
+	db.path = ""
 
 	db.munmap()
 }
 
 // Transaction creates a read-only transaction.
 // Multiple read-only transactions can be used concurrently.
+//
+// IMPORTANT: You must close the transaction after you are finished or else the database will not reclaim old pages.
 func (db *DB) Transaction() (*Transaction, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
@@ -282,6 +285,7 @@ func (db *DB) Transaction() (*Transaction, error) {
 
 // RWTransaction creates a read/write transaction.
 // Only one read/write transaction is allowed at a time.
+// You must call Commit() or Rollback() on the transaction to close it.
 func (db *DB) RWTransaction() (*RWTransaction, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
@@ -332,6 +336,7 @@ func (db *DB) removeTransaction(t *Transaction) {
 }
 
 // Bucket retrieves a reference to a bucket.
+// This is typically useful for checking the existence of a bucket.
 func (db *DB) Bucket(name string) (*Bucket, error) {
 	t, err := db.Transaction()
 	if err != nil {
@@ -351,7 +356,9 @@ func (db *DB) Buckets() ([]*Bucket, error) {
 	return t.Buckets(), nil
 }
 
-// CreateBucket creates a new bucket in the database.
+// CreateBucket creates a new bucket with the given name.
+// This function can return an error if the bucket already exists, if the name
+// is blank, or the bucket name is too long.
 func (db *DB) CreateBucket(name string) error {
 	t, err := db.RWTransaction()
 	if err != nil {
@@ -367,6 +374,7 @@ func (db *DB) CreateBucket(name string) error {
 }
 
 // DeleteBucket removes a bucket from the database.
+// Returns an error if the bucket does not exist.
 func (db *DB) DeleteBucket(name string) error {
 	t, err := db.RWTransaction()
 	if err != nil {
@@ -382,16 +390,18 @@ func (db *DB) DeleteBucket(name string) error {
 }
 
 // Get retrieves the value for a key in a bucket.
+// Returns an error if the key does not exist.
 func (db *DB) Get(name string, key []byte) ([]byte, error) {
 	t, err := db.Transaction()
 	if err != nil {
 		return nil, err
 	}
 	defer t.Close()
-	return t.Get(name, key), nil
+	return t.Get(name, key)
 }
 
 // Put sets the value for a key in a bucket.
+// Returns an error if the bucket is not found, if key is blank, if the key is too large, or if the value is too large.
 func (db *DB) Put(name string, key []byte, value []byte) error {
 	t, err := db.RWTransaction()
 	if err != nil {
@@ -405,6 +415,7 @@ func (db *DB) Put(name string, key []byte, value []byte) error {
 }
 
 // Delete removes a key from a bucket.
+// Returns an error if the bucket cannot be found.
 func (db *DB) Delete(name string, key []byte) error {
 	t, err := db.RWTransaction()
 	if err != nil {
@@ -418,6 +429,8 @@ func (db *DB) Delete(name string, key []byte) error {
 }
 
 // Copy writes the entire database to a writer.
+// A reader transaction is maintained during the copy so it is safe to continue
+// using the database while a copy is in progress.
 func (db *DB) Copy(w io.Writer) error {
 	if !db.opened {
 		return DatabaseNotOpenError
@@ -445,6 +458,8 @@ func (db *DB) Copy(w io.Writer) error {
 }
 
 // CopyFile copies the entire database to file at the given path.
+// A reader transaction is maintained during the copy so it is safe to continue
+// using the database while a copy is in progress.
 func (db *DB) CopyFile(path string) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -503,7 +518,7 @@ func (db *DB) allocate(count int) (*page, error) {
 // sync flushes the file descriptor to disk.
 func (db *DB) sync(force bool) error {
 	if db.opened {
-		return DatabaseAlreadyOpenedError
+		return DatabaseNotOpenError
 	}
 	if err := syscall.Fsync(int(db.file.Fd())); err != nil {
 		return err

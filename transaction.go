@@ -1,20 +1,21 @@
 package bolt
 
-const (
-	ps_modify   = 1
-	ps_rootonly = 2
-	ps_first    = 4
-	ps_last     = 8
-)
-
-type txnid uint64
-
+// Transaction represents a read-only transaction on the database.
+// It can be used for retrieving values for keys as well as creating cursors for
+// iterating over the data.
+//
+// IMPORTANT: You must close transactions when you are done with them. Pages
+// can not be reclaimed by the writer until no more transactions are using them.
+// A long running read transaction can cause the database to quickly grow.
 type Transaction struct {
 	db      *DB
 	meta    *meta
 	buckets *buckets
 	pages   map[pgid]*page
 }
+
+// txnid represents the internal transaction identifier.
+type txnid uint64
 
 // init initializes the transaction and associates it with a database.
 func (t *Transaction) init(db *DB) {
@@ -31,15 +32,18 @@ func (t *Transaction) id() txnid {
 	return t.meta.txnid
 }
 
+// Close closes the transaction and releases any pages it is using.
 func (t *Transaction) Close() {
 	t.db.removeTransaction(t)
 }
 
+// DB returns a reference to the database that created the transaction.
 func (t *Transaction) DB() *DB {
 	return t.db
 }
 
 // Bucket retrieves a bucket by name.
+// Returns nil if the bucket does not exist.
 func (t *Transaction) Bucket(name string) *Bucket {
 	b := t.buckets.get(name)
 	if b == nil {
@@ -60,21 +64,25 @@ func (t *Transaction) Buckets() []*Bucket {
 }
 
 // Cursor creates a cursor associated with a given bucket.
-func (t *Transaction) Cursor(name string) *Cursor {
+// The cursor is only valid as long as the Transaction is open.
+// Do not use a cursor after the transaction is closed.
+func (t *Transaction) Cursor(name string) (*Cursor, error) {
 	b := t.Bucket(name)
 	if b == nil {
-		return nil
+		return nil, BucketNotFoundError
 	}
-	return b.cursor()
+	return b.cursor(), nil
 }
 
 // Get retrieves the value for a key in a named bucket.
-func (t *Transaction) Get(name string, key []byte) []byte {
-	c := t.Cursor(name)
-	if c == nil {
-		return nil
+// Returns a nil value if the key does not exist.
+// Returns an error if the bucket does not exist.
+func (t *Transaction) Get(name string, key []byte) (value []byte, err error) {
+	c, err := t.Cursor(name)
+	if err != nil {
+		return nil, err
 	}
-	return c.Get(key)
+	return c.Get(key), nil
 }
 
 // page returns a reference to the page with a given id.

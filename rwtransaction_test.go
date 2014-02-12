@@ -44,7 +44,7 @@ func TestRWTransactionRecreateBucket(t *testing.T) {
 
 		// Create the same bucket again.
 		err = db.CreateBucket("widgets")
-		assert.Equal(t, err, &Error{"bucket already exists", nil})
+		assert.Equal(t, err, BucketExistsError)
 	})
 }
 
@@ -52,7 +52,7 @@ func TestRWTransactionRecreateBucket(t *testing.T) {
 func TestRWTransactionCreateBucketWithoutName(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.CreateBucket("")
-		assert.Equal(t, err, &Error{"bucket name cannot be blank", nil})
+		assert.Equal(t, err, BucketNameRequiredError)
 	})
 }
 
@@ -63,7 +63,7 @@ func TestRWTransactionCreateBucketWithLongName(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = db.CreateBucket(strings.Repeat("X", 256))
-		assert.Equal(t, err, &Error{"bucket name too long", nil})
+		assert.Equal(t, err, BucketNameTooLargeError)
 	})
 }
 
@@ -152,7 +152,9 @@ func TestRWTransactionPutMultiple(t *testing.T) {
 			// Verify all items exist.
 			txn, _ := db.Transaction()
 			for _, item := range items {
-				if !assert.Equal(t, item.Value, txn.Get("widgets", item.Key)) {
+				value, err := txn.Get("widgets", item.Key)
+				assert.NoError(t, err)
+				if !assert.Equal(t, item.Value, value) {
 					db.CopyFile("/tmp/bolt.put.multiple.db")
 					t.FailNow()
 				}
@@ -188,11 +190,15 @@ func TestRWTransactionDelete(t *testing.T) {
 				txn, _ := db.Transaction()
 				for j, exp := range items {
 					if j > i {
-						if !assert.Equal(t, exp.Value, txn.Get("widgets", exp.Key)) {
+						value, err := txn.Get("widgets", exp.Key)
+						assert.NoError(t, err)
+						if !assert.Equal(t, exp.Value, value) {
 							t.FailNow()
 						}
 					} else {
-						if !assert.Nil(t, txn.Get("widgets", exp.Key)) {
+						value, err := txn.Get("widgets", exp.Key)
+						assert.NoError(t, err)
+						if !assert.Nil(t, value) {
 							t.FailNow()
 						}
 					}

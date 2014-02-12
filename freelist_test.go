@@ -52,7 +52,7 @@ func TestFreelistRead(t *testing.T) {
 	// Create a page.
 	var buf [4096]byte
 	page := (*page)(unsafe.Pointer(&buf[0]))
-	page.flags = p_freelist
+	page.flags = freelistPageFlag
 	page.count = 2
 
 	// Insert 2 page ids.

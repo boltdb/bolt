@@ -43,7 +43,8 @@ func TestTransactionCursorEmptyBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		txn, _ := db.Transaction()
-		c := txn.Cursor("widgets")
+		c, err := txn.Cursor("widgets")
+		assert.NoError(t, err)
 		k, v := c.First()
 		assert.Nil(t, k)
 		assert.Nil(t, v)
@@ -56,7 +57,9 @@ func TestTransactionCursorMissingBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		txn, _ := db.Transaction()
-		assert.Nil(t, txn.Cursor("woojits"))
+		c, err := txn.Cursor("woojits")
+		assert.Nil(t, c)
+		assert.Equal(t, err, BucketNotFoundError)
 		txn.Close()
 	})
 }
@@ -69,7 +72,8 @@ func TestTransactionCursorLeafRoot(t *testing.T) {
 		db.Put("widgets", []byte("foo"), []byte{0})
 		db.Put("widgets", []byte("bar"), []byte{1})
 		txn, _ := db.Transaction()
-		c := txn.Cursor("widgets")
+		c, err := txn.Cursor("widgets")
+		assert.NoError(t, err)
 
 		k, v := c.First()
 		assert.Equal(t, string(k), "bar")
@@ -103,7 +107,8 @@ func TestTransactionCursorRestart(t *testing.T) {
 		db.Put("widgets", []byte("foo"), []byte{})
 
 		txn, _ := db.Transaction()
-		c := txn.Cursor("widgets")
+		c, err := txn.Cursor("widgets")
+		assert.NoError(t, err)
 
 		k, _ := c.First()
 		assert.Equal(t, string(k), "bar")
@@ -139,7 +144,8 @@ func TestTransactionCursorIterate(t *testing.T) {
 			// Iterate over all items and check consistency.
 			var index = 0
 			txn, _ := db.Transaction()
-			c := txn.Cursor("widgets")
+			c, err := txn.Cursor("widgets")
+			assert.NoError(t, err)
 			for k, v := c.First(); k != nil && index < len(items); k, v = c.Next() {
 				assert.Equal(t, k, items[index].Key)
 				assert.Equal(t, v, items[index].Value)

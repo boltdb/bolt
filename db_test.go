@@ -27,7 +27,7 @@ func TestDBReopen(t *testing.T) {
 	withDB(func(db *DB, path string) {
 		db.Open(path, 0666)
 		err := db.Open(path, 0666)
-		assert.Equal(t, err, DatabaseAlreadyOpenedError)
+		assert.Equal(t, err, DatabaseOpenError)
 	})
 }
 
