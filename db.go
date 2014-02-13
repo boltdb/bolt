@@ -15,6 +15,9 @@ const (
 
 const minPageSize = 0x1000
 
+const minMmapSize = 1 << 22 // 4MB
+const maxMmapStep = 1 << 30 // 1GB
+
 type DB struct {
 	os            _os
 	syscall       _syscall
@@ -98,7 +101,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 	}
 
 	// Memory map the data file.
-	if err := db.mmap(); err != nil {
+	if err := db.mmap(0); err != nil {
 		db.close()
 		return err
 	}
@@ -113,7 +116,19 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 }
 
 // mmap opens the underlying memory-mapped file and initializes the meta references.
-func (db *DB) mmap() error {
+// minsz is the minimum size that the new mmap can be.
+func (db *DB) mmap(minsz int) error {
+	db.mmaplock.Lock()
+	defer db.mmaplock.Unlock()
+
+	// Dereference all mmap references before unmapping.
+	if db.rwtransaction != nil {
+		db.rwtransaction.dereference()
+	}
+
+	// Unmap existing data before continuing.
+	db.munmap()
+
 	info, err := db.file.Stat()
 	if err != nil {
 		return &Error{"mmap stat error", err}
@@ -121,8 +136,12 @@ func (db *DB) mmap() error {
 		return &Error{"file size too small", err}
 	}
 
-	// TODO(benbjohnson): Determine appropriate mmap size by db size.
-	size := 2 << 30
+	// Ensure the size is at least the minimum size.
+	var size = int(info.Size())
+	if size < minsz {
+		size = minsz
+	}
+	size = db.mmapSize(minsz)
 
 	// Memory-map the data file as a byte slice.
 	if db.data, err = db.syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
@@ -142,6 +161,35 @@ func (db *DB) mmap() error {
 	}
 
 	return nil
+}
+
+// munmap unmaps the data file from memory.
+func (db *DB) munmap() {
+	if db.data != nil {
+		if err := db.syscall.Munmap(db.data); err != nil {
+			panic("unmap error: " + err.Error())
+		}
+		db.data = nil
+	}
+}
+
+// mmapSize determines the appropriate size for the mmap given the current size
+// of the database. The minimum size is 4MB and doubles until it reaches 1GB.
+func (db *DB) mmapSize(size int) int {
+	if size < minMmapSize {
+		return minMmapSize
+	} else if size < maxMmapStep {
+		size *= 2
+	} else {
+		size += maxMmapStep
+	}
+
+	// Ensure that the mmap size is a multiple of the page size.
+	if (size % db.pageSize) != 0 {
+		size = ((size / db.pageSize) + 1) * db.pageSize
+	}
+
+	return size
 }
 
 // init creates a new database file and initializes its meta pages.
@@ -196,8 +244,14 @@ func (db *DB) Close() {
 }
 
 func (db *DB) close() {
-	// TODO: Undo everything in Open().
+	// Wait for pending transactions before closing and unmapping the data.
+	// db.mmaplock.Lock()
+	// defer db.mmaplock.Unlock()
+
+	// TODO(benbjohnson): Undo everything in Open().
 	db.freelist = nil
+
+	db.munmap()
 }
 
 // Transaction creates a read-only transaction.
@@ -205,6 +259,11 @@ func (db *DB) close() {
 func (db *DB) Transaction() (*Transaction, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
+
+	// Obtain a read-only lock on the mmap. When the mmap is remapped it will
+	// obtain a write lock so all transactions must finish before it can be
+	// remapped.
+	db.mmaplock.RLock()
 
 	// Exit if the database is not open yet.
 	if !db.opened {
@@ -259,6 +318,9 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 func (db *DB) removeTransaction(t *Transaction) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
+
+	// Release the read lock on the mmap.
+	db.mmaplock.RUnlock()
 
 	// Remove the transaction.
 	for i, txn := range db.transactions {
@@ -412,7 +474,7 @@ func (db *DB) meta() *meta {
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
-func (db *DB) allocate(count int) *page {
+func (db *DB) allocate(count int) (*page, error) {
 	// Allocate a temporary buffer for the page.
 	buf := make([]byte, count*db.pageSize)
 	p := (*page)(unsafe.Pointer(&buf[0]))
@@ -420,16 +482,22 @@ func (db *DB) allocate(count int) *page {
 
 	// Use pages from the freelist if they are available.
 	if p.id = db.freelist.allocate(count); p.id != 0 {
-		return p
+		return p, nil
 	}
 
-	// TODO(benbjohnson): Resize mmap().
-
-	// If there are no free pages then allocate from the end of the file.
+	// Resize mmap() if we're at the end.
 	p.id = db.rwtransaction.meta.pgid
+	var minsz = int((p.id+pgid(count))+1) * db.pageSize
+	if minsz >= len(db.data) {
+		if err := db.mmap(minsz); err != nil {
+			return nil, &Error{"mmap allocate error", err}
+		}
+	}
+
+	// Move the page id high water mark.
 	db.rwtransaction.meta.pgid += pgid(count)
 
-	return p
+	return p, nil
 }
 
 // sync flushes the file descriptor to disk.
