@@ -6,7 +6,9 @@ import (
 )
 
 // RWTransaction represents a transaction that can read and write data.
-// Only one read/write transaction can be active for a DB at a time.
+// Only one read/write transaction can be active for a database at a time.
+// RWTransaction is composed of a read-only Transaction so it can also use
+// functions provided by Transaction.
 type RWTransaction struct {
 	Transaction
 	nodes   map[pgid]*node
@@ -25,14 +27,15 @@ func (t *RWTransaction) init(db *DB) {
 }
 
 // CreateBucket creates a new bucket.
+// Returns an error if the bucket already exists, if the bucket name is blank, or if the bucket name is too long.
 func (t *RWTransaction) CreateBucket(name string) error {
 	// Check if bucket already exists.
 	if b := t.Bucket(name); b != nil {
-		return &Error{"bucket already exists", nil}
+		return BucketExistsError
 	} else if len(name) == 0 {
-		return &Error{"bucket name cannot be blank", nil}
+		return BucketNameRequiredError
 	} else if len(name) > MaxBucketNameSize {
-		return &Error{"bucket name too long", nil}
+		return BucketNameTooLargeError
 	}
 
 	// Create a blank root leaf page.
@@ -40,7 +43,7 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	if err != nil {
 		return err
 	}
-	p.flags = p_leaf
+	p.flags = leafPageFlag
 
 	// Add bucket to buckets page.
 	t.buckets.put(name, &bucket{root: p.id})
@@ -48,28 +51,37 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	return nil
 }
 
-// DropBucket deletes a bucket.
+// DeleteBucket deletes a bucket.
+// Returns an error if the bucket cannot be found.
 func (t *RWTransaction) DeleteBucket(name string) error {
+	if b := t.Bucket(name); b == nil {
+		return BucketNotFoundError
+	}
+
 	// Remove from buckets page.
 	t.buckets.del(name)
 
 	// TODO(benbjohnson): Free all pages.
+
 	return nil
 }
 
+// Put sets the value for a key inside of the named bucket.
+// If the key exist then its previous value will be overwritten.
+// Returns an error if the bucket is not found, if the key is blank, if the key is too large, or if the value is too large.
 func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	b := t.Bucket(name)
 	if b == nil {
-		return &Error{"bucket not found", nil}
+		return BucketNotFoundError
 	}
 
 	// Validate the key and data size.
 	if len(key) == 0 {
-		return &Error{"key required", nil}
+		return KeyRequiredError
 	} else if len(key) > MaxKeySize {
-		return &Error{"key too large", nil}
-	} else if len(value) > MaxDataSize {
-		return &Error{"data too large", nil}
+		return KeyTooLargeError
+	} else if len(value) > MaxValueSize {
+		return ValueTooLargeError
 	}
 
 	// Move cursor to correct position.
@@ -82,10 +94,13 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	return nil
 }
 
+// Delete removes a key from the named bucket.
+// If the key does not exist then nothing is done and a nil error is returned.
+// Returns an error if the bucket cannot be found.
 func (t *RWTransaction) Delete(name string, key []byte) error {
 	b := t.Bucket(name)
 	if b == nil {
-		return &Error{"bucket not found", nil}
+		return BucketNotFoundError
 	}
 
 	// Move cursor to correct position.
@@ -98,7 +113,8 @@ func (t *RWTransaction) Delete(name string, key []byte) error {
 	return nil
 }
 
-// Commit writes all changes to disk.
+// Commit writes all changes to disk and updates the meta page.
+// Returns an error if a disk write error occurs.
 func (t *RWTransaction) Commit() error {
 	defer t.close()
 
@@ -131,6 +147,7 @@ func (t *RWTransaction) Commit() error {
 	return nil
 }
 
+// Rollback closes the transaction and ignores all previous updates.
 func (t *RWTransaction) Rollback() {
 	t.close()
 }

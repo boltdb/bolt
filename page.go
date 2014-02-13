@@ -16,11 +16,11 @@ const branchPageElementSize = int(unsafe.Sizeof(branchPageElement{}))
 const leafPageElementSize = int(unsafe.Sizeof(leafPageElement{}))
 
 const (
-	p_branch   = 0x01
-	p_leaf     = 0x02
-	p_meta     = 0x04
-	p_buckets  = 0x08
-	p_freelist = 0x10
+	branchPageFlag   = 0x01
+	leafPageFlag     = 0x02
+	metaPageFlag     = 0x04
+	bucketsPageFlag  = 0x08
+	freelistPageFlag = 0x10
 )
 
 type pgid uint64
@@ -41,15 +41,15 @@ type pageElementRef struct {
 
 // typ returns a human readable page type string used for debugging.
 func (p *page) typ() string {
-	if (p.flags & p_branch) != 0 {
+	if (p.flags & branchPageFlag) != 0 {
 		return "branch"
-	} else if (p.flags & p_leaf) != 0 {
+	} else if (p.flags & leafPageFlag) != 0 {
 		return "leaf"
-	} else if (p.flags & p_meta) != 0 {
+	} else if (p.flags & metaPageFlag) != 0 {
 		return "meta"
-	} else if (p.flags & p_buckets) != 0 {
+	} else if (p.flags & bucketsPageFlag) != 0 {
 		return "buckets"
-	} else if (p.flags & p_freelist) != 0 {
+	} else if (p.flags & freelistPageFlag) != 0 {
 		return "freelist"
 	}
 	return fmt.Sprintf("unknown<%02x>", p.flags)

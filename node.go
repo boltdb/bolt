@@ -28,9 +28,9 @@ func (n *node) minKeys() int {
 
 // size returns the size of the node after serialization.
 func (n *node) size() int {
-	var elementSize int = n.pageElementSize()
+	var elementSize = n.pageElementSize()
 
-	var size int = pageHeaderSize
+	var size = pageHeaderSize
 	for _, item := range n.inodes {
 		size += elementSize + len(item.key) + len(item.value)
 	}
@@ -132,7 +132,7 @@ func (n *node) del(key []byte) {
 // read initializes the node from a page.
 func (n *node) read(p *page) {
 	n.pgid = p.id
-	n.isLeaf = ((p.flags & p_leaf) != 0)
+	n.isLeaf = ((p.flags & leafPageFlag) != 0)
 	n.inodes = make(inodes, int(p.count))
 
 	for i := 0; i < int(p.count); i++ {
@@ -160,9 +160,9 @@ func (n *node) read(p *page) {
 func (n *node) write(p *page) {
 	// Initialize page.
 	if n.isLeaf {
-		p.flags |= p_leaf
+		p.flags |= leafPageFlag
 	} else {
-		p.flags |= p_branch
+		p.flags |= branchPageFlag
 	}
 	p.count = uint16(len(n.inodes))
 
@@ -344,7 +344,7 @@ func (n *node) dereference() {
 	copy(key, n.key)
 	n.key = key
 
-	for i, _ := range n.inodes {
+	for i := range n.inodes {
 		inode := &n.inodes[i]
 
 		key := make([]byte, len(inode.key))

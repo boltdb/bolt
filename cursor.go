@@ -5,14 +5,17 @@ import (
 	"sort"
 )
 
+// Cursor represents an iterator that can traverse over all key/value pairs in a bucket in sorted order.
+// Cursors can be obtained from a Transaction and are valid as long as the Transaction is open.
 type Cursor struct {
 	transaction *Transaction
 	root        pgid
 	stack       []pageElementRef
 }
 
-// First moves the cursor to the first item in the bucket and returns its key and data.
-func (c *Cursor) First() ([]byte, []byte) {
+// First moves the cursor to the first item in the bucket and returns its key and value.
+// If the bucket is empty then a nil key is returned.
+func (c *Cursor) First() (key []byte, value []byte) {
 	if len(c.stack) > 0 {
 		c.stack = c.stack[:0]
 	}
@@ -21,8 +24,9 @@ func (c *Cursor) First() ([]byte, []byte) {
 	return c.keyValue()
 }
 
-// Move the cursor to the next key/value.
-func (c *Cursor) Next() ([]byte, []byte) {
+// Next moves the cursor to the next item in the bucket and returns its key and value.
+// If the cursor is at the end of the bucket then a nil key returned.
+func (c *Cursor) Next() (key []byte, value []byte) {
 	// Attempt to move over one element until we're successful.
 	// Move up the stack as we hit the end of each page in our stack.
 	for i := len(c.stack) - 1; i >= 0; i-- {
@@ -44,8 +48,9 @@ func (c *Cursor) Next() ([]byte, []byte) {
 	return c.keyValue()
 }
 
-// Get positions the cursor at a specific key and returns the its value.
-func (c *Cursor) Get(key []byte) []byte {
+// Get moves the cursor to a given key and returns its value.
+// If the key does not exist then the cursor is left at the closest key and a nil key is returned.
+func (c *Cursor) Get(key []byte) (value []byte) {
 	// Start from root page and traverse to correct page.
 	c.stack = c.stack[:0]
 	c.search(key, c.transaction.page(c.root))
@@ -64,12 +69,12 @@ func (c *Cursor) Get(key []byte) []byte {
 	return c.element().value()
 }
 
-// first moves the cursor to the first leaf element under a page.
+// first moves the cursor to the first leaf element under the last page in the stack.
 func (c *Cursor) first() {
 	p := c.stack[len(c.stack)-1].page
 	for {
 		// Exit when we hit a leaf page. 
-		if (p.flags & p_leaf) != 0 {
+		if (p.flags & leafPageFlag) != 0 {
 			break
 		}
 
@@ -79,13 +84,14 @@ func (c *Cursor) first() {
 	}
 }
 
+// search recursively performs a binary search against a given page until it finds a given key.
 func (c *Cursor) search(key []byte, p *page) {
-	_assert((p.flags&(p_branch|p_leaf)) != 0, "invalid page type: "+p.typ())
+	_assert((p.flags&(branchPageFlag|leafPageFlag)) != 0, "invalid page type: "+p.typ())
 	e := pageElementRef{page: p}
 	c.stack = append(c.stack, e)
 
 	// If we're on a leaf page then find the specific node.
-	if (p.flags & p_leaf) != 0 {
+	if (p.flags & leafPageFlag) != 0 {
 		c.nsearch(key, p)
 		return
 	}

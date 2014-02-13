@@ -13,8 +13,8 @@ type buckets struct {
 
 // size returns the size of the page after serialization.
 func (b *buckets) size() int {
-	var size int = pageHeaderSize
-	for key, _ := range b.items {
+	var size = pageHeaderSize
+	for key := range b.items {
 		size += int(unsafe.Sizeof(bucket{})) + len(key)
 	}
 	return size
@@ -70,12 +70,12 @@ func (b *buckets) read(p *page) {
 // write writes the items onto a page.
 func (b *buckets) write(p *page) {
 	// Initialize page.
-	p.flags |= p_buckets
+	p.flags |= bucketsPageFlag
 	p.count = uint16(len(b.items))
 
 	// Sort keys.
 	var keys []string
-	for key, _ := range b.items {
+	for key := range b.items {
 		keys = append(keys, key)
 	}
 	sort.StringSlice(keys).Sort()

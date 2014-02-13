@@ -1,11 +1,16 @@
 package bolt
 
+// Bucket represents a collection of key/value pairs inside the database.
+// All keys inside the bucket are unique. The Bucket type is not typically used
+// directly. Instead the bucket name is typically passed into the Get(), Put(),
+// or Delete() functions.
 type Bucket struct {
 	*bucket
 	name        string
 	transaction *Transaction
 }
 
+// bucket represents the on-file representation of a bucket.
 type bucket struct {
 	root pgid
 }
