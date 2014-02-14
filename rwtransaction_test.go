@@ -119,7 +119,7 @@ func TestRWTransactionPutSingle(t *testing.T) {
 						panic("get error: " + err.Error())
 					}
 					if !bytes.Equal(value, v) {
-						db.CopyFile("/tmp/bolt.put.single.db")
+						db.CopyFile("/tmp/bolt.put.single.db", 0666)
 						t.Fatalf("value mismatch [run %d] (%d of %d):\nkey: %x\ngot: %x\nexp: %x", index, i, len(m), []byte(k), value, v)
 					}
 					i++
@@ -155,7 +155,7 @@ func TestRWTransactionPutMultiple(t *testing.T) {
 				value, err := txn.Get("widgets", item.Key)
 				assert.NoError(t, err)
 				if !assert.Equal(t, item.Value, value) {
-					db.CopyFile("/tmp/bolt.put.multiple.db")
+					db.CopyFile("/tmp/bolt.put.multiple.db", 0666)
 					t.FailNow()
 				}
 			}

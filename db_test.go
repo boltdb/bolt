@@ -140,6 +140,17 @@ func TestDBTransactionDatabaseNotOpenError(t *testing.T) {
 	})
 }
 
+// Ensure that a bucket that gets a non-existent key returns nil.
+func TestDBGetNonExistent(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		value, err := db.Get("widgets", []byte("foo"))
+		if assert.NoError(t, err) {
+			assert.Nil(t, value)
+		}
+	})
+}
+
 // Ensure that a bucket can write a key/value.
 func TestDBPut(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -207,17 +218,17 @@ func withDB(fn func(*DB, string)) {
 	os.Remove(path)
 	defer os.RemoveAll(path)
 
-	db := NewDB()
-	fn(db, path)
+	var db DB
+	fn(&db, path)
 }
 
 // withMockDB executes a function with a database reference and a mock filesystem.
 func withMockDB(fn func(*DB, *mockos, *mocksyscall, string)) {
 	os, syscall := &mockos{}, &mocksyscall{}
-	db := NewDB()
+	var db DB
 	db.os = os
 	db.syscall = syscall
-	fn(db, os, syscall, "/mock/db")
+	fn(&db, os, syscall, "/mock/db")
 }
 
 // withOpenDB executes a function with an already opened database.
