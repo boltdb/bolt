@@ -37,11 +37,6 @@ type DB struct {
 	mmaplock sync.RWMutex // Protects mmap access during remapping.
 }
 
-// NewDB creates a new DB instance.
-func NewDB() *DB {
-	return &DB{}
-}
-
 // Path returns the path to currently open database file.
 func (db *DB) Path() string {
 	return db.path
@@ -460,8 +455,8 @@ func (db *DB) Copy(w io.Writer) error {
 // CopyFile copies the entire database to file at the given path.
 // A reader transaction is maintained during the copy so it is safe to continue
 // using the database while a copy is in progress.
-func (db *DB) CopyFile(path string) error {
-	f, err := os.Create(path)
+func (db *DB) CopyFile(path string, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}
