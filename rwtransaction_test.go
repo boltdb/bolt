@@ -72,6 +72,32 @@ func TestRWTransactionDeleteBucket(t *testing.T) {
 	t.Skip("pending") // TODO(benbjohnson)
 }
 
+// Ensure that a bucket can return an autoincrementing sequence.
+func TestRWTransactionNextSequence(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.CreateBucket("woojits")
+
+		// Make sure sequence increments.
+		seq, err := db.NextSequence("widgets")
+		assert.NoError(t, err)
+		assert.Equal(t, seq, 1)
+		seq, err = db.NextSequence("widgets")
+		assert.NoError(t, err)
+		assert.Equal(t, seq, 2)
+
+		// Buckets should be separate.
+		seq, err = db.NextSequence("woojits")
+		assert.NoError(t, err)
+		assert.Equal(t, seq, 1)
+
+		// Missing buckets return an error.
+		seq, err = db.NextSequence("no_such_bucket")
+		assert.Equal(t, err, BucketNotFoundError)
+		assert.Equal(t, seq, 0)
+	})
+}
+
 // Ensure that an error is returned when inserting into a bucket that doesn't exist.
 func TestRWTransactionPutBucketNotFound(t *testing.T) {
 	t.Skip("pending") // TODO(benbjohnson)

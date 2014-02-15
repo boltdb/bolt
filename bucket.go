@@ -13,6 +13,7 @@ type Bucket struct {
 // bucket represents the on-file representation of a bucket.
 type bucket struct {
 	root pgid
+	sequence uint64
 }
 
 // Name returns the name of the bucket.

@@ -384,6 +384,25 @@ func (db *DB) DeleteBucket(name string) error {
 	return t.Commit()
 }
 
+// NextSequence returns an autoincrementing integer for the bucket.
+// This function can return an error if the bucket does not exist.
+func (db *DB) NextSequence(name string) (int, error) {
+	t, err := db.RWTransaction()
+	if err != nil {
+		return 0, err
+	}
+
+	seq, err := t.NextSequence(name)
+	if err != nil {
+		t.Rollback()
+		return 0, err
+	}
+	if err := t.Commit(); err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
 // Get retrieves the value for a key in a bucket.
 // Returns an error if the key does not exist.
 func (db *DB) Get(name string, key []byte) ([]byte, error) {
