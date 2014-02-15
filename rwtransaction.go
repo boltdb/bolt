@@ -66,6 +66,20 @@ func (t *RWTransaction) DeleteBucket(name string) error {
 	return nil
 }
 
+// NextSequence returns an autoincrementing integer for the bucket.
+func (t *RWTransaction) NextSequence(name string) (int, error) {
+	// Check if bucket already exists.
+	b := t.Bucket(name)
+	if b == nil {
+		return 0, BucketNotFoundError
+	}
+
+	// Increment and return the sequence.
+	b.bucket.sequence++
+
+	return int(b.bucket.sequence), nil
+}
+
 // Put sets the value for a key inside of the named bucket.
 // If the key exist then its previous value will be overwritten.
 // Returns an error if the bucket is not found, if the key is blank, if the key is too large, or if the value is too large.
