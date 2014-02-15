@@ -60,6 +60,33 @@ func ExampleDB_Delete() {
 	// The value of 'foo' is now: nil
 }
 
+func ExampleDB_Do() {
+	// Open the database.
+	var db DB
+	db.Open("/tmp/bolt/db_do.db", 0666)
+	defer db.Close()
+
+	// Execute several commands within a write transaction.
+	err := db.Do(func(t *RWTransaction) error {
+		if err := t.CreateBucket("widgets"); err != nil {
+			return err
+		}
+		if err := t.Put("widgets", []byte("foo"), []byte("bar")); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	// If our transactional block didn't return an error then our data is saved.
+	if err == nil {
+		value, _ := db.Get("widgets", []byte("foo"))
+		fmt.Printf("The value of 'foo' is: %s\n", string(value))
+	}
+
+	// Output:
+	// The value of 'foo' is: bar
+}
+
 func ExampleRWTransaction() {
 	// Open the database.
 	var db DB
