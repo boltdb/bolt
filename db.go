@@ -330,6 +330,26 @@ func (db *DB) removeTransaction(t *Transaction) {
 	}
 }
 
+// Do executes a function within the context of a RWTransaction.
+// If no error is returned from the function then the transaction is committed.
+// If an error is returned then the entire transaction is rolled back.
+// Any error that is returned from the function or returned from the commit is
+// returned from the Do() method.
+func (db *DB) Do(fn func(*RWTransaction) error) error {
+	t, err := db.RWTransaction()
+	if err != nil {
+		return err
+	}
+
+	// If an error is returned from the function then rollback and return error.
+	if err := fn(t); err != nil {
+		t.Rollback()
+		return err
+	}
+
+	return t.Commit()
+}
+
 // Bucket retrieves a reference to a bucket.
 // This is typically useful for checking the existence of a bucket.
 func (db *DB) Bucket(name string) (*Bucket, error) {
@@ -355,49 +375,29 @@ func (db *DB) Buckets() ([]*Bucket, error) {
 // This function can return an error if the bucket already exists, if the name
 // is blank, or the bucket name is too long.
 func (db *DB) CreateBucket(name string) error {
-	t, err := db.RWTransaction()
-	if err != nil {
-		return err
-	}
-
-	if err := t.CreateBucket(name); err != nil {
-		t.Rollback()
-		return err
-	}
-
-	return t.Commit()
+	return db.Do(func(t *RWTransaction) error {
+		return t.CreateBucket(name)
+	})
 }
 
 // DeleteBucket removes a bucket from the database.
 // Returns an error if the bucket does not exist.
 func (db *DB) DeleteBucket(name string) error {
-	t, err := db.RWTransaction()
-	if err != nil {
-		return err
-	}
-
-	if err := t.DeleteBucket(name); err != nil {
-		t.Rollback()
-		return err
-	}
-
-	return t.Commit()
+	return db.Do(func(t *RWTransaction) error {
+		return t.DeleteBucket(name)
+	})
 }
 
 // NextSequence returns an autoincrementing integer for the bucket.
 // This function can return an error if the bucket does not exist.
 func (db *DB) NextSequence(name string) (int, error) {
-	t, err := db.RWTransaction()
+	var seq int 
+	err := db.Do(func(t *RWTransaction) error {
+		var err error
+		seq, err = t.NextSequence(name)
+		return err
+	})
 	if err != nil {
-		return 0, err
-	}
-
-	seq, err := t.NextSequence(name)
-	if err != nil {
-		t.Rollback()
-		return 0, err
-	}
-	if err := t.Commit(); err != nil {
 		return 0, err
 	}
 	return seq, nil
@@ -417,29 +417,17 @@ func (db *DB) Get(name string, key []byte) ([]byte, error) {
 // Put sets the value for a key in a bucket.
 // Returns an error if the bucket is not found, if key is blank, if the key is too large, or if the value is too large.
 func (db *DB) Put(name string, key []byte, value []byte) error {
-	t, err := db.RWTransaction()
-	if err != nil {
-		return err
-	}
-	if err := t.Put(name, key, value); err != nil {
-		t.Rollback()
-		return err
-	}
-	return t.Commit()
+	return db.Do(func(t *RWTransaction) error {
+		return t.Put(name, key, value)
+	})
 }
 
 // Delete removes a key from a bucket.
 // Returns an error if the bucket cannot be found.
 func (db *DB) Delete(name string, key []byte) error {
-	t, err := db.RWTransaction()
-	if err != nil {
-		return err
-	}
-	if err := t.Delete(name, key); err != nil {
-		t.Rollback()
-		return err
-	}
-	return t.Commit()
+	return db.Do(func(t *RWTransaction) error {
+		return t.Delete(name, key)
+	})
 }
 
 // Copy writes the entire database to a writer.

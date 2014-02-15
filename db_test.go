@@ -178,6 +178,24 @@ func TestDBDelete(t *testing.T) {
 	})
 }
 
+// Ensure a database can provide a transactional block.
+func TestDBTransactionBlock(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		err := db.Do(func(txn *RWTransaction) error {
+			txn.CreateBucket("widgets")
+			txn.Put("widgets", []byte("foo"), []byte("bar"))
+			txn.Put("widgets", []byte("baz"), []byte("bat"))
+			txn.Delete("widgets", []byte("foo"))
+			return nil
+		})
+		assert.NoError(t, err)
+		value, _ := db.Get("widgets", []byte("foo"))
+		assert.Nil(t, value)
+		value, _ = db.Get("widgets", []byte("baz"))
+		assert.Equal(t, value, []byte("bat"))
+	})
+}
+
 // Ensure that the database can be copied to a writer.
 func TestDBCopy(t *testing.T) {
 	t.Skip("pending") // TODO(benbjohnson)
