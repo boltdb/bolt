@@ -3,7 +3,7 @@ BENCH=.
 COVERPROFILE=/tmp/c.out
 
 bench: benchpreq
-	go test -v -test.bench=$(BENCH) ./.bench
+	go test -v -test.bench=$(BENCH)
 
 cover: fmt
 	go test -coverprofile=$(COVERPROFILE) -test.run=$(TEST) .

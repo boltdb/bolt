@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -40,6 +41,16 @@ type DB struct {
 // Path returns the path to currently open database file.
 func (db *DB) Path() string {
 	return db.path
+}
+
+// GoString returns the Go string representation of the database.
+func (db *DB) GoString() string {
+	return fmt.Sprintf("bolt.DB{path:%q}", db.path)
+}
+
+// String returns the string representation of the database.
+func (db *DB) String() string {
+	return fmt.Sprintf("DB<%q>", db.path)
 }
 
 // Open opens a data file at the given path and initializes the database.
