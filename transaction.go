@@ -20,9 +20,13 @@ type txnid uint64
 // init initializes the transaction and associates it with a database.
 func (t *Transaction) init(db *DB) {
 	t.db = db
-	t.meta = db.meta()
 	t.pages = nil
 
+	// Copy the meta page since it can be changed by the writer.
+	t.meta = &meta{}
+	db.meta().copy(t.meta)
+
+	// Read in the buckets page.
 	t.buckets = &buckets{}
 	t.buckets.read(t.page(t.meta.buckets))
 }

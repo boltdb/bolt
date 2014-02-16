@@ -20,9 +20,7 @@ func (t *RWTransaction) init(db *DB) {
 	t.Transaction.init(db)
 	t.pages = make(map[pgid]*page)
 
-	// Copy the meta and increase the transaction id. 
-	t.meta = &meta{}
-	db.meta().copy(t.meta)
+	// Increment the transaction id. 
 	t.meta.txnid += txnid(1)
 }
 

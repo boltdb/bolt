@@ -64,7 +64,7 @@ func (b *buckets) read(p *page) {
 	// Associate keys and items.
 	for index, key := range keys {
 		b.items[key] = &bucket{
-			root: items[index].root,
+			root:     items[index].root,
 			sequence: items[index].sequence,
 		}
 	}

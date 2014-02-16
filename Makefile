@@ -14,6 +14,11 @@ fmt:
 	@go fmt ./...
 
 test: fmt
+	@echo "=== TESTS ==="
 	@go test -v -cover -test.run=$(TEST)
+	@echo ""
+	@echo ""
+	@echo "=== RACE DETECTOR ==="
+	@go test -v -race -test.run=Parallel
 
 .PHONY: bench cover fmt test

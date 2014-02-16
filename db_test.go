@@ -259,3 +259,10 @@ func withOpenDB(fn func(*DB, string)) {
 		fn(db, path)
 	})
 }
+
+func trunc(b []byte, length int) []byte {
+	if length < len(b) {
+		return b[:length]
+	}
+	return b
+}
