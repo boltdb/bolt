@@ -359,6 +359,17 @@ func (db *DB) Do(fn func(*RWTransaction) error) error {
 	return t.Commit()
 }
 
+// ForEach executes a function for each key/value pair in a bucket.
+// An error is returned if the bucket cannot be found.
+func (db *DB) ForEach(name string, fn func(k, v []byte) error) error {
+	t, err := db.Transaction()
+	if err != nil {
+		return err
+	}
+	defer t.Close()
+	return t.ForEach(name, fn)
+}
+
 // Bucket retrieves a reference to a bucket.
 // This is typically useful for checking the existence of a bucket.
 func (db *DB) Bucket(name string) (*Bucket, error) {

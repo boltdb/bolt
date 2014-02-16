@@ -87,6 +87,30 @@ func ExampleDB_Do() {
 	// The value of 'foo' is: bar
 }
 
+func ExampleDB_ForEach() {
+	// Open the database.
+	var db DB
+	db.Open("/tmp/bolt/db_foreach.db", 0666)
+	defer db.Close()
+
+	// Insert data into a bucket.
+	db.CreateBucket("animals")
+	db.Put("animals", []byte("dog"), []byte("fun"))
+	db.Put("animals", []byte("cat"), []byte("lame"))
+	db.Put("animals", []byte("liger"), []byte("awesome"))
+
+	// Iterate over items in sorted key order.
+	db.ForEach("animals", func(k, v []byte) error {
+		fmt.Printf("A %s is %s.\n", string(k), string(v))
+		return nil
+	})
+
+	// Output:
+	// A cat is lame.
+	// A dog is fun.
+	// A liger is awesome.
+}
+
 func ExampleRWTransaction() {
 	// Open the database.
 	var db DB
