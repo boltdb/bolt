@@ -87,6 +87,28 @@ func ExampleDB_Do() {
 	// The value of 'foo' is: bar
 }
 
+func ExampleDB_With() {
+	// Open the database.
+	var db DB
+	db.Open("/tmp/bolt/db_foreach.db", 0666)
+	defer db.Close()
+
+	// Insert data into a bucket.
+	db.CreateBucket("people")
+	db.Put("people", []byte("john"), []byte("doe"))
+	db.Put("people", []byte("susy"), []byte("que"))
+
+	// Access data from within a read-only transactional block.
+	db.With(func(t *Transaction) error {
+		v, _ := t.Get("people", []byte("john"))
+		fmt.Printf("John's last name is %s.\n", string(v))
+		return nil
+	})
+
+	// Output:
+	// John's last name is doe.
+}
+
 func ExampleDB_ForEach() {
 	// Open the database.
 	var db DB

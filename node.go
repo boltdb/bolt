@@ -118,7 +118,7 @@ func (n *node) del(key []byte) {
 	index := sort.Search(len(n.inodes), func(i int) bool { return bytes.Compare(n.inodes[i].key, key) != -1 })
 
 	// Exit if the key isn't found.
-	if !bytes.Equal(n.inodes[index].key, key) {
+	if index >= len(n.inodes) || !bytes.Equal(n.inodes[index].key, key) {
 		return
 	}
 

@@ -359,15 +359,25 @@ func (db *DB) Do(fn func(*RWTransaction) error) error {
 	return t.Commit()
 }
 
-// ForEach executes a function for each key/value pair in a bucket.
-// An error is returned if the bucket cannot be found.
-func (db *DB) ForEach(name string, fn func(k, v []byte) error) error {
+// With executes a function within the context of a Transaction.
+// Any error that is returned from the function is returned from the With() method.
+func (db *DB) With(fn func(*Transaction) error) error {
 	t, err := db.Transaction()
 	if err != nil {
 		return err
 	}
 	defer t.Close()
-	return t.ForEach(name, fn)
+
+	// If an error is returned from the function then pass it through.
+	return fn(t)
+}
+
+// ForEach executes a function for each key/value pair in a bucket.
+// An error is returned if the bucket cannot be found.
+func (db *DB) ForEach(name string, fn func(k, v []byte) error) error {
+	return db.With(func(t *Transaction) error {
+		return t.ForEach(name, fn)
+	})
 }
 
 // Bucket retrieves a reference to a bucket.
