@@ -239,6 +239,8 @@ func (db *DB) Close() {
 }
 
 func (db *DB) close() {
+	db.opened = false
+	
 	// TODO(benbjohnson): Undo everything in Open().
 	db.freelist = nil
 	db.path = ""
