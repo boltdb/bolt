@@ -47,7 +47,10 @@ func TestParallelTransactions(t *testing.T) {
 						local := current
 						txn, err := db.Transaction()
 						mutex.RUnlock()
-						if !assert.NoError(t, err) {
+						if err == DatabaseNotOpenError {
+							wg.Done()
+							return
+						} else if !assert.NoError(t, err) {
 							t.FailNow()
 						}
 

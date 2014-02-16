@@ -63,8 +63,12 @@ func (t *Transaction) Bucket(name string) *Bucket {
 
 // Buckets retrieves a list of all buckets.
 func (t *Transaction) Buckets() []*Bucket {
-	warn("[pending] Transaction.Buckets()") // TODO
-	return nil
+	buckets := make([]*Bucket, 0, len(t.buckets.items))
+	for name, b := range t.buckets.items {
+		bucket := &Bucket{bucket: b, transaction: t, name: name}
+		buckets = append(buckets, bucket)
+	}
+	return buckets
 }
 
 // Cursor creates a cursor associated with a given bucket.

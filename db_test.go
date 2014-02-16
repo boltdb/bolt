@@ -178,6 +178,14 @@ func TestDBDelete(t *testing.T) {
 	})
 }
 
+// Ensure that a delete on a missing bucket returns an error.
+func TestDBDeleteFromMissingBucket(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		err := db.Delete("widgets", []byte("foo"))
+		assert.Equal(t, err, BucketNotFoundError)
+	})
+}
+
 // Ensure a database can provide a transactional block.
 func TestDBTransactionBlock(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -196,19 +204,62 @@ func TestDBTransactionBlock(t *testing.T) {
 	})
 }
 
-// Ensure that the database can be copied to a writer.
-func TestDBCopy(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
+// Ensure a closed database returns an error while running a transaction block
+func TestDBTransactionBlockWhileClosed(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		err := db.Do(func(txn *RWTransaction) error {
+			txn.CreateBucket("widgets")
+			return nil
+		})
+		assert.Equal(t, err, DatabaseNotOpenError)
+	})
+}
+
+// Ensure a closed database returns an error when finding a bucket.
+func TestDBBucketWhileClosed(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		b, err := db.Bucket("widgets")
+		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Nil(t, b)
+	})
+}
+
+// Ensure a closed database returns an error when finding all buckets.
+func TestDBBucketsWhileClosed(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		b, err := db.Buckets()
+		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Nil(t, b)
+	})
+}
+
+// Ensure a closed database returns an error when getting a key.
+func TestDBGetWhileClosed(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		value, err := db.Get("widgets", []byte("foo"))
+		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Nil(t, value)
+	})
 }
 
 // Ensure that the database can be copied to a file path.
 func TestDBCopyFile(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
-}
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Put("widgets", []byte("foo"), []byte("bar"))
+		db.Put("widgets", []byte("baz"), []byte("bat"))
+		assert.NoError(t, os.RemoveAll("/tmp/bolt.copyfile.db"))
+		assert.NoError(t, db.CopyFile("/tmp/bolt.copyfile.db", 0666))
 
-// Ensure that the database can sync to the file system.
-func TestDBSync(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
+		var db2 DB
+		assert.NoError(t, db2.Open("/tmp/bolt.copyfile.db", 0666))
+		defer db2.Close()
+
+		value, _ := db2.Get("widgets", []byte("foo"))
+		assert.Equal(t, value, []byte("bar"))
+		value, _ = db2.Get("widgets", []byte("baz"))
+		assert.Equal(t, value, []byte("bat"))
+	})
 }
 
 // Ensure that an error is returned when a database write fails.

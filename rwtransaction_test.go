@@ -21,6 +21,15 @@ func TestRWTransaction(t *testing.T) {
 	})
 }
 
+// Ensure that opening a RWTransaction while the DB is closed returns an error.
+func TestRWTransactionOpenWithClosedDB(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		txn, err := db.RWTransaction()
+		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Nil(t, txn)
+	})
+}
+
 // Ensure that a bucket can be created and retrieved.
 func TestRWTransactionCreateBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -69,7 +78,23 @@ func TestRWTransactionCreateBucketWithLongName(t *testing.T) {
 
 // Ensure that a bucket can be deleted.
 func TestRWTransactionDeleteBucket(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
+	withOpenDB(func(db *DB, path string) {
+		// Create a bucket and add a value.
+		db.CreateBucket("widgets")
+		db.Put("widgets", []byte("foo"), []byte("bar"))
+
+		// Delete the bucket and make sure we can't get the value.
+		assert.NoError(t, db.DeleteBucket("widgets"))
+		value, err := db.Get("widgets", []byte("foo"))
+		assert.Equal(t, err, BucketNotFoundError)
+		assert.Nil(t, value)
+
+		// Create the bucket again and make sure there's not a phantom value.
+		assert.NoError(t, db.CreateBucket("widgets"))
+		value, err = db.Get("widgets", []byte("foo"))
+		assert.NoError(t, err)
+		assert.Nil(t, value)
+	})
 }
 
 // Ensure that a bucket can return an autoincrementing sequence.
@@ -100,27 +125,38 @@ func TestRWTransactionNextSequence(t *testing.T) {
 
 // Ensure that an error is returned when inserting into a bucket that doesn't exist.
 func TestRWTransactionPutBucketNotFound(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
+	withOpenDB(func(db *DB, path string) {
+		err := db.Put("widgets", []byte("foo"), []byte("bar"))
+		assert.Equal(t, err, BucketNotFoundError)
+	})
 }
 
 // Ensure that an error is returned when inserting with an empty key.
 func TestRWTransactionPutEmptyKey(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		err := db.Put("widgets", []byte(""), []byte("bar"))
+		assert.Equal(t, err, KeyRequiredError)
+		err = db.Put("widgets", nil, []byte("bar"))
+		assert.Equal(t, err, KeyRequiredError)
+	})
 }
 
 // Ensure that an error is returned when inserting with a key that's too large.
 func TestRWTransactionPutKeyTooLarge(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
-}
-
-// Ensure that an error is returned when inserting with data that's too large.
-func TestRWTransactionPutDataTooLarge(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		err := db.Put("widgets", make([]byte, 32769), []byte("bar"))
+		assert.Equal(t, err, KeyTooLargeError)
+	})
 }
 
 // Ensure that an error is returned when deleting from a bucket that doesn't exist.
 func TestRWTransactionDeleteBucketNotFound(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
+	withOpenDB(func(db *DB, path string) {
+		err := db.DeleteBucket("widgets")
+		assert.Equal(t, err, BucketNotFoundError)
+	})
 }
 
 // Ensure that a bucket can write random keys and values across multiple txns.

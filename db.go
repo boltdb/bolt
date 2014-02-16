@@ -240,7 +240,7 @@ func (db *DB) Close() {
 
 func (db *DB) close() {
 	db.opened = false
-	
+
 	// TODO(benbjohnson): Undo everything in Open().
 	db.freelist = nil
 	db.path = ""
@@ -432,10 +432,6 @@ func (db *DB) Delete(name string, key []byte) error {
 // A reader transaction is maintained during the copy so it is safe to continue
 // using the database while a copy is in progress.
 func (db *DB) Copy(w io.Writer) error {
-	if !db.opened {
-		return DatabaseNotOpenError
-	}
-
 	// Maintain a reader transaction so pages don't get reclaimed.
 	t, err := db.Transaction()
 	if err != nil {
@@ -513,15 +509,4 @@ func (db *DB) allocate(count int) (*page, error) {
 	db.rwtransaction.meta.pgid += pgid(count)
 
 	return p, nil
-}
-
-// sync flushes the file descriptor to disk.
-func (db *DB) sync(force bool) error {
-	if db.opened {
-		return DatabaseNotOpenError
-	}
-	if err := syscall.Fsync(int(db.file.Fd())); err != nil {
-		return err
-	}
-	return nil
 }
