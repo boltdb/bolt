@@ -93,6 +93,25 @@ func (t *Transaction) Get(name string, key []byte) (value []byte, err error) {
 	return c.Get(key), nil
 }
 
+// ForEach executes a function for each key/value pair in a bucket.
+// An error is returned if the bucket cannot be found.
+func (t *Transaction) ForEach(name string, fn func(k, v []byte) error) error {
+	// Open a cursor on the bucket.
+	c, err := t.Cursor(name)
+	if err != nil {
+		return err
+	}
+
+	// Iterate over each key/value pair in the bucket.
+	for k, v := c.First(); k != nil; k, v = c.Next() {
+		if err := fn(k, v); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // page returns a reference to the page with a given id.
 // If page has been written to then a temporary bufferred page is returned.
 func (t *Transaction) page(id pgid) *page {

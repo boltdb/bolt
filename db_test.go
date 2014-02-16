@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"bytes"
 	"io"
 	"io/ioutil"
 	"os"
@@ -211,6 +212,72 @@ func TestDBTransactionBlockWhileClosed(t *testing.T) {
 			txn.CreateBucket("widgets")
 			return nil
 		})
+		assert.Equal(t, err, ErrDatabaseNotOpen)
+	})
+}
+
+// Ensure a database can loop over all key/value pairs in a bucket.
+func TestDBForEach(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Put("widgets", []byte("foo"), []byte("0000"))
+		db.Put("widgets", []byte("baz"), []byte("0001"))
+		db.Put("widgets", []byte("bar"), []byte("0002"))
+
+		var index int
+		err := db.ForEach("widgets", func(k, v []byte) error {
+			switch index {
+			case 0:
+				assert.Equal(t, k, []byte("bar"))
+				assert.Equal(t, v, []byte("0002"))
+			case 1:
+				assert.Equal(t, k, []byte("baz"))
+				assert.Equal(t, v, []byte("0001"))
+			case 2:
+				assert.Equal(t, k, []byte("foo"))
+				assert.Equal(t, v, []byte("0000"))
+			}
+			index++
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, index, 3)
+	})
+}
+
+// Ensure a database can stop iteration early.
+func TestDBForEachShortCircuit(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Put("widgets", []byte("bar"), []byte("0000"))
+		db.Put("widgets", []byte("baz"), []byte("0000"))
+		db.Put("widgets", []byte("foo"), []byte("0000"))
+
+		var index int
+		err := db.ForEach("widgets", func(k, v []byte) error {
+			index++
+			if bytes.Equal(k, []byte("baz")) {
+				return &Error{"marker", nil}
+			}
+			return nil
+		})
+		assert.Equal(t, err, &Error{"marker", nil})
+		assert.Equal(t, index, 2)
+	})
+}
+
+// Ensure a database returns an error when trying to attempt a for each on a missing bucket.
+func TestDBForEachBucketNotFound(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		err := db.ForEach("widgets", func(k, v []byte) error { return nil })
+		assert.Equal(t, err, ErrBucketNotFound)
+	})
+}
+
+// Ensure a closed database returns an error when executing a for each.
+func TestDBForEachWhileClosed(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		err := db.ForEach("widgets", func(k, v []byte) error { return nil })
 		assert.Equal(t, err, ErrDatabaseNotOpen)
 	})
 }
