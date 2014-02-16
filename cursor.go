@@ -154,9 +154,7 @@ func (c *Cursor) keyValue() ([]byte, []byte) {
 
 // node returns the node that the cursor is currently positioned on.
 func (c *Cursor) node(t *RWTransaction) *node {
-	if len(c.stack) == 0 {
-		return nil
-	}
+	_assert(len(c.stack) > 0, "accessing a node with a zero-length cursor stack")
 
 	// Start from root and traverse down the hierarchy.
 	n := t.node(c.stack[0].page.id, nil)

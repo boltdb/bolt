@@ -12,7 +12,17 @@ import (
 
 // Ensure that the database can retrieve a list of buckets.
 func TestTransactionBuckets(t *testing.T) {
-	t.Skip("pending") // TODO(benbjohnson)
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("foo")
+		db.CreateBucket("bar")
+		db.CreateBucket("baz")
+		buckets, err := db.Buckets()
+		if assert.NoError(t, err) && assert.Equal(t, len(buckets), 3) {
+			assert.Equal(t, buckets[0].Name(), "bar")
+			assert.Equal(t, buckets[1].Name(), "baz")
+			assert.Equal(t, buckets[2].Name(), "foo")
+		}
+	})
 }
 
 // Ensure that a Transaction can retrieve a bucket.
