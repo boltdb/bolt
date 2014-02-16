@@ -27,7 +27,7 @@ func TestDBReopen(t *testing.T) {
 	withDB(func(db *DB, path string) {
 		db.Open(path, 0666)
 		err := db.Open(path, 0666)
-		assert.Equal(t, err, DatabaseOpenError)
+		assert.Equal(t, err, ErrDatabaseOpen)
 	})
 }
 
@@ -127,16 +127,16 @@ func TestDBCorruptMeta0(t *testing.T) {
 
 		// Open the database.
 		err := db.Open(path, 0666)
-		assert.Equal(t, err, &Error{"meta error", InvalidError})
+		assert.Equal(t, err, &Error{"meta error", ErrInvalid})
 	})
 }
 
 // Ensure that a database cannot open a transaction when it's not open.
-func TestDBTransactionDatabaseNotOpenError(t *testing.T) {
+func TestDBTransactionErrDatabaseNotOpen(t *testing.T) {
 	withDB(func(db *DB, path string) {
 		txn, err := db.Transaction()
 		assert.Nil(t, txn)
-		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Equal(t, err, ErrDatabaseNotOpen)
 	})
 }
 
@@ -182,7 +182,7 @@ func TestDBDelete(t *testing.T) {
 func TestDBDeleteFromMissingBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.Delete("widgets", []byte("foo"))
-		assert.Equal(t, err, BucketNotFoundError)
+		assert.Equal(t, err, ErrBucketNotFound)
 	})
 }
 
@@ -211,7 +211,7 @@ func TestDBTransactionBlockWhileClosed(t *testing.T) {
 			txn.CreateBucket("widgets")
 			return nil
 		})
-		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Equal(t, err, ErrDatabaseNotOpen)
 	})
 }
 
@@ -219,7 +219,7 @@ func TestDBTransactionBlockWhileClosed(t *testing.T) {
 func TestDBBucketWhileClosed(t *testing.T) {
 	withDB(func(db *DB, path string) {
 		b, err := db.Bucket("widgets")
-		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Equal(t, err, ErrDatabaseNotOpen)
 		assert.Nil(t, b)
 	})
 }
@@ -228,7 +228,7 @@ func TestDBBucketWhileClosed(t *testing.T) {
 func TestDBBucketsWhileClosed(t *testing.T) {
 	withDB(func(db *DB, path string) {
 		b, err := db.Buckets()
-		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Equal(t, err, ErrDatabaseNotOpen)
 		assert.Nil(t, b)
 	})
 }
@@ -237,7 +237,7 @@ func TestDBBucketsWhileClosed(t *testing.T) {
 func TestDBGetWhileClosed(t *testing.T) {
 	withDB(func(db *DB, path string) {
 		value, err := db.Get("widgets", []byte("foo"))
-		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Equal(t, err, ErrDatabaseNotOpen)
 		assert.Nil(t, value)
 	})
 }

@@ -69,7 +69,7 @@ func TestTransactionCursorMissingBucket(t *testing.T) {
 		txn, _ := db.Transaction()
 		c, err := txn.Cursor("woojits")
 		assert.Nil(t, c)
-		assert.Equal(t, err, BucketNotFoundError)
+		assert.Equal(t, err, ErrBucketNotFound)
 		txn.Close()
 	})
 }

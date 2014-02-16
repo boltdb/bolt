@@ -29,11 +29,11 @@ func (t *RWTransaction) init(db *DB) {
 func (t *RWTransaction) CreateBucket(name string) error {
 	// Check if bucket already exists.
 	if b := t.Bucket(name); b != nil {
-		return BucketExistsError
+		return ErrBucketExists
 	} else if len(name) == 0 {
-		return BucketNameRequiredError
+		return ErrBucketNameRequired
 	} else if len(name) > MaxBucketNameSize {
-		return BucketNameTooLargeError
+		return ErrBucketNameTooLarge
 	}
 
 	// Create a blank root leaf page.
@@ -53,7 +53,7 @@ func (t *RWTransaction) CreateBucket(name string) error {
 // Returns an error if the bucket cannot be found.
 func (t *RWTransaction) DeleteBucket(name string) error {
 	if b := t.Bucket(name); b == nil {
-		return BucketNotFoundError
+		return ErrBucketNotFound
 	}
 
 	// Remove from buckets page.
@@ -69,7 +69,7 @@ func (t *RWTransaction) NextSequence(name string) (int, error) {
 	// Check if bucket already exists.
 	b := t.Bucket(name)
 	if b == nil {
-		return 0, BucketNotFoundError
+		return 0, ErrBucketNotFound
 	}
 
 	// Increment and return the sequence.
@@ -84,16 +84,16 @@ func (t *RWTransaction) NextSequence(name string) (int, error) {
 func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 	b := t.Bucket(name)
 	if b == nil {
-		return BucketNotFoundError
+		return ErrBucketNotFound
 	}
 
 	// Validate the key and data size.
 	if len(key) == 0 {
-		return KeyRequiredError
+		return ErrKeyRequired
 	} else if len(key) > MaxKeySize {
-		return KeyTooLargeError
+		return ErrKeyTooLarge
 	} else if len(value) > MaxValueSize {
-		return ValueTooLargeError
+		return ErrValueTooLarge
 	}
 
 	// Move cursor to correct position.
@@ -112,7 +112,7 @@ func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
 func (t *RWTransaction) Delete(name string, key []byte) error {
 	b := t.Bucket(name)
 	if b == nil {
-		return BucketNotFoundError
+		return ErrBucketNotFound
 	}
 
 	// Move cursor to correct position.

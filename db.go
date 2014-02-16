@@ -17,7 +17,7 @@ const maxMmapStep = 1 << 30 // 1GB
 
 // DB represents a collection of buckets persisted to a file on disk.
 // All data access is performed through transactions which can be obtained through the DB.
-// All the functions on DB will return a DatabaseNotOpenError if accessed before Open() is called.
+// All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
 type DB struct {
 	os            _os
 	syscall       _syscall
@@ -71,7 +71,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 	// Exit if the database is currently open.
 	if db.opened {
-		return DatabaseOpenError
+		return ErrDatabaseOpen
 	}
 
 	// Open data file and separate sync handler for metadata writes.
@@ -274,7 +274,7 @@ func (db *DB) Transaction() (*Transaction, error) {
 
 	// Exit if the database is not open yet.
 	if !db.opened {
-		return nil, DatabaseNotOpenError
+		return nil, ErrDatabaseNotOpen
 	}
 
 	// Create a transaction associated with the database.
@@ -300,7 +300,7 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 	// Exit if the database is not open yet.
 	if !db.opened {
 		db.rwlock.Unlock()
-		return nil, DatabaseNotOpenError
+		return nil, ErrDatabaseNotOpen
 	}
 
 	// Create a transaction associated with the database.

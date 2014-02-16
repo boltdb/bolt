@@ -25,7 +25,7 @@ func TestRWTransaction(t *testing.T) {
 func TestRWTransactionOpenWithClosedDB(t *testing.T) {
 	withDB(func(db *DB, path string) {
 		txn, err := db.RWTransaction()
-		assert.Equal(t, err, DatabaseNotOpenError)
+		assert.Equal(t, err, ErrDatabaseNotOpen)
 		assert.Nil(t, txn)
 	})
 }
@@ -53,7 +53,7 @@ func TestRWTransactionRecreateBucket(t *testing.T) {
 
 		// Create the same bucket again.
 		err = db.CreateBucket("widgets")
-		assert.Equal(t, err, BucketExistsError)
+		assert.Equal(t, err, ErrBucketExists)
 	})
 }
 
@@ -61,7 +61,7 @@ func TestRWTransactionRecreateBucket(t *testing.T) {
 func TestRWTransactionCreateBucketWithoutName(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.CreateBucket("")
-		assert.Equal(t, err, BucketNameRequiredError)
+		assert.Equal(t, err, ErrBucketNameRequired)
 	})
 }
 
@@ -72,7 +72,7 @@ func TestRWTransactionCreateBucketWithLongName(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = db.CreateBucket(strings.Repeat("X", 256))
-		assert.Equal(t, err, BucketNameTooLargeError)
+		assert.Equal(t, err, ErrBucketNameTooLarge)
 	})
 }
 
@@ -86,7 +86,7 @@ func TestRWTransactionDeleteBucket(t *testing.T) {
 		// Delete the bucket and make sure we can't get the value.
 		assert.NoError(t, db.DeleteBucket("widgets"))
 		value, err := db.Get("widgets", []byte("foo"))
-		assert.Equal(t, err, BucketNotFoundError)
+		assert.Equal(t, err, ErrBucketNotFound)
 		assert.Nil(t, value)
 
 		// Create the bucket again and make sure there's not a phantom value.
@@ -118,7 +118,7 @@ func TestRWTransactionNextSequence(t *testing.T) {
 
 		// Missing buckets return an error.
 		seq, err = db.NextSequence("no_such_bucket")
-		assert.Equal(t, err, BucketNotFoundError)
+		assert.Equal(t, err, ErrBucketNotFound)
 		assert.Equal(t, seq, 0)
 	})
 }
@@ -127,7 +127,7 @@ func TestRWTransactionNextSequence(t *testing.T) {
 func TestRWTransactionPutBucketNotFound(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.Put("widgets", []byte("foo"), []byte("bar"))
-		assert.Equal(t, err, BucketNotFoundError)
+		assert.Equal(t, err, ErrBucketNotFound)
 	})
 }
 
@@ -136,9 +136,9 @@ func TestRWTransactionPutEmptyKey(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		err := db.Put("widgets", []byte(""), []byte("bar"))
-		assert.Equal(t, err, KeyRequiredError)
+		assert.Equal(t, err, ErrKeyRequired)
 		err = db.Put("widgets", nil, []byte("bar"))
-		assert.Equal(t, err, KeyRequiredError)
+		assert.Equal(t, err, ErrKeyRequired)
 	})
 }
 
@@ -147,7 +147,7 @@ func TestRWTransactionPutKeyTooLarge(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		err := db.Put("widgets", make([]byte, 32769), []byte("bar"))
-		assert.Equal(t, err, KeyTooLargeError)
+		assert.Equal(t, err, ErrKeyTooLarge)
 	})
 }
 
@@ -155,7 +155,7 @@ func TestRWTransactionPutKeyTooLarge(t *testing.T) {
 func TestRWTransactionDeleteBucketNotFound(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.DeleteBucket("widgets")
-		assert.Equal(t, err, BucketNotFoundError)
+		assert.Equal(t, err, ErrBucketNotFound)
 	})
 }
 

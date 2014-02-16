@@ -77,7 +77,7 @@ func (t *Transaction) Buckets() []*Bucket {
 func (t *Transaction) Cursor(name string) (*Cursor, error) {
 	b := t.Bucket(name)
 	if b == nil {
-		return nil, BucketNotFoundError
+		return nil, ErrBucketNotFound
 	}
 	return b.cursor(), nil
 }
