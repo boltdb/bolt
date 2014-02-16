@@ -389,6 +389,14 @@ func (db *DB) CreateBucket(name string) error {
 	})
 }
 
+// CreateBucketIfNotExists creates a new bucket with the given name if it doesn't already exist.
+// This function can return an error if the name is blank, or the bucket name is too long.
+func (db *DB) CreateBucketIfNotExists(name string) error {
+	return db.Do(func(t *RWTransaction) error {
+		return t.CreateBucketIfNotExists(name)
+	})
+}
+
 // DeleteBucket removes a bucket from the database.
 // Returns an error if the bucket does not exist.
 func (db *DB) DeleteBucket(name string) error {

@@ -44,6 +44,19 @@ func TestRWTransactionCreateBucket(t *testing.T) {
 	})
 }
 
+// Ensure that a bucket can be created if it doesn't already exist.
+func TestRWTransactionCreateBucketIfNotExists(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		assert.NoError(t, db.CreateBucketIfNotExists("widgets"))
+		assert.NoError(t, db.CreateBucketIfNotExists("widgets"))
+
+		// Read the bucket through a separate transaction.
+		b, err := db.Bucket("widgets")
+		assert.NotNil(t, b)
+		assert.NoError(t, err)
+	})
+}
+
 // Ensure that a bucket cannot be created twice.
 func TestRWTransactionRecreateBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {

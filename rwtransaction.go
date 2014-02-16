@@ -49,6 +49,16 @@ func (t *RWTransaction) CreateBucket(name string) error {
 	return nil
 }
 
+// CreateBucketIfNotExists creates a new bucket if it doesn't already exist.
+// Returns an error if the bucket name is blank, or if the bucket name is too long.
+func (t *RWTransaction) CreateBucketIfNotExists(name string) error {
+	err := t.CreateBucket(name)
+	if err != nil && err != ErrBucketExists {
+		return err
+	}
+	return nil
+}
+
 // DeleteBucket deletes a bucket.
 // Returns an error if the bucket cannot be found.
 func (t *RWTransaction) DeleteBucket(name string) error {
