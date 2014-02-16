@@ -12,7 +12,7 @@ type Bucket struct {
 
 // bucket represents the on-file representation of a bucket.
 type bucket struct {
-	root pgid
+	root     pgid
 	sequence uint64
 }
 

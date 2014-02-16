@@ -239,10 +239,6 @@ func (db *DB) Close() {
 }
 
 func (db *DB) close() {
-	// Wait for pending transactions before closing and unmapping the data.
-	// db.mmaplock.Lock()
-	// defer db.mmaplock.Unlock()
-
 	// TODO(benbjohnson): Undo everything in Open().
 	db.freelist = nil
 	db.path = ""
@@ -391,7 +387,7 @@ func (db *DB) DeleteBucket(name string) error {
 // NextSequence returns an autoincrementing integer for the bucket.
 // This function can return an error if the bucket does not exist.
 func (db *DB) NextSequence(name string) (int, error) {
-	var seq int 
+	var seq int
 	err := db.Do(func(t *RWTransaction) error {
 		var err error
 		seq, err = t.NextSequence(name)
