@@ -82,6 +82,12 @@ func (t *RWTransaction) NextSequence(name string) (int, error) {
 		return 0, ErrBucketNotFound
 	}
 
+	// Make sure next sequence number will not be larger than the maximum
+	// integer size of the system.
+	if b.bucket.sequence == uint64(maxInt) {
+		return 0, ErrSequenceOverflow
+	}
+
 	// Increment and return the sequence.
 	b.bucket.sequence++
 

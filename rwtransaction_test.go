@@ -136,6 +136,21 @@ func TestRWTransactionNextSequence(t *testing.T) {
 	})
 }
 
+// Ensure that incrementing past the maximum sequence number will return an error.
+func TestRWTransactionNextSequenceOverflow(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Do(func(txn *RWTransaction) error {
+			b := txn.Bucket("widgets")
+			b.bucket.sequence = uint64(maxInt)
+			seq, err := txn.NextSequence("widgets")
+			assert.Equal(t, err, ErrSequenceOverflow)
+			assert.Equal(t, seq, 0)
+			return nil
+		})
+	})
+}
+
 // Ensure that an error is returned when inserting into a bucket that doesn't exist.
 func TestRWTransactionPutBucketNotFound(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
