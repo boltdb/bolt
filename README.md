@@ -14,7 +14,7 @@ Since Bolt is meant to be used as such a low-level piece of functionality, simpl
 
 ## Project Status
 
-Bolt is currently in development and is currently not functional.
+Bolt is functionally complete and has nearly full unit test coverage. The library test suite also includes randomized black box testing to ensure database consistency and thread safety. However, Bolt is a new library so it does not have significant real world usage so please use with caution and report any bugs found.
 
 
 ## Comparing Bolt vs LMDB
