@@ -14,7 +14,7 @@ type Cursor struct {
 }
 
 // First moves the cursor to the first item in the bucket and returns its key and value.
-// If the bucket is empty then a nil key is returned.
+// If the bucket is empty then a nil key and value are returned.
 func (c *Cursor) First() (key []byte, value []byte) {
 	if len(c.stack) > 0 {
 		c.stack = c.stack[:0]
@@ -25,7 +25,7 @@ func (c *Cursor) First() (key []byte, value []byte) {
 }
 
 // Next moves the cursor to the next item in the bucket and returns its key and value.
-// If the cursor is at the end of the bucket then a nil key returned.
+// If the cursor is at the end of the bucket then a nil key and value are returned.
 func (c *Cursor) Next() (key []byte, value []byte) {
 	// Attempt to move over one element until we're successful.
 	// Move up the stack as we hit the end of each page in our stack.
@@ -49,7 +49,7 @@ func (c *Cursor) Next() (key []byte, value []byte) {
 }
 
 // Get moves the cursor to a given key and returns its value.
-// If the key does not exist then the cursor is left at the closest key and a nil key is returned.
+// If the key does not exist then the cursor is left at the closest key and a nil value is returned.
 func (c *Cursor) Get(key []byte) (value []byte) {
 	// Start from root page and traverse to correct page.
 	c.stack = c.stack[:0]
