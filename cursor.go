@@ -48,32 +48,28 @@ func (c *Cursor) Next() (key []byte, value []byte) {
 	return c.keyValue()
 }
 
-// Get moves the cursor to a given key and returns its value.
-// If the key does not exist then the cursor is left at the closest key and a nil value is returned.
-func (c *Cursor) Get(key []byte) (value []byte) {
+// Seek moves the cursor to a given key and returns it.
+// If the key does not exist then the next key is used. If no keys
+// follow, a nil value is returned.
+func (c *Cursor) Seek(seek []byte) (key []byte, value []byte) {
 	// Start from root page and traverse to correct page.
 	c.stack = c.stack[:0]
-	c.search(key, c.transaction.page(c.root))
+	c.search(seek, c.transaction.page(c.root))
 	p, index := c.top()
 
 	// If the cursor is pointing to the end of page then return nil.
 	if index == p.count {
-		return nil
+		return nil, nil
 	}
 
-	// If our target node isn't the same key as what's passed in then return nil.
-	if !bytes.Equal(key, c.element().key()) {
-		return nil
-	}
-
-	return c.element().value()
+	return c.element().key(), c.element().value()
 }
 
 // first moves the cursor to the first leaf element under the last page in the stack.
 func (c *Cursor) first() {
 	p := c.stack[len(c.stack)-1].page
 	for {
-		// Exit when we hit a leaf page. 
+		// Exit when we hit a leaf page.
 		if (p.flags & leafPageFlag) != 0 {
 			break
 		}
