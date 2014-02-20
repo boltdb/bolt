@@ -38,6 +38,10 @@ var (
 
 	// ErrValueTooLarge is returned when inserting a value that is larger than MaxValueSize.
 	ErrValueTooLarge = &Error{"value too large", nil}
+
+	// ErrSequenceOverflow is returned when the next sequence number will be
+	// larger than the maximum integer size.
+	ErrSequenceOverflow = &Error{"sequence overflow", nil}
 )
 
 // Error represents an error condition caused by Bolt.
