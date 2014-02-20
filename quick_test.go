@@ -55,6 +55,12 @@ func (t testdata) Generate(rand *rand.Rand, size int) reflect.Value {
 	return reflect.ValueOf(items)
 }
 
+type revtestdata []testdataitem
+
+func (t revtestdata) Len() int           { return len(t) }
+func (t revtestdata) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
+func (t revtestdata) Less(i, j int) bool { return bytes.Compare(t[i].Key, t[j].Key) == 1 }
+
 type testdataitem struct {
 	Key   []byte
 	Value []byte

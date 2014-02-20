@@ -109,6 +109,41 @@ func TestTransactionCursorLeafRoot(t *testing.T) {
 	})
 }
 
+// Ensure that a Transaction cursor can iterate in reverse over a single root with a couple elements.
+func TestTransactionCursorLeafRootReverse(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Put("widgets", []byte("baz"), []byte{})
+		db.Put("widgets", []byte("foo"), []byte{0})
+		db.Put("widgets", []byte("bar"), []byte{1})
+		txn, _ := db.Transaction()
+		c, err := txn.Cursor("widgets")
+		assert.NoError(t, err)
+
+		k, v := c.Last()
+		assert.Equal(t, string(k), "foo")
+		assert.Equal(t, v, []byte{0})
+
+		k, v = c.Prev()
+		assert.Equal(t, string(k), "baz")
+		assert.Equal(t, v, []byte{})
+
+		k, v = c.Prev()
+		assert.Equal(t, string(k), "bar")
+		assert.Equal(t, v, []byte{1})
+
+		k, v = c.Prev()
+		assert.Nil(t, k)
+		assert.Nil(t, v)
+
+		k, v = c.Prev()
+		assert.Nil(t, k)
+		assert.Nil(t, v)
+
+		txn.Close()
+	})
+}
+
 // Ensure that a Transaction cursor can restart from the beginning.
 func TestTransactionCursorRestart(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -157,6 +192,43 @@ func TestTransactionCursorIterate(t *testing.T) {
 			c, err := txn.Cursor("widgets")
 			assert.NoError(t, err)
 			for k, v := c.First(); k != nil && index < len(items); k, v = c.Next() {
+				assert.Equal(t, k, items[index].Key)
+				assert.Equal(t, v, items[index].Value)
+				index++
+			}
+			assert.Equal(t, len(items), index)
+			txn.Close()
+		})
+		fmt.Fprint(os.Stderr, ".")
+		return true
+	}
+	if err := quick.Check(f, qconfig()); err != nil {
+		t.Error(err)
+	}
+	fmt.Fprint(os.Stderr, "\n")
+}
+
+// Ensure that a transaction can iterate over all elements in a bucket in reverse.
+func TestTransactionCursorIterateReverse(t *testing.T) {
+	f := func(items testdata) bool {
+		withOpenDB(func(db *DB, path string) {
+			// Bulk insert all values.
+			db.CreateBucket("widgets")
+			rwtxn, _ := db.RWTransaction()
+			for _, item := range items {
+				assert.NoError(t, rwtxn.Put("widgets", item.Key, item.Value))
+			}
+			assert.NoError(t, rwtxn.Commit())
+
+			// Sort test data.
+			sort.Sort(revtestdata(items))
+
+			// Iterate over all items and check consistency.
+			var index = 0
+			txn, _ := db.Transaction()
+			c, err := txn.Cursor("widgets")
+			assert.NoError(t, err)
+			for k, v := c.Last(); k != nil && index < len(items); k, v = c.Prev() {
 				assert.Equal(t, k, items[index].Key)
 				assert.Equal(t, v, items[index].Value)
 				index++
