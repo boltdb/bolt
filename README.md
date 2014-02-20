@@ -30,11 +30,11 @@ Bolt is inspired by [LMDB](http://symas.com/mdb/) so there are many similarities
 
 There are also several differences between Bolt and LMDB:
 
-1. LMDB supports more additional features such as multi-value keys, fixed length keys, multi-key insert, direct writes, and bi-directional cursors. Bolt only supports basic `Get()`, `Put()`, and `Delete()` operations and unidirectional cursors.
+1. LMDB supports more additional features such as multi-value keys, fixed length keys, multi-key insert, and direct writes. Bolt only supports basic `Get()`, `Put()`, and `Delete()` operations and bidirectional cursors.
 
-2. LMDB databases can be shared between processes. Bolt only allows a single process to use a database at a time.
+2. LMDB databases can be shared between processes. Bolt only allows a single process access.
 
-3. LMDB is written in C and extremely fast. Bolt is written in pure Go and, while it's fast, it is not as fast as LMDB.
+3. LMDB is written in C and extremely fast. Bolt is fast but not as fast as LMDB.
 
 4. LMDB is a more mature library and is used heavily in projects such as [OpenLDAP](http://www.openldap.org/).
 
