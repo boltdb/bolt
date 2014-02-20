@@ -5,6 +5,10 @@ COVERPROFILE=/tmp/c.out
 bench: benchpreq
 	go test -v -test.bench=$(BENCH)
 
+# http://cloc.sourceforge.net/
+cloc:
+	@cloc --not-match-f='Makefile|_test.go' .
+
 cover: fmt
 	go test -coverprofile=$(COVERPROFILE) -test.run=$(TEST) .
 	go tool cover -html=$(COVERPROFILE)
@@ -21,4 +25,4 @@ test: fmt
 	@echo "=== RACE DETECTOR ==="
 	@go test -v -race -test.run=Parallel
 
-.PHONY: bench cover fmt test
+.PHONY: bench cloc cover fmt test
