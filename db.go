@@ -506,6 +506,34 @@ func (db *DB) CopyFile(path string, mode os.FileMode) error {
 	return db.Copy(f)
 }
 
+// Stat retrieves stats on the database and its page usage.
+// Returns an error if the database is not open.
+func (db *DB) Stat() (*Stat, error) {
+	// Obtain meta & mmap locks.
+	db.metalock.Lock()
+	db.mmaplock.RLock()
+
+	var s = &Stat{
+		MmapSize:         len(db.data),
+		TransactionCount: len(db.transactions),
+	}
+
+	// Release locks.
+	db.mmaplock.RUnlock()
+	db.metalock.Unlock()
+
+	err := db.Do(func(t *RWTransaction) error {
+		s.PageCount = int(t.meta.pgid)
+		s.FreePageCount = len(db.freelist.all())
+		s.PageSize = db.pageSize
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
 // page retrieves a page reference from the mmap based on the current page size.
 func (db *DB) page(id pgid) *page {
 	return (*page)(unsafe.Pointer(&db.data[id*pgid(db.pageSize)]))
@@ -549,4 +577,27 @@ func (db *DB) allocate(count int) (*page, error) {
 	db.rwtransaction.meta.pgid += pgid(count)
 
 	return p, nil
+}
+
+// Stat represents stats on the database such as free pages and sizes.
+type Stat struct {
+	// PageCount is the total number of allocated pages. This is a high water
+	// mark in the database that represents how many pages have actually been
+	// used. This will be smaller than the MmapSize / PageSize.
+	PageCount int
+
+	// FreePageCount is the total number of pages which have been previously
+	// allocated but are no longer used.
+	FreePageCount int
+
+	// PageSize is the size, in bytes, of individual database pages.
+	PageSize int
+
+	// MmapSize is the mmap-allocated size of the data file. When the data file
+	// grows beyond this size, the database will obtain a lock on the mmap and
+	// resize it.
+	MmapSize int
+
+	// TransactionCount is the total number of reader transactions.
+	TransactionCount int
 }
