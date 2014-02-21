@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -326,6 +327,51 @@ func TestDBCopyFile(t *testing.T) {
 		assert.Equal(t, value, []byte("bar"))
 		value, _ = db2.Get("widgets", []byte("baz"))
 		assert.Equal(t, value, []byte("bat"))
+	})
+}
+
+// Ensure the database can return stats about itself.
+func TestDBStat(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Do(func(txn *RWTransaction) error {
+			txn.CreateBucket("widgets")
+			for i := 0; i < 10000; i++ {
+				txn.Put("widgets", []byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+			}
+			return nil
+		})
+
+		// Delete some keys.
+		db.Delete("widgets", []byte("10"))
+		db.Delete("widgets", []byte("1000"))
+
+		// Open some readers.
+		t0, _ := db.Transaction()
+		t1, _ := db.Transaction()
+		t2, _ := db.Transaction()
+		t2.Close()
+
+		// Obtain stats.
+		stat, err := db.Stat()
+		assert.NoError(t, err)
+		assert.Equal(t, stat.PageCount, 128)
+		assert.Equal(t, stat.FreePageCount, 2)
+		assert.Equal(t, stat.PageSize, 4096)
+		assert.Equal(t, stat.MmapSize, 4194304)
+		assert.Equal(t, stat.TransactionCount, 2)
+
+		// Close readers.
+		t0.Close()
+		t1.Close()
+	})
+}
+
+// Ensure the getting stats on a closed database returns an error.
+func TestDBStatWhileClosed(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		stat, err := db.Stat()
+		assert.Equal(t, err, ErrDatabaseNotOpen)
+		assert.Nil(t, stat)
 	})
 }
 
