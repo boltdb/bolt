@@ -134,3 +134,19 @@ func (t *Transaction) page(id pgid) *page {
 	// Otherwise return directly from the mmap.
 	return t.db.page(id)
 }
+
+// forEachPage iterates over every page within a given page and executes a function.
+func (t *Transaction) forEachPage(pgid pgid, depth int, fn func(*page, int)) {
+	p := t.page(pgid)
+
+	// Execute function.
+	fn(p, depth)
+
+	// Recursively loop over children.
+	if (p.flags & branchPageFlag) != 0 {
+		for i := 0; i < int(p.count); i++ {
+			elem := p.branchPageElement(uint16(i))
+			t.forEachPage(elem.pgid, depth+1, fn)
+		}
+	}
+}
