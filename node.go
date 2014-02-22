@@ -8,7 +8,7 @@ import (
 
 // node represents an in-memory, deserialized page.
 type node struct {
-	transaction *RWTransaction
+	transaction *Transaction
 	isLeaf      bool
 	unbalanced  bool
 	key         []byte

@@ -16,8 +16,12 @@ const minMmapSize = 1 << 22 // 4MB
 const maxMmapStep = 1 << 30 // 1GB
 
 // DB represents a collection of buckets persisted to a file on disk.
-// All data access is performed through transactions which can be obtained through the DB.
-// All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
+// All data access is performed through transactions which can be obtained from
+// the DB. There are a number of functions duplicated from the Transction type
+// which provide ease-of-use, single transaction access to the data.
+//
+// All the functions on DB will return a ErrDatabaseNotOpen if accessed before
+// Open() is called or after Close is called.
 type DB struct {
 	os            _os
 	syscall       _syscall
@@ -29,7 +33,7 @@ type DB struct {
 	meta1         *meta
 	pageSize      int
 	opened        bool
-	rwtransaction *RWTransaction
+	rwtransaction *Transaction
 	transactions  []*Transaction
 	freelist      *freelist
 
@@ -41,16 +45,6 @@ type DB struct {
 // Path returns the path to currently open database file.
 func (db *DB) Path() string {
 	return db.path
-}
-
-// GoString returns the Go string representation of the database.
-func (db *DB) GoString() string {
-	return fmt.Sprintf("bolt.DB{path:%q}", db.path)
-}
-
-// String returns the string representation of the database.
-func (db *DB) String() string {
-	return fmt.Sprintf("DB<%q>", db.path)
 }
 
 // Open opens a data file at the given path and initializes the database.
@@ -262,7 +256,8 @@ func (db *DB) close() {
 // Transaction creates a read-only transaction.
 // Multiple read-only transactions can be used concurrently.
 //
-// IMPORTANT: You must close the transaction after you are finished or else the database will not reclaim old pages.
+// IMPORTANT: You must close the transaction after you are finished or else the
+// database will not reclaim old pages.
 func (db *DB) Transaction() (*Transaction, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
@@ -289,12 +284,12 @@ func (db *DB) Transaction() (*Transaction, error) {
 
 // RWTransaction creates a read/write transaction.
 // Only one read/write transaction is allowed at a time.
-// You must call Commit() or Rollback() on the transaction to close it.
-func (db *DB) RWTransaction() (*RWTransaction, error) {
+// You must call Commit() or Close() on the transaction to close it.
+func (db *DB) RWTransaction() (*Transaction, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
-	// Obtain writer lock. This is released by the RWTransaction when it closes.
+	// Obtain writer lock. This is released by the writer transaction when it closes.
 	db.rwlock.Lock()
 
 	// Exit if the database is not open yet.
@@ -303,8 +298,8 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 		return nil, ErrDatabaseNotOpen
 	}
 
-	// Create a transaction associated with the database.
-	t := &RWTransaction{nodes: make(map[pgid]*node)}
+	// Create a writable transaction associated with the database.
+	t := &Transaction{writable: true, nodes: make(map[pgid]*node)}
 	t.init(db)
 	db.rwtransaction = t
 
@@ -339,12 +334,12 @@ func (db *DB) removeTransaction(t *Transaction) {
 	}
 }
 
-// Do executes a function within the context of a RWTransaction.
+// Do executes a function within the context of a writable Transaction.
 // If no error is returned from the function then the transaction is committed.
 // If an error is returned then the entire transaction is rolled back.
 // Any error that is returned from the function or returned from the commit is
 // returned from the Do() method.
-func (db *DB) Do(fn func(*RWTransaction) error) error {
+func (db *DB) Do(fn func(*Transaction) error) error {
 	t, err := db.RWTransaction()
 	if err != nil {
 		return err
@@ -366,7 +361,7 @@ func (db *DB) With(fn func(*Transaction) error) error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Rollback()
 
 	// If an error is returned from the function then pass it through.
 	return fn(t)
@@ -376,28 +371,36 @@ func (db *DB) With(fn func(*Transaction) error) error {
 // An error is returned if the bucket cannot be found.
 func (db *DB) ForEach(name string, fn func(k, v []byte) error) error {
 	return db.With(func(t *Transaction) error {
-		return t.ForEach(name, fn)
+		b := t.Bucket(name)
+		if b == nil {
+			return ErrBucketNotFound
+		}
+		return b.ForEach(fn)
 	})
 }
 
 // Bucket retrieves a reference to a bucket.
 // This is typically useful for checking the existence of a bucket.
+//
+// Do not use the returned bucket for accessing or changing data.
 func (db *DB) Bucket(name string) (*Bucket, error) {
 	t, err := db.Transaction()
 	if err != nil {
 		return nil, err
 	}
-	defer t.Close()
+	defer t.Rollback()
 	return t.Bucket(name), nil
 }
 
 // Buckets retrieves a list of all buckets in the database.
+//
+// Do not use any of the returned buckets for accessing or changing data.
 func (db *DB) Buckets() ([]*Bucket, error) {
 	t, err := db.Transaction()
 	if err != nil {
 		return nil, err
 	}
-	defer t.Close()
+	defer t.Rollback()
 	return t.Buckets(), nil
 }
 
@@ -405,7 +408,7 @@ func (db *DB) Buckets() ([]*Bucket, error) {
 // This function can return an error if the bucket already exists, if the name
 // is blank, or the bucket name is too long.
 func (db *DB) CreateBucket(name string) error {
-	return db.Do(func(t *RWTransaction) error {
+	return db.Do(func(t *Transaction) error {
 		return t.CreateBucket(name)
 	})
 }
@@ -413,7 +416,7 @@ func (db *DB) CreateBucket(name string) error {
 // CreateBucketIfNotExists creates a new bucket with the given name if it doesn't already exist.
 // This function can return an error if the name is blank, or the bucket name is too long.
 func (db *DB) CreateBucketIfNotExists(name string) error {
-	return db.Do(func(t *RWTransaction) error {
+	return db.Do(func(t *Transaction) error {
 		return t.CreateBucketIfNotExists(name)
 	})
 }
@@ -421,7 +424,7 @@ func (db *DB) CreateBucketIfNotExists(name string) error {
 // DeleteBucket removes a bucket from the database.
 // Returns an error if the bucket does not exist.
 func (db *DB) DeleteBucket(name string) error {
-	return db.Do(func(t *RWTransaction) error {
+	return db.Do(func(t *Transaction) error {
 		return t.DeleteBucket(name)
 	})
 }
@@ -430,10 +433,17 @@ func (db *DB) DeleteBucket(name string) error {
 // This function can return an error if the bucket does not exist.
 func (db *DB) NextSequence(name string) (int, error) {
 	var seq int
-	err := db.Do(func(t *RWTransaction) error {
+	err := db.Do(func(t *Transaction) error {
+		b := t.Bucket(name)
+		if b == nil {
+			return ErrBucketNotFound
+		}
+
 		var err error
-		seq, err = t.NextSequence(name)
-		return err
+		if seq, err = b.NextSequence(); err != nil {
+			return err
+		}
+		return nil
 	})
 	if err != nil {
 		return 0, err
@@ -442,29 +452,43 @@ func (db *DB) NextSequence(name string) (int, error) {
 }
 
 // Get retrieves the value for a key in a bucket.
-// Returns an error if the key does not exist.
+// Returns an error if the bucket does not exist.
 func (db *DB) Get(name string, key []byte) ([]byte, error) {
 	t, err := db.Transaction()
 	if err != nil {
 		return nil, err
 	}
-	defer t.Close()
-	return t.Get(name, key)
+	defer t.Rollback()
+
+	b := t.Bucket(name)
+	if b == nil {
+		return nil, ErrBucketNotFound
+	}
+
+	return b.Get(key), nil
 }
 
 // Put sets the value for a key in a bucket.
 // Returns an error if the bucket is not found, if key is blank, if the key is too large, or if the value is too large.
 func (db *DB) Put(name string, key []byte, value []byte) error {
-	return db.Do(func(t *RWTransaction) error {
-		return t.Put(name, key, value)
+	return db.Do(func(t *Transaction) error {
+		b := t.Bucket(name)
+		if b == nil {
+			return ErrBucketNotFound
+		}
+		return b.Put(key, value)
 	})
 }
 
 // Delete removes a key from a bucket.
 // Returns an error if the bucket cannot be found.
 func (db *DB) Delete(name string, key []byte) error {
-	return db.Do(func(t *RWTransaction) error {
-		return t.Delete(name, key)
+	return db.Do(func(t *Transaction) error {
+		b := t.Bucket(name)
+		if b == nil {
+			return ErrBucketNotFound
+		}
+		return b.Delete(key)
 	})
 }
 
@@ -477,7 +501,7 @@ func (db *DB) Copy(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Commit()
 
 	// Open reader on the database.
 	f, err := os.Open(db.path)
@@ -522,7 +546,7 @@ func (db *DB) Stat() (*Stat, error) {
 	db.mmaplock.RUnlock()
 	db.metalock.Unlock()
 
-	err := db.Do(func(t *RWTransaction) error {
+	err := db.Do(func(t *Transaction) error {
 		s.PageCount = int(t.meta.pgid)
 		s.FreePageCount = len(db.freelist.all())
 		s.PageSize = db.pageSize
@@ -532,6 +556,16 @@ func (db *DB) Stat() (*Stat, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// GoString returns the Go string representation of the database.
+func (db *DB) GoString() string {
+	return fmt.Sprintf("bolt.DB{path:%q}", db.path)
+}
+
+// String returns the string representation of the database.
+func (db *DB) String() string {
+	return fmt.Sprintf("DB<%q>", db.path)
 }
 
 // page retrieves a page reference from the mmap based on the current page size.
