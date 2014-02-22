@@ -11,23 +11,26 @@ import (
 // Ensure a bucket can calculate stats.
 func TestBucketStat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		db.Do(func(txn *RWTransaction) error {
+		db.Do(func(txn *Transaction) error {
 			// Add bucket with lots of keys.
 			txn.CreateBucket("widgets")
+			b := txn.Bucket("widgets")
 			for i := 0; i < 100000; i++ {
-				txn.Put("widgets", []byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 			}
 
 			// Add bucket with fewer keys but one big value.
 			txn.CreateBucket("woojits")
+			b = txn.Bucket("woojits")
 			for i := 0; i < 500; i++ {
-				txn.Put("woojits", []byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 			}
-			txn.Put("woojits", []byte("really-big-value"), []byte(strings.Repeat("*", 10000)))
+			b.Put([]byte("really-big-value"), []byte(strings.Repeat("*", 10000)))
 
 			// Add a bucket that fits on a single root leaf.
 			txn.CreateBucket("whozawhats")
-			txn.Put("whozawhats", []byte("foo"), []byte("bar"))
+			b = txn.Bucket("whozawhats")
+			b.Put([]byte("foo"), []byte("bar"))
 
 			return nil
 		})

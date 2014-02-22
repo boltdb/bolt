@@ -10,19 +10,18 @@ optimized for fast read access and does not require recovery in the event of a
 system crash. Transactions which have not finished committing will simply be
 rolled back in the event of a crash.
 
-The design of Bolt is based on Howard Chu's LMDB database project.
+The design of Bolt is based on Howard Chu's LMDB project.
 
 Basics
 
-There are only a few types in Bolt: DB, Bucket, Transaction, RWTransaction, and
-Cursor. The DB is a collection of buckets and is represented by a single file
-on disk. A bucket is a collection of unique keys that are associated with values.
+There are only a few types in Bolt: DB, Bucket, Transaction, and Cursor. The DB
+is a collection of buckets and is represented by a single file on disk. A
+bucket is a collection of unique keys that are associated with values.
 
-Transactions provide read-only access to data inside the database. They can
-retrieve key/value pairs and can use Cursors to iterate over the entire dataset.
-RWTransactions provide read-write access to the database. They can create and
-delete buckets and they can insert and remove keys. Only one RWTransaction is
-allowed at a time.
+Transactions provide a consistent view of the database. They can be used for
+retrieving, setting, and deleting properties. They can also be used to iterate
+over all the values in a bucket. Only one writer Transaction can be in use at
+a time.
 
 
 Caveats
@@ -30,8 +29,8 @@ Caveats
 The database uses a read-only, memory-mapped data file to ensure that
 applications cannot corrupt the database, however, this means that keys and
 values returned from Bolt cannot be changed. Writing to a read-only byte slice
-will cause Go to panic. If you need to work with data returned from a Get() you
-need to first copy it to a new byte slice.
+will cause Go to panic. If you need to alter data returned from a Transaction
+you need to first copy it to a new byte slice.
 
 Bolt currently works on Mac OS and Linux. Windows support is coming soon.
 
