@@ -1,0 +1,13 @@
+TODO
+====
+X Open DB.
+X Initialize transaction.
+- Cursor First, Get(key), Next
+- RWTransaction.insert()
+  - rebalance
+  - adjust cursors
+- RWTransaction Commmit
+
+
+
+

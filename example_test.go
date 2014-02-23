@@ -67,13 +67,11 @@ func ExampleDB_Do() {
 	defer db.Close()
 
 	// Execute several commands within a write transaction.
-	err := db.Do(func(t *Transaction) error {
+	err := db.Do(func(t *RWTransaction) error {
 		if err := t.CreateBucket("widgets"); err != nil {
 			return err
 		}
-
-		b := t.Bucket("widgets")
-		if err := b.Put([]byte("foo"), []byte("bar")); err != nil {
+		if err := t.Put("widgets", []byte("foo"), []byte("bar")); err != nil {
 			return err
 		}
 		return nil
@@ -102,7 +100,7 @@ func ExampleDB_With() {
 
 	// Access data from within a read-only transactional block.
 	db.With(func(t *Transaction) error {
-		v := t.Bucket("people").Get([]byte("john"))
+		v, _ := t.Get("people", []byte("john"))
 		fmt.Printf("John's last name is %s.\n", string(v))
 		return nil
 	})
@@ -135,30 +133,29 @@ func ExampleDB_ForEach() {
 	// A liger is awesome.
 }
 
-func ExampleTransaction_Commit() {
+func ExampleRWTransaction() {
 	// Open the database.
 	var db DB
-	db.Open("/tmp/bolt/db_rwtransaction.db", 0666)
+	db.Open("/tmp/bolt/rwtransaction.db", 0666)
 	defer db.Close()
 
 	// Create a bucket.
 	db.CreateBucket("widgets")
 
 	// Create several keys in a transaction.
-	txn, _ := db.RWTransaction()
-	b := txn.Bucket("widgets")
-	b.Put([]byte("john"), []byte("blue"))
-	b.Put([]byte("abby"), []byte("red"))
-	b.Put([]byte("zephyr"), []byte("purple"))
-	txn.Commit()
+	rwtxn, _ := db.RWTransaction()
+	rwtxn.Put("widgets", []byte("john"), []byte("blue"))
+	rwtxn.Put("widgets", []byte("abby"), []byte("red"))
+	rwtxn.Put("widgets", []byte("zephyr"), []byte("purple"))
+	rwtxn.Commit()
 
 	// Iterate over the values in sorted key order.
-	txn, _ = db.Transaction()
-	c := txn.Bucket("widgets").Cursor()
+	txn, _ := db.Transaction()
+	c, _ := txn.Cursor("widgets")
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		fmt.Printf("%s likes %s\n", string(k), string(v))
 	}
-	txn.Rollback()
+	txn.Close()
 
 	// Output:
 	// abby likes red
@@ -166,10 +163,10 @@ func ExampleTransaction_Commit() {
 	// zephyr likes purple
 }
 
-func ExampleTransaction_Rollback() {
+func ExampleRWTransaction_rollback() {
 	// Open the database.
 	var db DB
-	db.Open("/tmp/bolt/transaction_close.db", 0666)
+	db.Open("/tmp/bolt/rwtransaction_rollback.db", 0666)
 	defer db.Close()
 
 	// Create a bucket.
@@ -179,9 +176,9 @@ func ExampleTransaction_Rollback() {
 	db.Put("widgets", []byte("foo"), []byte("bar"))
 
 	// Update the key but rollback the transaction so it never saves.
-	txn, _ := db.RWTransaction()
-	txn.Bucket("widgets").Put([]byte("foo"), []byte("baz"))
-	txn.Rollback()
+	rwtxn, _ := db.RWTransaction()
+	rwtxn.Put("widgets", []byte("foo"), []byte("baz"))
+	rwtxn.Rollback()
 
 	// Ensure that our original value is still set.
 	value, _ := db.Get("widgets", []byte("foo"))

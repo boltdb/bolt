@@ -16,10 +16,6 @@ var (
 	// already open.
 	ErrDatabaseOpen = &Error{"database already open", nil}
 
-	// ErrTransactionNotWritable is returned changing data using a read-only
-	// transaction.
-	ErrTransactionNotWritable = &Error{"transaction not writable", nil}
-
 	// ErrBucketNotFound is returned when trying to access a bucket that has
 	// not been created yet.
 	ErrBucketNotFound = &Error{"bucket not found", nil}

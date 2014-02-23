@@ -56,15 +56,15 @@ func TestParallelTransactions(t *testing.T) {
 
 						// Verify all data is in for local data list.
 						for _, item := range local {
-							value := txn.Bucket("widgets").Get(item.Key)
+							value, err := txn.Get("widgets", item.Key)
 							if !assert.NoError(t, err) || !assert.Equal(t, value, item.Value) {
-								txn.Rollback()
+								txn.Close()
 								wg.Done()
 								t.FailNow()
 							}
 						}
 
-						txn.Rollback()
+						txn.Close()
 						wg.Done()
 						<-readers
 					}()
@@ -89,9 +89,8 @@ func TestParallelTransactions(t *testing.T) {
 				}
 
 				// Insert whole batch.
-				b := txn.Bucket("widgets")
 				for _, item := range batchItems {
-					err := b.Put(item.Key, item.Value)
+					err := txn.Put("widgets", item.Key, item.Value)
 					if !assert.NoError(t, err) {
 						t.FailNow()
 					}

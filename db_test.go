@@ -188,34 +188,14 @@ func TestDBDeleteFromMissingBucket(t *testing.T) {
 	})
 }
 
-// Ensure that a Transaction can be retrieved.
-func TestDBRWTransaction(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		txn, err := db.RWTransaction()
-		assert.NotNil(t, txn)
-		assert.NoError(t, err)
-		assert.Equal(t, txn.DB(), db)
-	})
-}
-
-// Ensure that opening a Transaction while the DB is closed returns an error.
-func TestRWTransactionOpenWithClosedDB(t *testing.T) {
-	withDB(func(db *DB, path string) {
-		txn, err := db.RWTransaction()
-		assert.Equal(t, err, ErrDatabaseNotOpen)
-		assert.Nil(t, txn)
-	})
-}
-
 // Ensure a database can provide a transactional block.
 func TestDBTransactionBlock(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		err := db.Do(func(txn *Transaction) error {
+		err := db.Do(func(txn *RWTransaction) error {
 			txn.CreateBucket("widgets")
-			b := txn.Bucket("widgets")
-			b.Put([]byte("foo"), []byte("bar"))
-			b.Put([]byte("baz"), []byte("bat"))
-			b.Delete([]byte("foo"))
+			txn.Put("widgets", []byte("foo"), []byte("bar"))
+			txn.Put("widgets", []byte("baz"), []byte("bat"))
+			txn.Delete("widgets", []byte("foo"))
 			return nil
 		})
 		assert.NoError(t, err)
@@ -229,7 +209,7 @@ func TestDBTransactionBlock(t *testing.T) {
 // Ensure a closed database returns an error while running a transaction block
 func TestDBTransactionBlockWhileClosed(t *testing.T) {
 	withDB(func(db *DB, path string) {
-		err := db.Do(func(txn *Transaction) error {
+		err := db.Do(func(txn *RWTransaction) error {
 			txn.CreateBucket("widgets")
 			return nil
 		})
@@ -353,11 +333,10 @@ func TestDBCopyFile(t *testing.T) {
 // Ensure the database can return stats about itself.
 func TestDBStat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		db.Do(func(txn *Transaction) error {
+		db.Do(func(txn *RWTransaction) error {
 			txn.CreateBucket("widgets")
-			b := txn.Bucket("widgets")
 			for i := 0; i < 10000; i++ {
-				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+				txn.Put("widgets", []byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 			}
 			return nil
 		})
@@ -370,7 +349,7 @@ func TestDBStat(t *testing.T) {
 		t0, _ := db.Transaction()
 		t1, _ := db.Transaction()
 		t2, _ := db.Transaction()
-		t2.Rollback()
+		t2.Close()
 
 		// Obtain stats.
 		stat, err := db.Stat()
@@ -382,8 +361,8 @@ func TestDBStat(t *testing.T) {
 		assert.Equal(t, stat.TransactionCount, 2)
 
 		// Close readers.
-		t0.Rollback()
-		t1.Rollback()
+		t0.Close()
+		t1.Close()
 	})
 }
 
