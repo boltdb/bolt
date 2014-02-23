@@ -1,12 +1,8 @@
 package bolt
 
 import (
-	"bytes"
-	"fmt"
-	"os"
 	"strings"
 	"testing"
-	"testing/quick"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -27,6 +23,27 @@ func TestRWTransactionOpenWithClosedDB(t *testing.T) {
 		txn, err := db.RWTransaction()
 		assert.Equal(t, err, ErrDatabaseNotOpen)
 		assert.Nil(t, txn)
+	})
+}
+
+// Ensure that retrieving all buckets returns writable buckets.
+func TestRWTransactionBuckets(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.CreateBucket("woojits")
+		db.Do(func(txn *RWTransaction) error {
+			buckets := txn.Buckets()
+			assert.Equal(t, len(buckets), 2)
+			assert.Equal(t, buckets[0].Name(), "widgets")
+			assert.Equal(t, buckets[1].Name(), "woojits")
+			buckets[0].Put([]byte("foo"), []byte("0000"))
+			buckets[1].Put([]byte("bar"), []byte("0001"))
+			return nil
+		})
+		v, _ := db.Get("widgets", []byte("foo"))
+		assert.Equal(t, v, []byte("0000"))
+		v, _ = db.Get("woojits", []byte("bar"))
+		assert.Equal(t, v, []byte("0001"))
 	})
 }
 
@@ -110,197 +127,10 @@ func TestRWTransactionDeleteBucket(t *testing.T) {
 	})
 }
 
-// Ensure that a bucket can return an autoincrementing sequence.
-func TestRWTransactionNextSequence(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		db.CreateBucket("woojits")
-
-		// Make sure sequence increments.
-		seq, err := db.NextSequence("widgets")
-		assert.NoError(t, err)
-		assert.Equal(t, seq, 1)
-		seq, err = db.NextSequence("widgets")
-		assert.NoError(t, err)
-		assert.Equal(t, seq, 2)
-
-		// Buckets should be separate.
-		seq, err = db.NextSequence("woojits")
-		assert.NoError(t, err)
-		assert.Equal(t, seq, 1)
-
-		// Missing buckets return an error.
-		seq, err = db.NextSequence("no_such_bucket")
-		assert.Equal(t, err, ErrBucketNotFound)
-		assert.Equal(t, seq, 0)
-	})
-}
-
-// Ensure that incrementing past the maximum sequence number will return an error.
-func TestRWTransactionNextSequenceOverflow(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		db.Do(func(txn *RWTransaction) error {
-			b := txn.Bucket("widgets")
-			b.bucket.sequence = uint64(maxInt)
-			seq, err := txn.NextSequence("widgets")
-			assert.Equal(t, err, ErrSequenceOverflow)
-			assert.Equal(t, seq, 0)
-			return nil
-		})
-	})
-}
-
-// Ensure that an error is returned when inserting into a bucket that doesn't exist.
-func TestRWTransactionPutBucketNotFound(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		err := db.Put("widgets", []byte("foo"), []byte("bar"))
-		assert.Equal(t, err, ErrBucketNotFound)
-	})
-}
-
-// Ensure that an error is returned when inserting with an empty key.
-func TestRWTransactionPutEmptyKey(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		err := db.Put("widgets", []byte(""), []byte("bar"))
-		assert.Equal(t, err, ErrKeyRequired)
-		err = db.Put("widgets", nil, []byte("bar"))
-		assert.Equal(t, err, ErrKeyRequired)
-	})
-}
-
-// Ensure that an error is returned when inserting with a key that's too large.
-func TestRWTransactionPutKeyTooLarge(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		err := db.Put("widgets", make([]byte, 32769), []byte("bar"))
-		assert.Equal(t, err, ErrKeyTooLarge)
-	})
-}
-
 // Ensure that an error is returned when deleting from a bucket that doesn't exist.
 func TestRWTransactionDeleteBucketNotFound(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.DeleteBucket("widgets")
 		assert.Equal(t, err, ErrBucketNotFound)
 	})
-}
-
-// Ensure that a bucket can write random keys and values across multiple txns.
-func TestRWTransactionPutSingle(t *testing.T) {
-	index := 0
-	f := func(items testdata) bool {
-		withOpenDB(func(db *DB, path string) {
-			m := make(map[string][]byte)
-
-			db.CreateBucket("widgets")
-			for _, item := range items {
-				if err := db.Put("widgets", item.Key, item.Value); err != nil {
-					panic("put error: " + err.Error())
-				}
-				m[string(item.Key)] = item.Value
-
-				// Verify all key/values so far.
-				i := 0
-				for k, v := range m {
-					value, err := db.Get("widgets", []byte(k))
-					if err != nil {
-						panic("get error: " + err.Error())
-					}
-					if !bytes.Equal(value, v) {
-						db.CopyFile("/tmp/bolt.put.single.db", 0666)
-						t.Fatalf("value mismatch [run %d] (%d of %d):\nkey: %x\ngot: %x\nexp: %x", index, i, len(m), []byte(k), value, v)
-					}
-					i++
-				}
-			}
-
-			fmt.Fprint(os.Stderr, ".")
-		})
-		index++
-		return true
-	}
-	if err := quick.Check(f, qconfig()); err != nil {
-		t.Error(err)
-	}
-	fmt.Fprint(os.Stderr, "\n")
-}
-
-// Ensure that a transaction can insert multiple key/value pairs at once.
-func TestRWTransactionPutMultiple(t *testing.T) {
-	f := func(items testdata) bool {
-		withOpenDB(func(db *DB, path string) {
-			// Bulk insert all values.
-			db.CreateBucket("widgets")
-			rwtxn, _ := db.RWTransaction()
-			for _, item := range items {
-				assert.NoError(t, rwtxn.Put("widgets", item.Key, item.Value))
-			}
-			assert.NoError(t, rwtxn.Commit())
-
-			// Verify all items exist.
-			txn, _ := db.Transaction()
-			for _, item := range items {
-				value, err := txn.Get("widgets", item.Key)
-				assert.NoError(t, err)
-				if !assert.Equal(t, item.Value, value) {
-					db.CopyFile("/tmp/bolt.put.multiple.db", 0666)
-					t.FailNow()
-				}
-			}
-			txn.Close()
-		})
-		fmt.Fprint(os.Stderr, ".")
-		return true
-	}
-	if err := quick.Check(f, qconfig()); err != nil {
-		t.Error(err)
-	}
-	fmt.Fprint(os.Stderr, "\n")
-}
-
-// Ensure that a transaction can delete all key/value pairs and return to a single leaf page.
-func TestRWTransactionDelete(t *testing.T) {
-	f := func(items testdata) bool {
-		withOpenDB(func(db *DB, path string) {
-			// Bulk insert all values.
-			db.CreateBucket("widgets")
-			rwtxn, _ := db.RWTransaction()
-			for _, item := range items {
-				assert.NoError(t, rwtxn.Put("widgets", item.Key, item.Value))
-			}
-			assert.NoError(t, rwtxn.Commit())
-
-			// Remove items one at a time and check consistency.
-			for i, item := range items {
-				assert.NoError(t, db.Delete("widgets", item.Key))
-
-				// Anything before our deletion index should be nil.
-				txn, _ := db.Transaction()
-				for j, exp := range items {
-					if j > i {
-						value, err := txn.Get("widgets", exp.Key)
-						assert.NoError(t, err)
-						if !assert.Equal(t, exp.Value, value) {
-							t.FailNow()
-						}
-					} else {
-						value, err := txn.Get("widgets", exp.Key)
-						assert.NoError(t, err)
-						if !assert.Nil(t, value) {
-							t.FailNow()
-						}
-					}
-				}
-				txn.Close()
-			}
-		})
-		fmt.Fprint(os.Stderr, ".")
-		return true
-	}
-	if err := quick.Check(f, qconfig()); err != nil {
-		t.Error(err)
-	}
-	fmt.Fprint(os.Stderr, "\n")
 }

@@ -1,9 +1,5 @@
 package bolt
 
-import (
-	"bytes"
-)
-
 // Transaction represents a read-only transaction on the database.
 // It can be used for retrieving values for keys as well as creating cursors for
 // iterating over the data.
@@ -50,7 +46,7 @@ func (t *Transaction) DB() *DB {
 	return t.db
 }
 
-// Bucket retrieves a bucket by name.
+// Bucket retrieves a read-only bucket by name.
 // Returns nil if the bucket does not exist.
 func (t *Transaction) Bucket(name string) *Bucket {
 	b := t.buckets.get(name)
@@ -66,6 +62,7 @@ func (t *Transaction) Bucket(name string) *Bucket {
 }
 
 // Buckets retrieves a list of all buckets.
+// All returned buckets are read-only.
 func (t *Transaction) Buckets() []*Bucket {
 	buckets := make([]*Bucket, 0, len(t.buckets.items))
 	for name, b := range t.buckets.items {
@@ -73,52 +70,6 @@ func (t *Transaction) Buckets() []*Bucket {
 		buckets = append(buckets, bucket)
 	}
 	return buckets
-}
-
-// Cursor creates a cursor associated with a given bucket.
-// The cursor is only valid as long as the Transaction is open.
-// Do not use a cursor after the transaction is closed.
-func (t *Transaction) Cursor(name string) (*Cursor, error) {
-	b := t.Bucket(name)
-	if b == nil {
-		return nil, ErrBucketNotFound
-	}
-	return b.cursor(), nil
-}
-
-// Get retrieves the value for a key in a named bucket.
-// Returns a nil value if the key does not exist.
-// Returns an error if the bucket does not exist.
-func (t *Transaction) Get(name string, key []byte) (value []byte, err error) {
-	c, err := t.Cursor(name)
-	if err != nil {
-		return nil, err
-	}
-	k, v := c.Seek(key)
-	// If our target node isn't the same key as what's passed in then return nil.
-	if !bytes.Equal(key, k) {
-		return nil, nil
-	}
-	return v, nil
-}
-
-// ForEach executes a function for each key/value pair in a bucket.
-// An error is returned if the bucket cannot be found.
-func (t *Transaction) ForEach(name string, fn func(k, v []byte) error) error {
-	// Open a cursor on the bucket.
-	c, err := t.Cursor(name)
-	if err != nil {
-		return err
-	}
-
-	// Iterate over each key/value pair in the bucket.
-	for k, v := c.First(); k != nil; k, v = c.Next() {
-		if err := fn(k, v); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // page returns a reference to the page with a given id.
