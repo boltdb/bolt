@@ -1,7 +1,6 @@
 package bolt
 
 import (
-	"bytes"
 	"io"
 	"io/ioutil"
 	"os"
@@ -142,44 +141,6 @@ func TestDBTransactionErrDatabaseNotOpen(t *testing.T) {
 	})
 }
 
-// Ensure that a bucket that gets a non-existent key returns nil.
-func TestDBGetNonExistent(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		value, err := db.Get("widgets", []byte("foo"))
-		if assert.NoError(t, err) {
-			assert.Nil(t, value)
-		}
-	})
-}
-
-// Ensure that a bucket can write a key/value.
-func TestDBPut(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		err := db.Put("widgets", []byte("foo"), []byte("bar"))
-		assert.NoError(t, err)
-		value, err := db.Get("widgets", []byte("foo"))
-		if assert.NoError(t, err) {
-			assert.Equal(t, value, []byte("bar"))
-		}
-	})
-}
-
-// Ensure that a bucket can delete an existing key.
-func TestDBDelete(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		db.Put("widgets", []byte("foo"), []byte("bar"))
-		err := db.Delete("widgets", []byte("foo"))
-		assert.NoError(t, err)
-		value, err := db.Get("widgets", []byte("foo"))
-		if assert.NoError(t, err) {
-			assert.Nil(t, value)
-		}
-	})
-}
-
 // Ensure that a delete on a missing bucket returns an error.
 func TestDBDeleteFromMissingBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -193,9 +154,10 @@ func TestDBTransactionBlock(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.Do(func(txn *RWTransaction) error {
 			txn.CreateBucket("widgets")
-			txn.Put("widgets", []byte("foo"), []byte("bar"))
-			txn.Put("widgets", []byte("baz"), []byte("bat"))
-			txn.Delete("widgets", []byte("foo"))
+			b := txn.Bucket("widgets")
+			b.Put([]byte("foo"), []byte("bar"))
+			b.Put([]byte("baz"), []byte("bat"))
+			b.Delete([]byte("foo"))
 			return nil
 		})
 		assert.NoError(t, err)
@@ -214,56 +176,6 @@ func TestDBTransactionBlockWhileClosed(t *testing.T) {
 			return nil
 		})
 		assert.Equal(t, err, ErrDatabaseNotOpen)
-	})
-}
-
-// Ensure a database can loop over all key/value pairs in a bucket.
-func TestDBForEach(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		db.Put("widgets", []byte("foo"), []byte("0000"))
-		db.Put("widgets", []byte("baz"), []byte("0001"))
-		db.Put("widgets", []byte("bar"), []byte("0002"))
-
-		var index int
-		err := db.ForEach("widgets", func(k, v []byte) error {
-			switch index {
-			case 0:
-				assert.Equal(t, k, []byte("bar"))
-				assert.Equal(t, v, []byte("0002"))
-			case 1:
-				assert.Equal(t, k, []byte("baz"))
-				assert.Equal(t, v, []byte("0001"))
-			case 2:
-				assert.Equal(t, k, []byte("foo"))
-				assert.Equal(t, v, []byte("0000"))
-			}
-			index++
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, index, 3)
-	})
-}
-
-// Ensure a database can stop iteration early.
-func TestDBForEachShortCircuit(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		db.Put("widgets", []byte("bar"), []byte("0000"))
-		db.Put("widgets", []byte("baz"), []byte("0000"))
-		db.Put("widgets", []byte("foo"), []byte("0000"))
-
-		var index int
-		err := db.ForEach("widgets", func(k, v []byte) error {
-			index++
-			if bytes.Equal(k, []byte("baz")) {
-				return &Error{"marker", nil}
-			}
-			return nil
-		})
-		assert.Equal(t, err, &Error{"marker", nil})
-		assert.Equal(t, index, 2)
 	})
 }
 
@@ -310,6 +222,14 @@ func TestDBGetWhileClosed(t *testing.T) {
 	})
 }
 
+// Ensure that an error is returned when inserting into a bucket that doesn't exist.
+func TestDBPutBucketNotFound(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		err := db.Put("widgets", []byte("foo"), []byte("bar"))
+		assert.Equal(t, err, ErrBucketNotFound)
+	})
+}
+
 // Ensure that the database can be copied to a file path.
 func TestDBCopyFile(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -335,8 +255,9 @@ func TestDBStat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Do(func(txn *RWTransaction) error {
 			txn.CreateBucket("widgets")
+			b := txn.Bucket("widgets")
 			for i := 0; i < 10000; i++ {
-				txn.Put("widgets", []byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 			}
 			return nil
 		})

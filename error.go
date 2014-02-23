@@ -30,6 +30,10 @@ var (
 	// that is longer than MaxBucketNameSize.
 	ErrBucketNameTooLarge = &Error{"bucket name too large", nil}
 
+	// ErrBucketNotWritable is returned when changing data on a bucket
+	// reference that was created from a read-only transaction.
+	ErrBucketNotWritable = &Error{"bucket not writable", nil}
+
 	// ErrKeyRequired is returned when inserting a zero-length key.
 	ErrKeyRequired = &Error{"key required", nil}
 

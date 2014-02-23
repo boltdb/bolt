@@ -24,6 +24,28 @@ func (t *RWTransaction) init(db *DB) {
 	t.meta.txnid += txnid(1)
 }
 
+// Bucket retrieves a writable bucket by name.
+// Returns nil if the bucket does not exist.
+func (t *RWTransaction) Bucket(name string) *Bucket {
+	b := t.Transaction.Bucket(name)
+	if b == nil {
+		return nil
+	}
+
+	b.rwtransaction = t
+	return b
+}
+
+// Buckets retrieves a list of all buckets.
+// All returned buckets are writable.
+func (t *RWTransaction) Buckets() []*Bucket {
+	buckets := t.Transaction.Buckets()
+	for _, b := range buckets {
+		b.rwtransaction = t
+	}
+	return buckets
+}
+
 // CreateBucket creates a new bucket.
 // Returns an error if the bucket already exists, if the bucket name is blank, or if the bucket name is too long.
 func (t *RWTransaction) CreateBucket(name string) error {
@@ -70,73 +92,6 @@ func (t *RWTransaction) DeleteBucket(name string) error {
 	t.buckets.del(name)
 
 	// TODO(benbjohnson): Free all pages.
-
-	return nil
-}
-
-// NextSequence returns an autoincrementing integer for the bucket.
-func (t *RWTransaction) NextSequence(name string) (int, error) {
-	// Check if bucket already exists.
-	b := t.Bucket(name)
-	if b == nil {
-		return 0, ErrBucketNotFound
-	}
-
-	// Make sure next sequence number will not be larger than the maximum
-	// integer size of the system.
-	if b.bucket.sequence == uint64(maxInt) {
-		return 0, ErrSequenceOverflow
-	}
-
-	// Increment and return the sequence.
-	b.bucket.sequence++
-
-	return int(b.bucket.sequence), nil
-}
-
-// Put sets the value for a key inside of the named bucket.
-// If the key exist then its previous value will be overwritten.
-// Returns an error if the bucket is not found, if the key is blank, if the key is too large, or if the value is too large.
-func (t *RWTransaction) Put(name string, key []byte, value []byte) error {
-	b := t.Bucket(name)
-	if b == nil {
-		return ErrBucketNotFound
-	}
-
-	// Validate the key and data size.
-	if len(key) == 0 {
-		return ErrKeyRequired
-	} else if len(key) > MaxKeySize {
-		return ErrKeyTooLarge
-	} else if len(value) > MaxValueSize {
-		return ErrValueTooLarge
-	}
-
-	// Move cursor to correct position.
-	c := b.cursor()
-	c.Seek(key)
-
-	// Insert the key/value.
-	c.node(t).put(key, key, value, 0)
-
-	return nil
-}
-
-// Delete removes a key from the named bucket.
-// If the key does not exist then nothing is done and a nil error is returned.
-// Returns an error if the bucket cannot be found.
-func (t *RWTransaction) Delete(name string, key []byte) error {
-	b := t.Bucket(name)
-	if b == nil {
-		return ErrBucketNotFound
-	}
-
-	// Move cursor to correct position.
-	c := b.cursor()
-	c.Seek(key)
-
-	// Delete the node if we have a matching key.
-	c.node(t).del(key)
 
 	return nil
 }
