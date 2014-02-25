@@ -18,32 +18,11 @@ type RWTransaction struct {
 // init initializes the transaction.
 func (t *RWTransaction) init(db *DB) {
 	t.Transaction.init(db)
+	t.Transaction.rwtransaction = t
 	t.pages = make(map[pgid]*page)
 
 	// Increment the transaction id.
 	t.meta.txnid += txnid(1)
-}
-
-// Bucket retrieves a writable bucket by name.
-// Returns nil if the bucket does not exist.
-func (t *RWTransaction) Bucket(name string) *Bucket {
-	b := t.Transaction.Bucket(name)
-	if b == nil {
-		return nil
-	}
-
-	b.rwtransaction = t
-	return b
-}
-
-// Buckets retrieves a list of all buckets.
-// All returned buckets are writable.
-func (t *RWTransaction) Buckets() []*Bucket {
-	buckets := t.Transaction.Buckets()
-	for _, b := range buckets {
-		b.rwtransaction = t
-	}
-	return buckets
 }
 
 // CreateBucket creates a new bucket.

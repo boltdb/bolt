@@ -8,10 +8,11 @@ package bolt
 // can not be reclaimed by the writer until no more transactions are using them.
 // A long running read transaction can cause the database to quickly grow.
 type Transaction struct {
-	db      *DB
-	meta    *meta
-	buckets *buckets
-	pages   map[pgid]*page
+	db            *DB
+	rwtransaction *RWTransaction
+	meta          *meta
+	buckets       *buckets
+	pages         map[pgid]*page
 }
 
 // txnid represents the internal transaction identifier.
@@ -38,6 +39,9 @@ func (t *Transaction) id() txnid {
 
 // Close closes the transaction and releases any pages it is using.
 func (t *Transaction) Close() {
+	if t.rwtransaction != nil {
+		t.rwtransaction.Rollback()
+	}
 	t.db.removeTransaction(t)
 }
 
@@ -46,7 +50,7 @@ func (t *Transaction) DB() *DB {
 	return t.db
 }
 
-// Bucket retrieves a read-only bucket by name.
+// Bucket retrieves a bucket by name.
 // Returns nil if the bucket does not exist.
 func (t *Transaction) Bucket(name string) *Bucket {
 	b := t.buckets.get(name)
@@ -55,18 +59,23 @@ func (t *Transaction) Bucket(name string) *Bucket {
 	}
 
 	return &Bucket{
-		bucket:      b,
-		name:        name,
-		transaction: t,
+		bucket:        b,
+		name:          name,
+		transaction:   t,
+		rwtransaction: t.rwtransaction,
 	}
 }
 
 // Buckets retrieves a list of all buckets.
-// All returned buckets are read-only.
 func (t *Transaction) Buckets() []*Bucket {
 	buckets := make([]*Bucket, 0, len(t.buckets.items))
 	for name, b := range t.buckets.items {
-		bucket := &Bucket{bucket: b, transaction: t, name: name}
+		bucket := &Bucket{
+			bucket:        b,
+			name:          name,
+			transaction:   t,
+			rwtransaction: t.rwtransaction,
+		}
 		buckets = append(buckets, bucket)
 	}
 	return buckets
