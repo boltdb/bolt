@@ -15,6 +15,27 @@ import (
 )
 
 // Ensure that a database can be opened without error.
+func TestOpen(t *testing.T) {
+	f, _ := ioutil.TempFile("", "bolt-")
+	path := f.Name()
+	f.Close()
+	os.Remove(path)
+	defer os.RemoveAll(path)
+
+	db, err := Open(path, 0666)
+	assert.NoError(t, err)
+	assert.NotNil(t, db)
+	db.Close()
+}
+
+// Ensure that opening a database with a bad path returns an error.
+func TestOpenBadPath(t *testing.T) {
+	db, err := Open("/../bad-path", 0666)
+	assert.Error(t, err)
+	assert.Nil(t, db)
+}
+
+// Ensure that a database can be opened without error.
 func TestDBOpen(t *testing.T) {
 	withDB(func(db *DB, path string) {
 		err := db.Open(path, 0666)
