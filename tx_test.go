@@ -310,6 +310,10 @@ func TestTxCursorRestart(t *testing.T) {
 
 // Ensure that a Tx can iterate over all elements in a bucket.
 func TestTxCursorIterate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	f := func(items testdata) bool {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
@@ -347,6 +351,10 @@ func TestTxCursorIterate(t *testing.T) {
 
 // Ensure that a transaction can iterate over all elements in a bucket in reverse.
 func TestTxCursorIterateReverse(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	f := func(items testdata) bool {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
