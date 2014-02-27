@@ -66,6 +66,7 @@ func TestRWTransactionCreateBucketIfNotExists(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		assert.NoError(t, db.CreateBucketIfNotExists("widgets"))
 		assert.NoError(t, db.CreateBucketIfNotExists("widgets"))
+		assert.Equal(t, db.CreateBucketIfNotExists(""), ErrBucketNameRequired)
 
 		// Read the bucket through a separate transaction.
 		b, err := db.Bucket("widgets")
@@ -113,11 +114,16 @@ func TestRWTransactionDeleteBucket(t *testing.T) {
 		db.CreateBucket("widgets")
 		db.Put("widgets", []byte("foo"), []byte("bar"))
 
+		b, _ := db.Bucket("widgets")
+
 		// Delete the bucket and make sure we can't get the value.
 		assert.NoError(t, db.DeleteBucket("widgets"))
 		value, err := db.Get("widgets", []byte("foo"))
 		assert.Equal(t, err, ErrBucketNotFound)
 		assert.Nil(t, value)
+
+		// Verify that the bucket's page is free.
+		assert.Equal(t, db.freelist.all(), []pgid{b.root})
 
 		// Create the bucket again and make sure there's not a phantom value.
 		assert.NoError(t, db.CreateBucket("widgets"))

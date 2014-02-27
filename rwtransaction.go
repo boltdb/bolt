@@ -63,14 +63,18 @@ func (t *RWTransaction) CreateBucketIfNotExists(name string) error {
 // DeleteBucket deletes a bucket.
 // Returns an error if the bucket cannot be found.
 func (t *RWTransaction) DeleteBucket(name string) error {
-	if b := t.Bucket(name); b == nil {
+	b := t.Bucket(name)
+	if b == nil {
 		return ErrBucketNotFound
 	}
 
 	// Remove from buckets page.
 	t.buckets.del(name)
 
-	// TODO(benbjohnson): Free all pages.
+	// Free all pages.
+	t.forEachPage(b.root, 0, func(p *page, depth int) {
+		t.db.freelist.free(t.id(), p)
+	})
 
 	return nil
 }
