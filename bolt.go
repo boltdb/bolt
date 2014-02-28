@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -12,4 +13,19 @@ func Open(path string, mode os.FileMode) (*DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// _assert will panic with a given formatted message if the given condition is false.
+func _assert(condition bool, msg string, v ...interface{}) {
+	if !condition {
+		panic(fmt.Sprintf("assertion failed: "+msg, v...))
+	}
+}
+
+func warn(v ...interface{}) {
+	fmt.Fprintln(os.Stderr, v...)
+}
+
+func warnf(msg string, v ...interface{}) {
+	fmt.Fprintf(os.Stderr, msg+"\n", v...)
 }

@@ -16,9 +16,7 @@ type Cursor struct {
 // First moves the cursor to the first item in the bucket and returns its key and value.
 // If the bucket is empty then a nil key and value are returned.
 func (c *Cursor) First() (key []byte, value []byte) {
-	if len(c.stack) > 0 {
-		c.stack = c.stack[:0]
-	}
+	c.stack = c.stack[:0]
 	p := c.transaction.page(c.root)
 	c.stack = append(c.stack, pageElementRef{page: p, index: 0})
 	c.first()
@@ -28,9 +26,7 @@ func (c *Cursor) First() (key []byte, value []byte) {
 // Last moves the cursor to the last item in the bucket and returns its key and value.
 // If the bucket is empty then a nil key and value are returned.
 func (c *Cursor) Last() (key []byte, value []byte) {
-	if len(c.stack) > 0 {
-		c.stack = c.stack[:0]
-	}
+	c.stack = c.stack[:0]
 	p := c.transaction.page(c.root)
 	c.stack = append(c.stack, pageElementRef{page: p, index: p.count - 1})
 	c.last()

@@ -334,6 +334,13 @@ func TestDBMmapSize(t *testing.T) {
 	assert.Equal(t, db.mmapSize(1<<30), 1<<31)
 }
 
+// Ensure that a database can return a string representation of itself.
+func TestDBString(t *testing.T) {
+	db := &DB{path: "/tmp/foo"}
+	assert.Equal(t, db.String(), `DB<"/tmp/foo">`)
+	assert.Equal(t, db.GoString(), `bolt.DB{path:"/tmp/foo"}`)
+}
+
 // withDB executes a function with a database reference.
 func withDB(fn func(*DB, string)) {
 	f, _ := ioutil.TempFile("", "bolt-")
