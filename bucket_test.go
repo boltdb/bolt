@@ -23,6 +23,20 @@ func TestBucketGetNonExistent(t *testing.T) {
 	})
 }
 
+// Ensure that a bucket can read a value that is not flushed yet.
+func TestBucketGetFromNode(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Do(func(txn *RWTransaction) error {
+			b := txn.Bucket("widgets")
+			b.Put([]byte("foo"), []byte("bar"))
+			value := b.Get([]byte("foo"))
+			assert.Equal(t, value, []byte("bar"))
+			return nil
+		})
+	})
+}
+
 // Ensure that a bucket can write a key/value.
 func TestBucketPut(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {

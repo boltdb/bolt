@@ -12,6 +12,7 @@ type Transaction struct {
 	rwtransaction *RWTransaction
 	meta          *meta
 	buckets       *buckets
+	nodes         map[pgid]*node
 	pages         map[pgid]*page
 }
 
@@ -93,6 +94,23 @@ func (t *Transaction) page(id pgid) *page {
 
 	// Otherwise return directly from the mmap.
 	return t.db.page(id)
+}
+
+// node returns a reference to the in-memory node for a given page, if it exists.
+func (t *Transaction) node(id pgid) *node {
+	if t.nodes == nil {
+		return nil
+	}
+	return t.nodes[id]
+}
+
+// pageNode returns the in-memory node, if it exists.
+// Otherwise returns the underlying page.
+func (t *Transaction) pageNode(id pgid) (*page, *node) {
+	if n := t.node(id); n != nil {
+		return nil, n
+	}
+	return t.page(id), nil
 }
 
 // forEachPage iterates over every page within a given page and executes a function.

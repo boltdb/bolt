@@ -33,12 +33,6 @@ type page struct {
 	ptr      uintptr
 }
 
-// pageElementRef represents a reference to an element on a given page.
-type pageElementRef struct {
-	page  *page
-	index uint16
-}
-
 // typ returns a human readable page type string used for debugging.
 func (p *page) typ() string {
 	if (p.flags & branchPageFlag) != 0 {
