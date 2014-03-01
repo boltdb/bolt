@@ -35,7 +35,7 @@ func (b *Bucket) Cursor() *Cursor {
 	return &Cursor{
 		transaction: b.transaction,
 		root:        b.root,
-		stack:       make([]pageElementRef, 0),
+		stack:       make([]elemRef, 0),
 	}
 }
 

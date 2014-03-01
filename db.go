@@ -304,7 +304,7 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 	}
 
 	// Create a transaction associated with the database.
-	t := &RWTransaction{nodes: make(map[pgid]*node)}
+	t := &RWTransaction{}
 	t.init(db)
 	db.rwtransaction = t
 
@@ -571,7 +571,8 @@ func (db *DB) Stat() (*Stat, error) {
 
 // page retrieves a page reference from the mmap based on the current page size.
 func (db *DB) page(id pgid) *page {
-	return (*page)(unsafe.Pointer(&db.data[id*pgid(db.pageSize)]))
+	pos := id*pgid(db.pageSize)
+	return (*page)(unsafe.Pointer(&db.data[pos]))
 }
 
 // pageInBuffer retrieves a page reference from a given byte array based on the current page size.
