@@ -146,7 +146,7 @@ func (db *DB) mmap(minsz int) error {
 	if size < minsz {
 		size = minsz
 	}
-	size = db.mmapSize(minsz)
+	size = db.mmapSize(size)
 
 	// Memory-map the data file as a byte slice.
 	if db.data, err = db.syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
