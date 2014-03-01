@@ -82,6 +82,10 @@ func (t *RWTransaction) DeleteBucket(name string) error {
 // Commit writes all changes to disk and updates the meta page.
 // Returns an error if a disk write error occurs.
 func (t *RWTransaction) Commit() error {
+	if t.db == nil {
+		return nil
+	}
+
 	defer t.close()
 
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
@@ -119,7 +123,10 @@ func (t *RWTransaction) Rollback() {
 }
 
 func (t *RWTransaction) close() {
-	t.db.rwlock.Unlock()
+	if t.db != nil {
+		t.db.rwlock.Unlock()
+		t.db = nil
+	}
 }
 
 // allocate returns a contiguous block of memory starting at a given page.

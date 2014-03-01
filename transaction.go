@@ -40,10 +40,14 @@ func (t *Transaction) id() txnid {
 
 // Close closes the transaction and releases any pages it is using.
 func (t *Transaction) Close() {
-	if t.rwtransaction != nil {
-		t.rwtransaction.Rollback()
+	if t.db != nil {
+		if t.rwtransaction != nil {
+			t.rwtransaction.Rollback()
+		} else {
+			t.db.removeTransaction(t)
+			t.db = nil
+		}
 	}
-	t.db.removeTransaction(t)
 }
 
 // DB returns a reference to the database that created the transaction.
