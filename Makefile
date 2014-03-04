@@ -14,6 +14,10 @@ cover: fmt
 	go tool cover -html=$(COVERPROFILE)
 	rm $(COVERPROFILE)
 
+cpuprofile: fmt
+	@go test -c
+	@./bolt.test -test.v -test.run="^X" -test.bench=$(BENCH) -test.cpuprofile cpu.prof
+
 fmt:
 	@go fmt ./...
 
@@ -25,4 +29,4 @@ test: fmt
 	@echo "=== RACE DETECTOR ==="
 	@go test -v -race -test.run=Parallel
 
-.PHONY: bench cloc cover fmt test
+.PHONY: bench cloc cover cpuprofile fmt memprofile test

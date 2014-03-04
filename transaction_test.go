@@ -2,8 +2,11 @@ package bolt
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"testing"
 	"testing/quick"
 
@@ -227,4 +230,36 @@ func TestTransactionCursorIterateReverse(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Fprint(os.Stderr, "\n")
+}
+
+// Benchmark the performance iterating over a cursor.
+func BenchmarkTransactionCursor(b *testing.B) {
+	indexes := rand.Perm(b.N)
+	value := []byte(strings.Repeat("0", 64))
+
+	withOpenDB(func(db *DB, path string) {
+		// Write data to bucket.
+		db.CreateBucket("widgets")
+		db.Do(func(txn *RWTransaction) error {
+			bucket := txn.Bucket("widgets")
+			for i := 0; i < b.N; i++ {
+				bucket.Put([]byte(strconv.Itoa(indexes[i])), value)
+			}
+			return nil
+		})
+		b.ResetTimer()
+
+		// Iterate over bucket using cursor.
+		db.With(func(txn *Transaction) error {
+			count := 0
+			c := txn.Bucket("widgets").Cursor()
+			for k, _ := c.First(); k != nil; k, _ = c.Next() {
+				count++
+			}
+			if count != b.N {
+				b.Fatalf("wrong count: %d; expected: %d", count, b.N)
+			}
+			return nil
+		})
+	})
 }

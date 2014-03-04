@@ -1,6 +1,8 @@
 package bolt
 
 import (
+	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -138,5 +140,42 @@ func TestRWTransactionDeleteBucketNotFound(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.DeleteBucket("widgets")
 		assert.Equal(t, err, ErrBucketNotFound)
+	})
+}
+
+// Benchmark the performance of bulk put transactions in random order.
+func BenchmarkRWTransactionPutRandom(b *testing.B) {
+	indexes := rand.Perm(b.N)
+	value := []byte(strings.Repeat("0", 64))
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		var txn *RWTransaction
+		var bucket *Bucket
+		for i := 0; i < b.N; i++ {
+			if i%1000 == 0 {
+				if txn != nil {
+					txn.Commit()
+				}
+				txn, _ = db.RWTransaction()
+				bucket = txn.Bucket("widgets")
+			}
+			bucket.Put([]byte(strconv.Itoa(indexes[i])), value)
+		}
+		txn.Commit()
+	})
+}
+
+// Benchmark the performance of bulk put transactions in sequential order.
+func BenchmarkRWTransactionPutSequential(b *testing.B) {
+	value := []byte(strings.Repeat("0", 64))
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.Do(func(txn *RWTransaction) error {
+			bucket := txn.Bucket("widgets")
+			for i := 0; i < b.N; i++ {
+				bucket.Put([]byte(strconv.Itoa(i)), value)
+			}
+			return nil
+		})
 	})
 }

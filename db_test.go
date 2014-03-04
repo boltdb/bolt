@@ -3,8 +3,10 @@ package bolt
 import (
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -339,6 +341,29 @@ func TestDBString(t *testing.T) {
 	db := &DB{path: "/tmp/foo"}
 	assert.Equal(t, db.String(), `DB<"/tmp/foo">`)
 	assert.Equal(t, db.GoString(), `bolt.DB{path:"/tmp/foo"}`)
+}
+
+// Benchmark the performance of single put transactions in random order.
+func BenchmarkDBPutSequential(b *testing.B) {
+	value := []byte(strings.Repeat("0", 64))
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		for i := 0; i < b.N; i++ {
+			db.Put("widgets", []byte(strconv.Itoa(i)), value)
+		}
+	})
+}
+
+// Benchmark the performance of single put transactions in random order.
+func BenchmarkDBPutRandom(b *testing.B) {
+	indexes := rand.Perm(b.N)
+	value := []byte(strings.Repeat("0", 64))
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		for i := 0; i < b.N; i++ {
+			db.Put("widgets", []byte(strconv.Itoa(indexes[i])), value)
+		}
+	})
 }
 
 // withDB executes a function with a database reference.
