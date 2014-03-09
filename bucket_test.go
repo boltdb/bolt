@@ -27,8 +27,8 @@ func TestBucketGetNonExistent(t *testing.T) {
 func TestBucketGetFromNode(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.Do(func(txn *RWTx) error {
-			b := txn.Bucket("widgets")
+		db.Do(func(tx *Tx) error {
+			b := tx.Bucket("widgets")
 			b.Put([]byte("foo"), []byte("bar"))
 			value := b.Get([]byte("foo"))
 			assert.Equal(t, value, []byte("bar"))
@@ -54,8 +54,8 @@ func TestBucketPut(t *testing.T) {
 func TestBucketPutReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.With(func(txn *Tx) error {
-			b := txn.Bucket("widgets")
+		db.With(func(tx *Tx) error {
+			b := tx.Bucket("widgets")
 			err := b.Put([]byte("foo"), []byte("bar"))
 			assert.Equal(t, err, ErrBucketNotWritable)
 			return nil
@@ -81,8 +81,8 @@ func TestBucketDelete(t *testing.T) {
 func TestBucketDeleteReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.With(func(txn *Tx) error {
-			b := txn.Bucket("widgets")
+		db.With(func(tx *Tx) error {
+			b := tx.Bucket("widgets")
 			err := b.Delete([]byte("foo"))
 			assert.Equal(t, err, ErrBucketNotWritable)
 			return nil
@@ -120,8 +120,8 @@ func TestBucketNextSequence(t *testing.T) {
 func TestBucketNextSequenceReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.With(func(txn *Tx) error {
-			b := txn.Bucket("widgets")
+		db.With(func(tx *Tx) error {
+			b := tx.Bucket("widgets")
 			i, err := b.NextSequence()
 			assert.Equal(t, i, 0)
 			assert.Equal(t, err, ErrBucketNotWritable)
@@ -134,8 +134,8 @@ func TestBucketNextSequenceReadOnly(t *testing.T) {
 func TestBucketNextSequenceOverflow(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.Do(func(txn *RWTx) error {
-			b := txn.Bucket("widgets")
+		db.Do(func(tx *Tx) error {
+			b := tx.Bucket("widgets")
 			b.bucket.sequence = uint64(maxInt)
 			seq, err := b.NextSequence()
 			assert.Equal(t, err, ErrSequenceOverflow)
@@ -218,31 +218,31 @@ func TestBucketPutKeyTooLarge(t *testing.T) {
 // Ensure a bucket can calculate stats.
 func TestBucketStat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		db.Do(func(txn *RWTx) error {
+		db.Do(func(tx *Tx) error {
 			// Add bucket with lots of keys.
-			txn.CreateBucket("widgets")
-			b := txn.Bucket("widgets")
+			tx.CreateBucket("widgets")
+			b := tx.Bucket("widgets")
 			for i := 0; i < 100000; i++ {
 				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 			}
 
 			// Add bucket with fewer keys but one big value.
-			txn.CreateBucket("woojits")
-			b = txn.Bucket("woojits")
+			tx.CreateBucket("woojits")
+			b = tx.Bucket("woojits")
 			for i := 0; i < 500; i++ {
 				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 			}
 			b.Put([]byte("really-big-value"), []byte(strings.Repeat("*", 10000)))
 
 			// Add a bucket that fits on a single root leaf.
-			txn.CreateBucket("whozawhats")
-			b = txn.Bucket("whozawhats")
+			tx.CreateBucket("whozawhats")
+			b = tx.Bucket("whozawhats")
 			b.Put([]byte("foo"), []byte("bar"))
 
 			return nil
 		})
-		db.With(func(txn *Tx) error {
-			b := txn.Bucket("widgets")
+		db.With(func(tx *Tx) error {
+			b := tx.Bucket("widgets")
 			stat := b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 15)
 			assert.Equal(t, stat.LeafPageCount, 1281)
@@ -250,7 +250,7 @@ func TestBucketStat(t *testing.T) {
 			assert.Equal(t, stat.KeyCount, 100000)
 			assert.Equal(t, stat.MaxDepth, 3)
 
-			b = txn.Bucket("woojits")
+			b = tx.Bucket("woojits")
 			stat = b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 1)
 			assert.Equal(t, stat.LeafPageCount, 6)
@@ -258,7 +258,7 @@ func TestBucketStat(t *testing.T) {
 			assert.Equal(t, stat.KeyCount, 501)
 			assert.Equal(t, stat.MaxDepth, 2)
 
-			b = txn.Bucket("whozawhats")
+			b = tx.Bucket("whozawhats")
 			stat = b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 0)
 			assert.Equal(t, stat.LeafPageCount, 1)
@@ -271,7 +271,7 @@ func TestBucketStat(t *testing.T) {
 	})
 }
 
-// Ensure that a bucket can write random keys and values across multiple txns.
+// Ensure that a bucket can write random keys and values across multiple transactions.
 func TestBucketPutSingle(t *testing.T) {
 	index := 0
 	f := func(items testdata) bool {
@@ -317,16 +317,16 @@ func TestBucketPutMultiple(t *testing.T) {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.CreateBucket("widgets")
-			rwtxn, _ := db.RWTx()
-			b := rwtxn.Bucket("widgets")
+			tx, _ := db.RWTx()
+			b := tx.Bucket("widgets")
 			for _, item := range items {
 				assert.NoError(t, b.Put(item.Key, item.Value))
 			}
-			assert.NoError(t, rwtxn.Commit())
+			assert.NoError(t, tx.Commit())
 
 			// Verify all items exist.
-			txn, _ := db.Tx()
-			b = txn.Bucket("widgets")
+			tx, _ = db.Tx()
+			b = tx.Bucket("widgets")
 			for _, item := range items {
 				value := b.Get(item.Key)
 				if !assert.Equal(t, item.Value, value) {
@@ -334,7 +334,7 @@ func TestBucketPutMultiple(t *testing.T) {
 					t.FailNow()
 				}
 			}
-			txn.Close()
+			tx.Rollback()
 		})
 		fmt.Fprint(os.Stderr, ".")
 		return true
@@ -351,20 +351,20 @@ func TestBucketDeleteQuick(t *testing.T) {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.CreateBucket("widgets")
-			rwtxn, _ := db.RWTx()
-			b := rwtxn.Bucket("widgets")
+			tx, _ := db.RWTx()
+			b := tx.Bucket("widgets")
 			for _, item := range items {
 				assert.NoError(t, b.Put(item.Key, item.Value))
 			}
-			assert.NoError(t, rwtxn.Commit())
+			assert.NoError(t, tx.Commit())
 
 			// Remove items one at a time and check consistency.
 			for i, item := range items {
 				assert.NoError(t, db.Delete("widgets", item.Key))
 
 				// Anything before our deletion index should be nil.
-				txn, _ := db.Tx()
-				b := txn.Bucket("widgets")
+				tx, _ := db.Tx()
+				b := tx.Bucket("widgets")
 				for j, exp := range items {
 					if j > i {
 						value := b.Get(exp.Key)
@@ -378,7 +378,7 @@ func TestBucketDeleteQuick(t *testing.T) {
 						}
 					}
 				}
-				txn.Close()
+				tx.Rollback()
 			}
 		})
 		fmt.Fprint(os.Stderr, ".")

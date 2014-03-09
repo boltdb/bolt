@@ -29,7 +29,7 @@ type DB struct {
 	meta1    *meta
 	pageSize int
 	opened   bool
-	rwtx     *RWTx
+	rwtx     *Tx
 	txs      []*Tx
 	freelist *freelist
 
@@ -290,11 +290,11 @@ func (db *DB) Tx() (*Tx, error) {
 // RWTx creates a read/write transaction.
 // Only one read/write transaction is allowed at a time.
 // You must call Commit() or Rollback() on the transaction to close it.
-func (db *DB) RWTx() (*RWTx, error) {
+func (db *DB) RWTx() (*Tx, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
-	// Obtain writer lock. This is released by the RWTx when it closes.
+	// Obtain writer lock. This is released by the transaction when it closes.
 	db.rwlock.Lock()
 
 	// Exit if the database is not open yet.
@@ -304,7 +304,7 @@ func (db *DB) RWTx() (*RWTx, error) {
 	}
 
 	// Create a transaction associated with the database.
-	t := &RWTx{}
+	t := &Tx{writable: true}
 	t.init(db)
 	db.rwtx = t
 
@@ -331,20 +331,20 @@ func (db *DB) removeTx(t *Tx) {
 	db.mmaplock.RUnlock()
 
 	// Remove the transaction.
-	for i, txn := range db.txs {
-		if txn == t {
+	for i, tx := range db.txs {
+		if tx == t {
 			db.txs = append(db.txs[:i], db.txs[i+1:]...)
 			break
 		}
 	}
 }
 
-// Do executes a function within the context of a RWTx.
+// Do executes a function within the context of a read-write transaction.
 // If no error is returned from the function then the transaction is committed.
 // If an error is returned then the entire transaction is rolled back.
 // Any error that is returned from the function or returned from the commit is
 // returned from the Do() method.
-func (db *DB) Do(fn func(*RWTx) error) error {
+func (db *DB) Do(fn func(*Tx) error) error {
 	t, err := db.RWTx()
 	if err != nil {
 		return err
@@ -366,7 +366,7 @@ func (db *DB) With(fn func(*Tx) error) error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Rollback()
 
 	// If an error is returned from the function then pass it through.
 	return fn(t)
@@ -391,7 +391,7 @@ func (db *DB) Bucket(name string) (*Bucket, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer t.Close()
+	defer t.Rollback()
 	return t.Bucket(name), nil
 }
 
@@ -401,7 +401,7 @@ func (db *DB) Buckets() ([]*Bucket, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer t.Close()
+	defer t.Rollback()
 	return t.Buckets(), nil
 }
 
@@ -409,7 +409,7 @@ func (db *DB) Buckets() ([]*Bucket, error) {
 // This function can return an error if the bucket already exists, if the name
 // is blank, or the bucket name is too long.
 func (db *DB) CreateBucket(name string) error {
-	return db.Do(func(t *RWTx) error {
+	return db.Do(func(t *Tx) error {
 		return t.CreateBucket(name)
 	})
 }
@@ -417,7 +417,7 @@ func (db *DB) CreateBucket(name string) error {
 // CreateBucketIfNotExists creates a new bucket with the given name if it doesn't already exist.
 // This function can return an error if the name is blank, or the bucket name is too long.
 func (db *DB) CreateBucketIfNotExists(name string) error {
-	return db.Do(func(t *RWTx) error {
+	return db.Do(func(t *Tx) error {
 		return t.CreateBucketIfNotExists(name)
 	})
 }
@@ -425,7 +425,7 @@ func (db *DB) CreateBucketIfNotExists(name string) error {
 // DeleteBucket removes a bucket from the database.
 // Returns an error if the bucket does not exist.
 func (db *DB) DeleteBucket(name string) error {
-	return db.Do(func(t *RWTx) error {
+	return db.Do(func(t *Tx) error {
 		return t.DeleteBucket(name)
 	})
 }
@@ -434,7 +434,7 @@ func (db *DB) DeleteBucket(name string) error {
 // This function can return an error if the bucket does not exist.
 func (db *DB) NextSequence(name string) (int, error) {
 	var seq int
-	err := db.Do(func(t *RWTx) error {
+	err := db.Do(func(t *Tx) error {
 		b := t.Bucket(name)
 		if b == nil {
 			return ErrBucketNotFound
@@ -457,17 +457,15 @@ func (db *DB) Get(name string, key []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer t.Close()
+	defer t.Rollback()
 
 	// Open bucket and retrieve value for key.
 	b := t.Bucket(name)
 	if b == nil {
 		return nil, ErrBucketNotFound
 	}
-	value, err := b.Get(key), nil
-	if err != nil {
-		return nil, err
-	} else if value == nil {
+	value := b.Get(key)
+	if value == nil {
 		return nil, nil
 	}
 
@@ -482,7 +480,7 @@ func (db *DB) Get(name string, key []byte) ([]byte, error) {
 // Put sets the value for a key in a bucket.
 // Returns an error if the bucket is not found, if key is blank, if the key is too large, or if the value is too large.
 func (db *DB) Put(name string, key []byte, value []byte) error {
-	return db.Do(func(t *RWTx) error {
+	return db.Do(func(t *Tx) error {
 		b := t.Bucket(name)
 		if b == nil {
 			return ErrBucketNotFound
@@ -494,7 +492,7 @@ func (db *DB) Put(name string, key []byte, value []byte) error {
 // Delete removes a key from a bucket.
 // Returns an error if the bucket cannot be found.
 func (db *DB) Delete(name string, key []byte) error {
-	return db.Do(func(t *RWTx) error {
+	return db.Do(func(t *Tx) error {
 		b := t.Bucket(name)
 		if b == nil {
 			return ErrBucketNotFound
@@ -512,7 +510,7 @@ func (db *DB) Copy(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer t.Close()
+	defer t.Rollback()
 
 	// Open reader on the database.
 	f, err := os.Open(db.path)
@@ -557,7 +555,7 @@ func (db *DB) Stat() (*Stat, error) {
 	db.mmaplock.RUnlock()
 	db.metalock.Unlock()
 
-	err := db.Do(func(t *RWTx) error {
+	err := db.Do(func(t *Tx) error {
 		s.PageCount = int(t.meta.pgid)
 		s.FreePageCount = len(db.freelist.all())
 		s.PageSize = db.pageSize

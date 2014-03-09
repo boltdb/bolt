@@ -9,7 +9,6 @@ type Bucket struct {
 	*bucket
 	name string
 	tx   *Tx
-	rwtx *RWTx
 }
 
 // bucket represents the on-file representation of a bucket.
@@ -25,7 +24,7 @@ func (b *Bucket) Name() string {
 
 // Writable returns whether the bucket is writable.
 func (b *Bucket) Writable() bool {
-	return (b.rwtx != nil)
+	return b.tx.writable
 }
 
 // Cursor creates a cursor associated with the bucket.
@@ -74,7 +73,7 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 	c.Seek(key)
 
 	// Insert the key/value.
-	c.node(b.rwtx).put(key, key, value, 0)
+	c.node(b.tx).put(key, key, value, 0)
 
 	return nil
 }
@@ -92,7 +91,7 @@ func (b *Bucket) Delete(key []byte) error {
 	c.Seek(key)
 
 	// Delete the node if we have a matching key.
-	c.node(b.rwtx).del(key)
+	c.node(b.tx).del(key)
 
 	return nil
 }
