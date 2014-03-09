@@ -9,7 +9,7 @@ import (
 // It also tracks pages that have been freed but are still in use by open transactions.
 type freelist struct {
 	ids     []pgid
-	pending map[txnid][]pgid
+	pending map[txid][]pgid
 }
 
 // all returns a list of all free ids and all pending ids in one sorted list.
@@ -50,19 +50,19 @@ func (f *freelist) allocate(n int) pgid {
 }
 
 // free releases a page and its overflow for a given transaction id.
-func (f *freelist) free(txnid txnid, p *page) {
-	var ids = f.pending[txnid]
+func (f *freelist) free(txid txid, p *page) {
+	var ids = f.pending[txid]
 	_assert(p.id > 1, "cannot free page 0 or 1: %d", p.id)
 	for i := 0; i < int(p.overflow+1); i++ {
 		ids = append(ids, p.id+pgid(i))
 	}
-	f.pending[txnid] = ids
+	f.pending[txid] = ids
 }
 
 // release moves all page ids for a transaction id (or older) to the freelist.
-func (f *freelist) release(txnid txnid) {
+func (f *freelist) release(txid txid) {
 	for tid, ids := range f.pending {
-		if tid <= txnid {
+		if tid <= txid {
 			f.ids = append(f.ids, ids...)
 			delete(f.pending, tid)
 		}

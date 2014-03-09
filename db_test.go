@@ -156,9 +156,9 @@ func TestDBCorruptMeta0(t *testing.T) {
 }
 
 // Ensure that a database cannot open a transaction when it's not open.
-func TestDBTransactionErrDatabaseNotOpen(t *testing.T) {
+func TestDBTxErrDatabaseNotOpen(t *testing.T) {
 	withDB(func(db *DB, path string) {
-		txn, err := db.Transaction()
+		txn, err := db.Tx()
 		assert.Nil(t, txn)
 		assert.Equal(t, err, ErrDatabaseNotOpen)
 	})
@@ -173,9 +173,9 @@ func TestDBDeleteFromMissingBucket(t *testing.T) {
 }
 
 // Ensure a database can provide a transactional block.
-func TestDBTransactionBlock(t *testing.T) {
+func TestDBTxBlock(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		err := db.Do(func(txn *RWTransaction) error {
+		err := db.Do(func(txn *RWTx) error {
 			txn.CreateBucket("widgets")
 			b := txn.Bucket("widgets")
 			b.Put([]byte("foo"), []byte("bar"))
@@ -192,9 +192,9 @@ func TestDBTransactionBlock(t *testing.T) {
 }
 
 // Ensure a closed database returns an error while running a transaction block
-func TestDBTransactionBlockWhileClosed(t *testing.T) {
+func TestDBTxBlockWhileClosed(t *testing.T) {
 	withDB(func(db *DB, path string) {
-		err := db.Do(func(txn *RWTransaction) error {
+		err := db.Do(func(txn *RWTx) error {
 			txn.CreateBucket("widgets")
 			return nil
 		})
@@ -276,7 +276,7 @@ func TestDBCopyFile(t *testing.T) {
 // Ensure the database can return stats about itself.
 func TestDBStat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		db.Do(func(txn *RWTransaction) error {
+		db.Do(func(txn *RWTx) error {
 			txn.CreateBucket("widgets")
 			b := txn.Bucket("widgets")
 			for i := 0; i < 10000; i++ {
@@ -290,9 +290,9 @@ func TestDBStat(t *testing.T) {
 		db.Delete("widgets", []byte("1000"))
 
 		// Open some readers.
-		t0, _ := db.Transaction()
-		t1, _ := db.Transaction()
-		t2, _ := db.Transaction()
+		t0, _ := db.Tx()
+		t1, _ := db.Tx()
+		t2, _ := db.Tx()
 		t2.Close()
 
 		// Obtain stats.
@@ -302,7 +302,7 @@ func TestDBStat(t *testing.T) {
 		assert.Equal(t, stat.FreePageCount, 2)
 		assert.Equal(t, stat.PageSize, 4096)
 		assert.Equal(t, stat.MmapSize, 4194304)
-		assert.Equal(t, stat.TransactionCount, 2)
+		assert.Equal(t, stat.TxCount, 2)
 
 		// Close readers.
 		t0.Close()

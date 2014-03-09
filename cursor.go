@@ -6,18 +6,18 @@ import (
 )
 
 // Cursor represents an iterator that can traverse over all key/value pairs in a bucket in sorted order.
-// Cursors can be obtained from a Transaction and are valid as long as the Transaction is open.
+// Cursors can be obtained from a transaction and are valid as long as the transaction is open.
 type Cursor struct {
-	transaction *Transaction
-	root        pgid
-	stack       []elemRef
+	tx    *Tx
+	root  pgid
+	stack []elemRef
 }
 
 // First moves the cursor to the first item in the bucket and returns its key and value.
 // If the bucket is empty then a nil key and value are returned.
 func (c *Cursor) First() (key []byte, value []byte) {
 	c.stack = c.stack[:0]
-	p, n := c.transaction.pageNode(c.root)
+	p, n := c.tx.pageNode(c.root)
 	c.stack = append(c.stack, elemRef{page: p, node: n, index: 0})
 	c.first()
 	return c.keyValue()
@@ -27,7 +27,7 @@ func (c *Cursor) First() (key []byte, value []byte) {
 // If the bucket is empty then a nil key and value are returned.
 func (c *Cursor) Last() (key []byte, value []byte) {
 	c.stack = c.stack[:0]
-	p, n := c.transaction.pageNode(c.root)
+	p, n := c.tx.pageNode(c.root)
 	ref := elemRef{page: p, node: n}
 	ref.index = ref.count() - 1
 	c.stack = append(c.stack, ref)
@@ -116,7 +116,7 @@ func (c *Cursor) first() {
 		} else {
 			pgid = ref.page.branchPageElement(uint16(ref.index)).pgid
 		}
-		p, n := c.transaction.pageNode(pgid)
+		p, n := c.tx.pageNode(pgid)
 		c.stack = append(c.stack, elemRef{page: p, node: n, index: 0})
 	}
 }
@@ -137,7 +137,7 @@ func (c *Cursor) last() {
 		} else {
 			pgid = ref.page.branchPageElement(uint16(ref.index)).pgid
 		}
-		p, n := c.transaction.pageNode(pgid)
+		p, n := c.tx.pageNode(pgid)
 
 		var nextRef = elemRef{page: p, node: n}
 		nextRef.index = nextRef.count() - 1
@@ -147,7 +147,7 @@ func (c *Cursor) last() {
 
 // search recursively performs a binary search against a given page/node until it finds a given key.
 func (c *Cursor) search(key []byte, pgid pgid) {
-	p, n := c.transaction.pageNode(pgid)
+	p, n := c.tx.pageNode(pgid)
 	if p != nil {
 		_assert((p.flags&(branchPageFlag|leafPageFlag)) != 0, "invalid page type: "+p.typ())
 	}
@@ -251,7 +251,7 @@ func (c *Cursor) keyValue() ([]byte, []byte) {
 }
 
 // node returns the node that the cursor is currently positioned on.
-func (c *Cursor) node(t *RWTransaction) *node {
+func (c *Cursor) node(t *RWTx) *node {
 	_assert(len(c.stack) > 0, "accessing a node with a zero-length cursor stack")
 
 	// If the top of the stack is a leaf node then just return it.

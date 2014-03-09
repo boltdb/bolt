@@ -9,31 +9,31 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Ensure that a RWTransaction can be retrieved.
-func TestRWTransaction(t *testing.T) {
+// Ensure that a RWTx can be retrieved.
+func TestRWTx(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		txn, err := db.RWTransaction()
+		txn, err := db.RWTx()
 		assert.NotNil(t, txn)
 		assert.NoError(t, err)
 		assert.Equal(t, txn.DB(), db)
 	})
 }
 
-// Ensure that opening a RWTransaction while the DB is closed returns an error.
-func TestRWTransactionOpenWithClosedDB(t *testing.T) {
+// Ensure that opening a RWTx while the DB is closed returns an error.
+func TestRWTxOpenWithClosedDB(t *testing.T) {
 	withDB(func(db *DB, path string) {
-		txn, err := db.RWTransaction()
+		txn, err := db.RWTx()
 		assert.Equal(t, err, ErrDatabaseNotOpen)
 		assert.Nil(t, txn)
 	})
 }
 
 // Ensure that retrieving all buckets returns writable buckets.
-func TestRWTransactionBuckets(t *testing.T) {
+func TestRWTxBuckets(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		db.CreateBucket("woojits")
-		db.Do(func(txn *RWTransaction) error {
+		db.Do(func(txn *RWTx) error {
 			buckets := txn.Buckets()
 			assert.Equal(t, len(buckets), 2)
 			assert.Equal(t, buckets[0].Name(), "widgets")
@@ -50,7 +50,7 @@ func TestRWTransactionBuckets(t *testing.T) {
 }
 
 // Ensure that a bucket can be created and retrieved.
-func TestRWTransactionCreateBucket(t *testing.T) {
+func TestRWTxCreateBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		// Create a bucket.
 		err := db.CreateBucket("widgets")
@@ -64,7 +64,7 @@ func TestRWTransactionCreateBucket(t *testing.T) {
 }
 
 // Ensure that a bucket can be created if it doesn't already exist.
-func TestRWTransactionCreateBucketIfNotExists(t *testing.T) {
+func TestRWTxCreateBucketIfNotExists(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		assert.NoError(t, db.CreateBucketIfNotExists("widgets"))
 		assert.NoError(t, db.CreateBucketIfNotExists("widgets"))
@@ -78,7 +78,7 @@ func TestRWTransactionCreateBucketIfNotExists(t *testing.T) {
 }
 
 // Ensure that a bucket cannot be created twice.
-func TestRWTransactionRecreateBucket(t *testing.T) {
+func TestRWTxRecreateBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		// Create a bucket.
 		err := db.CreateBucket("widgets")
@@ -91,7 +91,7 @@ func TestRWTransactionRecreateBucket(t *testing.T) {
 }
 
 // Ensure that a bucket is created with a non-blank name.
-func TestRWTransactionCreateBucketWithoutName(t *testing.T) {
+func TestRWTxCreateBucketWithoutName(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.CreateBucket("")
 		assert.Equal(t, err, ErrBucketNameRequired)
@@ -99,7 +99,7 @@ func TestRWTransactionCreateBucketWithoutName(t *testing.T) {
 }
 
 // Ensure that a bucket name is not too long.
-func TestRWTransactionCreateBucketWithLongName(t *testing.T) {
+func TestRWTxCreateBucketWithLongName(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.CreateBucket(strings.Repeat("X", 255))
 		assert.NoError(t, err)
@@ -110,7 +110,7 @@ func TestRWTransactionCreateBucketWithLongName(t *testing.T) {
 }
 
 // Ensure that a bucket can be deleted.
-func TestRWTransactionDeleteBucket(t *testing.T) {
+func TestRWTxDeleteBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		// Create a bucket and add a value.
 		db.CreateBucket("widgets")
@@ -136,7 +136,7 @@ func TestRWTransactionDeleteBucket(t *testing.T) {
 }
 
 // Ensure that an error is returned when deleting from a bucket that doesn't exist.
-func TestRWTransactionDeleteBucketNotFound(t *testing.T) {
+func TestRWTxDeleteBucketNotFound(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.DeleteBucket("widgets")
 		assert.Equal(t, err, ErrBucketNotFound)
@@ -144,19 +144,19 @@ func TestRWTransactionDeleteBucketNotFound(t *testing.T) {
 }
 
 // Benchmark the performance of bulk put transactions in random order.
-func BenchmarkRWTransactionPutRandom(b *testing.B) {
+func BenchmarkRWTxPutRandom(b *testing.B) {
 	indexes := rand.Perm(b.N)
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		var txn *RWTransaction
+		var txn *RWTx
 		var bucket *Bucket
 		for i := 0; i < b.N; i++ {
 			if i%1000 == 0 {
 				if txn != nil {
 					txn.Commit()
 				}
-				txn, _ = db.RWTransaction()
+				txn, _ = db.RWTx()
 				bucket = txn.Bucket("widgets")
 			}
 			bucket.Put([]byte(strconv.Itoa(indexes[i])), value)
@@ -166,11 +166,11 @@ func BenchmarkRWTransactionPutRandom(b *testing.B) {
 }
 
 // Benchmark the performance of bulk put transactions in sequential order.
-func BenchmarkRWTransactionPutSequential(b *testing.B) {
+func BenchmarkRWTxPutSequential(b *testing.B) {
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.Do(func(txn *RWTransaction) error {
+		db.Do(func(txn *RWTx) error {
 			bucket := txn.Bucket("widgets")
 			for i := 0; i < b.N; i++ {
 				bucket.Put([]byte(strconv.Itoa(i)), value)

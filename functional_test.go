@@ -12,7 +12,7 @@ import (
 )
 
 // Ensure that multiple threads can use the DB without race detector errors.
-func TestParallelTransactions(t *testing.T) {
+func TestParallelTxs(t *testing.T) {
 	var mutex sync.RWMutex
 
 	err := quick.Check(func(numReaders, batchSize uint, items testdata) bool {
@@ -45,7 +45,7 @@ func TestParallelTransactions(t *testing.T) {
 					go func() {
 						mutex.RLock()
 						local := current
-						txn, err := db.Transaction()
+						txn, err := db.Tx()
 						mutex.RUnlock()
 						if err == ErrDatabaseNotOpen {
 							wg.Done()
@@ -83,7 +83,7 @@ func TestParallelTransactions(t *testing.T) {
 				pending = pending[currentBatchSize:]
 
 				// Start write transaction.
-				txn, err := db.RWTransaction()
+				txn, err := db.RWTx()
 				if !assert.NoError(t, err) {
 					t.FailNow()
 				}
