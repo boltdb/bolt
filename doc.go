@@ -14,14 +14,15 @@ The design of Bolt is based on Howard Chu's LMDB database project.
 
 Basics
 
-There are only a few types in Bolt: DB, Bucket, Tx, RWTx, and Cursor. The DB is
+There are only a few types in Bolt: DB, Bucket, Tx, and Cursor. The DB is
 a collection of buckets and is represented by a single file on disk. A bucket is
 a collection of unique keys that are associated with values.
 
-Txs provide read-only access to data inside the database. They can retrieve
-key/value pairs and can use Cursors to iterate over the entire dataset. RWTxs
-provide read-write access to the database. They can create and delete buckets
-and they can insert and remove keys. Only one RWTx is allowed at a time.
+Transactions provide either read-only or read-write access to the database.
+Read-only transactions can retrieve key/value pairs and can use Cursors to
+iterate over the dataset sequentially. Read-write transactions can create and
+delete buckets and can insert and remove keys. Only one read-write transaction
+is allowed at a time.
 
 
 Caveats

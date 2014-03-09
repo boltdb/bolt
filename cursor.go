@@ -251,7 +251,7 @@ func (c *Cursor) keyValue() ([]byte, []byte) {
 }
 
 // node returns the node that the cursor is currently positioned on.
-func (c *Cursor) node(t *RWTx) *node {
+func (c *Cursor) node(t *Tx) *node {
 	_assert(len(c.stack) > 0, "accessing a node with a zero-length cursor stack")
 
 	// If the top of the stack is a leaf node then just return it.

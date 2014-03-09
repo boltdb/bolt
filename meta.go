@@ -36,7 +36,7 @@ func (m *meta) copy(dest *meta) {
 
 // write writes the meta onto a page.
 func (m *meta) write(p *page) {
-	// Page id is either going to be 0 or 1 which we can determine by the Txn ID.
+	// Page id is either going to be 0 or 1 which we can determine by the transaction ID.
 	p.id = pgid(m.txid % 2)
 	p.flags |= metaPageFlag
 
