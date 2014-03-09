@@ -8,14 +8,14 @@ import (
 
 // node represents an in-memory, deserialized page.
 type node struct {
-	transaction *RWTransaction
-	isLeaf      bool
-	unbalanced  bool
-	key         []byte
-	depth       int
-	pgid        pgid
-	parent      *node
-	inodes      inodes
+	tx         *RWTx
+	isLeaf     bool
+	unbalanced bool
+	key        []byte
+	depth      int
+	pgid       pgid
+	parent     *node
+	inodes     inodes
 }
 
 // minKeys returns the minimum number of inodes this node should have.
@@ -56,7 +56,7 @@ func (n *node) root() *node {
 // childAt returns the child node at a given index.
 func (n *node) childAt(index int) *node {
 	_assert(!n.isLeaf, "invalid childAt(%d) on a leaf node", index)
-	return n.transaction.node(n.inodes[index].pgid, n)
+	return n.tx.node(n.inodes[index].pgid, n)
 }
 
 // childIndex returns the index of a given child node.
@@ -214,7 +214,7 @@ func (n *node) split(pageSize int) []*node {
 		if len(current.inodes) >= minKeysPerPage && i < len(inodes)-minKeysPerPage && size+elemSize > threshold {
 			size = pageHeaderSize
 			nodes = append(nodes, current)
-			current = &node{transaction: n.transaction, isLeaf: n.isLeaf}
+			current = &node{tx: n.tx, isLeaf: n.isLeaf}
 		}
 
 		size += elemSize
@@ -234,7 +234,7 @@ func (n *node) rebalance() {
 	n.unbalanced = false
 
 	// Ignore if node is above threshold (25%) and has enough keys.
-	var threshold = n.transaction.db.pageSize / 4
+	var threshold = n.tx.db.pageSize / 4
 	if n.size() > threshold && len(n.inodes) > n.minKeys() {
 		return
 	}
@@ -244,20 +244,20 @@ func (n *node) rebalance() {
 		// If root node is a branch and only has one node then collapse it.
 		if !n.isLeaf && len(n.inodes) == 1 {
 			// Move child's children up.
-			child := n.transaction.nodes[n.inodes[0].pgid]
+			child := n.tx.nodes[n.inodes[0].pgid]
 			n.isLeaf = child.isLeaf
 			n.inodes = child.inodes[:]
 
 			// Reparent all child nodes being moved.
 			for _, inode := range n.inodes {
-				if child, ok := n.transaction.nodes[inode.pgid]; ok {
+				if child, ok := n.tx.nodes[inode.pgid]; ok {
 					child.parent = n
 				}
 			}
 
 			// Remove old child.
 			child.parent = nil
-			delete(n.transaction.nodes, child.pgid)
+			delete(n.tx.nodes, child.pgid)
 		}
 
 		return
@@ -278,7 +278,7 @@ func (n *node) rebalance() {
 	if target.numChildren() > target.minKeys() {
 		if useNextSibling {
 			// Reparent and move node.
-			if child, ok := n.transaction.nodes[target.inodes[0].pgid]; ok {
+			if child, ok := n.tx.nodes[target.inodes[0].pgid]; ok {
 				child.parent = n
 			}
 			n.inodes = append(n.inodes, target.inodes[0])
@@ -289,7 +289,7 @@ func (n *node) rebalance() {
 			target.key = target.inodes[0].key
 		} else {
 			// Reparent and move node.
-			if child, ok := n.transaction.nodes[target.inodes[len(target.inodes)-1].pgid]; ok {
+			if child, ok := n.tx.nodes[target.inodes[len(target.inodes)-1].pgid]; ok {
 				child.parent = n
 			}
 			n.inodes = append(n.inodes, inode{})
@@ -309,7 +309,7 @@ func (n *node) rebalance() {
 	if useNextSibling {
 		// Reparent all child nodes being moved.
 		for _, inode := range target.inodes {
-			if child, ok := n.transaction.nodes[inode.pgid]; ok {
+			if child, ok := n.tx.nodes[inode.pgid]; ok {
 				child.parent = n
 			}
 		}
@@ -317,11 +317,11 @@ func (n *node) rebalance() {
 		// Copy over inodes from target and remove target.
 		n.inodes = append(n.inodes, target.inodes...)
 		n.parent.del(target.key)
-		delete(n.transaction.nodes, target.pgid)
+		delete(n.tx.nodes, target.pgid)
 	} else {
 		// Reparent all child nodes being moved.
 		for _, inode := range n.inodes {
-			if child, ok := n.transaction.nodes[inode.pgid]; ok {
+			if child, ok := n.tx.nodes[inode.pgid]; ok {
 				child.parent = target
 			}
 		}
@@ -330,7 +330,7 @@ func (n *node) rebalance() {
 		target.inodes = append(target.inodes, n.inodes...)
 		n.parent.del(n.key)
 		n.parent.put(target.key, target.inodes[0].key, nil, target.pgid)
-		delete(n.transaction.nodes, n.pgid)
+		delete(n.tx.nodes, n.pgid)
 	}
 
 	// Either this node or the target node was deleted from the parent so rebalance it.

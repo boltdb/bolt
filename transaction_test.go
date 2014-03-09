@@ -14,7 +14,7 @@ import (
 )
 
 // Ensure that the database can retrieve a list of buckets.
-func TestTransactionBuckets(t *testing.T) {
+func TestTxBuckets(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("foo")
 		db.CreateBucket("bar")
@@ -28,8 +28,8 @@ func TestTransactionBuckets(t *testing.T) {
 	})
 }
 
-// Ensure that a Transaction can retrieve a bucket.
-func TestTransactionBucketMissing(t *testing.T) {
+// Ensure that a Tx can retrieve a bucket.
+func TestTxBucketMissing(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		b, err := db.Bucket("widgets")
@@ -40,8 +40,8 @@ func TestTransactionBucketMissing(t *testing.T) {
 	})
 }
 
-// Ensure that a Transaction retrieving a non-existent key returns nil.
-func TestTransactionGetMissing(t *testing.T) {
+// Ensure that a Tx retrieving a non-existent key returns nil.
+func TestTxGetMissing(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		db.Put("widgets", []byte("foo"), []byte("bar"))
@@ -51,11 +51,11 @@ func TestTransactionGetMissing(t *testing.T) {
 	})
 }
 
-// Ensure that a Transaction cursor can iterate over an empty bucket without error.
-func TestTransactionCursorEmptyBucket(t *testing.T) {
+// Ensure that a Tx cursor can iterate over an empty bucket without error.
+func TestTxCursorEmptyBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		txn, _ := db.Transaction()
+		txn, _ := db.Tx()
 		c := txn.Bucket("widgets").Cursor()
 		k, v := c.First()
 		assert.Nil(t, k)
@@ -64,14 +64,14 @@ func TestTransactionCursorEmptyBucket(t *testing.T) {
 	})
 }
 
-// Ensure that a Transaction cursor can iterate over a single root with a couple elements.
-func TestTransactionCursorLeafRoot(t *testing.T) {
+// Ensure that a Tx cursor can iterate over a single root with a couple elements.
+func TestTxCursorLeafRoot(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		db.Put("widgets", []byte("baz"), []byte{})
 		db.Put("widgets", []byte("foo"), []byte{0})
 		db.Put("widgets", []byte("bar"), []byte{1})
-		txn, _ := db.Transaction()
+		txn, _ := db.Tx()
 		c := txn.Bucket("widgets").Cursor()
 
 		k, v := c.First()
@@ -98,14 +98,14 @@ func TestTransactionCursorLeafRoot(t *testing.T) {
 	})
 }
 
-// Ensure that a Transaction cursor can iterate in reverse over a single root with a couple elements.
-func TestTransactionCursorLeafRootReverse(t *testing.T) {
+// Ensure that a Tx cursor can iterate in reverse over a single root with a couple elements.
+func TestTxCursorLeafRootReverse(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		db.Put("widgets", []byte("baz"), []byte{})
 		db.Put("widgets", []byte("foo"), []byte{0})
 		db.Put("widgets", []byte("bar"), []byte{1})
-		txn, _ := db.Transaction()
+		txn, _ := db.Tx()
 		c := txn.Bucket("widgets").Cursor()
 
 		k, v := c.Last()
@@ -132,14 +132,14 @@ func TestTransactionCursorLeafRootReverse(t *testing.T) {
 	})
 }
 
-// Ensure that a Transaction cursor can restart from the beginning.
-func TestTransactionCursorRestart(t *testing.T) {
+// Ensure that a Tx cursor can restart from the beginning.
+func TestTxCursorRestart(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
 		db.Put("widgets", []byte("bar"), []byte{})
 		db.Put("widgets", []byte("foo"), []byte{})
 
-		txn, _ := db.Transaction()
+		txn, _ := db.Tx()
 		c := txn.Bucket("widgets").Cursor()
 
 		k, _ := c.First()
@@ -158,13 +158,13 @@ func TestTransactionCursorRestart(t *testing.T) {
 	})
 }
 
-// Ensure that a transaction can iterate over all elements in a bucket.
-func TestTransactionCursorIterate(t *testing.T) {
+// Ensure that a Tx can iterate over all elements in a bucket.
+func TestTxCursorIterate(t *testing.T) {
 	f := func(items testdata) bool {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.CreateBucket("widgets")
-			rwtxn, _ := db.RWTransaction()
+			rwtxn, _ := db.RWTx()
 			b := rwtxn.Bucket("widgets")
 			for _, item := range items {
 				assert.NoError(t, b.Put(item.Key, item.Value))
@@ -176,7 +176,7 @@ func TestTransactionCursorIterate(t *testing.T) {
 
 			// Iterate over all items and check consistency.
 			var index = 0
-			txn, _ := db.Transaction()
+			txn, _ := db.Tx()
 			c := txn.Bucket("widgets").Cursor()
 			for k, v := c.First(); k != nil && index < len(items); k, v = c.Next() {
 				assert.Equal(t, k, items[index].Key)
@@ -196,12 +196,12 @@ func TestTransactionCursorIterate(t *testing.T) {
 }
 
 // Ensure that a transaction can iterate over all elements in a bucket in reverse.
-func TestTransactionCursorIterateReverse(t *testing.T) {
+func TestTxCursorIterateReverse(t *testing.T) {
 	f := func(items testdata) bool {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.CreateBucket("widgets")
-			rwtxn, _ := db.RWTransaction()
+			rwtxn, _ := db.RWTx()
 			b := rwtxn.Bucket("widgets")
 			for _, item := range items {
 				assert.NoError(t, b.Put(item.Key, item.Value))
@@ -213,7 +213,7 @@ func TestTransactionCursorIterateReverse(t *testing.T) {
 
 			// Iterate over all items and check consistency.
 			var index = 0
-			txn, _ := db.Transaction()
+			txn, _ := db.Tx()
 			c := txn.Bucket("widgets").Cursor()
 			for k, v := c.Last(); k != nil && index < len(items); k, v = c.Prev() {
 				assert.Equal(t, k, items[index].Key)
@@ -233,14 +233,14 @@ func TestTransactionCursorIterateReverse(t *testing.T) {
 }
 
 // Benchmark the performance iterating over a cursor.
-func BenchmarkTransactionCursor(b *testing.B) {
+func BenchmarkTxCursor(b *testing.B) {
 	indexes := rand.Perm(b.N)
 	value := []byte(strings.Repeat("0", 64))
 
 	withOpenDB(func(db *DB, path string) {
 		// Write data to bucket.
 		db.CreateBucket("widgets")
-		db.Do(func(txn *RWTransaction) error {
+		db.Do(func(txn *RWTx) error {
 			bucket := txn.Bucket("widgets")
 			for i := 0; i < b.N; i++ {
 				bucket.Put([]byte(strconv.Itoa(indexes[i])), value)
@@ -250,7 +250,7 @@ func BenchmarkTransactionCursor(b *testing.B) {
 		b.ResetTimer()
 
 		// Iterate over bucket using cursor.
-		db.With(func(txn *Transaction) error {
+		db.With(func(txn *Tx) error {
 			count := 0
 			c := txn.Bucket("widgets").Cursor()
 			for k, _ := c.First(); k != nil; k, _ = c.Next() {

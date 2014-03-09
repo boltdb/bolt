@@ -1,26 +1,26 @@
 package bolt
 
-// Transaction represents a read-only transaction on the database.
+// Tx represents a read-only transaction on the database.
 // It can be used for retrieving values for keys as well as creating cursors for
 // iterating over the data.
 //
 // IMPORTANT: You must close transactions when you are done with them. Pages
 // can not be reclaimed by the writer until no more transactions are using them.
 // A long running read transaction can cause the database to quickly grow.
-type Transaction struct {
-	db            *DB
-	rwtransaction *RWTransaction
-	meta          *meta
-	buckets       *buckets
-	nodes         map[pgid]*node
-	pages         map[pgid]*page
+type Tx struct {
+	db      *DB
+	rwtx    *RWTx
+	meta    *meta
+	buckets *buckets
+	nodes   map[pgid]*node
+	pages   map[pgid]*page
 }
 
-// txnid represents the internal transaction identifier.
-type txnid uint64
+// txid represents the internal transaction identifier.
+type txid uint64
 
 // init initializes the transaction and associates it with a database.
-func (t *Transaction) init(db *DB) {
+func (t *Tx) init(db *DB) {
 	t.db = db
 	t.pages = nil
 
@@ -34,52 +34,52 @@ func (t *Transaction) init(db *DB) {
 }
 
 // id returns the transaction id.
-func (t *Transaction) id() txnid {
-	return t.meta.txnid
+func (t *Tx) id() txid {
+	return t.meta.txid
 }
 
 // Close closes the transaction and releases any pages it is using.
-func (t *Transaction) Close() {
+func (t *Tx) Close() {
 	if t.db != nil {
-		if t.rwtransaction != nil {
-			t.rwtransaction.Rollback()
+		if t.rwtx != nil {
+			t.rwtx.Rollback()
 		} else {
-			t.db.removeTransaction(t)
+			t.db.removeTx(t)
 			t.db = nil
 		}
 	}
 }
 
 // DB returns a reference to the database that created the transaction.
-func (t *Transaction) DB() *DB {
+func (t *Tx) DB() *DB {
 	return t.db
 }
 
 // Bucket retrieves a bucket by name.
 // Returns nil if the bucket does not exist.
-func (t *Transaction) Bucket(name string) *Bucket {
+func (t *Tx) Bucket(name string) *Bucket {
 	b := t.buckets.get(name)
 	if b == nil {
 		return nil
 	}
 
 	return &Bucket{
-		bucket:        b,
-		name:          name,
-		transaction:   t,
-		rwtransaction: t.rwtransaction,
+		bucket: b,
+		name:   name,
+		tx:     t,
+		rwtx:   t.rwtx,
 	}
 }
 
 // Buckets retrieves a list of all buckets.
-func (t *Transaction) Buckets() []*Bucket {
+func (t *Tx) Buckets() []*Bucket {
 	buckets := make([]*Bucket, 0, len(t.buckets.items))
 	for name, b := range t.buckets.items {
 		bucket := &Bucket{
-			bucket:        b,
-			name:          name,
-			transaction:   t,
-			rwtransaction: t.rwtransaction,
+			bucket: b,
+			name:   name,
+			tx:     t,
+			rwtx:   t.rwtx,
 		}
 		buckets = append(buckets, bucket)
 	}
@@ -88,7 +88,7 @@ func (t *Transaction) Buckets() []*Bucket {
 
 // page returns a reference to the page with a given id.
 // If page has been written to then a temporary bufferred page is returned.
-func (t *Transaction) page(id pgid) *page {
+func (t *Tx) page(id pgid) *page {
 	// Check the dirty pages first.
 	if t.pages != nil {
 		if p, ok := t.pages[id]; ok {
@@ -101,7 +101,7 @@ func (t *Transaction) page(id pgid) *page {
 }
 
 // node returns a reference to the in-memory node for a given page, if it exists.
-func (t *Transaction) node(id pgid) *node {
+func (t *Tx) node(id pgid) *node {
 	if t.nodes == nil {
 		return nil
 	}
@@ -110,7 +110,7 @@ func (t *Transaction) node(id pgid) *node {
 
 // pageNode returns the in-memory node, if it exists.
 // Otherwise returns the underlying page.
-func (t *Transaction) pageNode(id pgid) (*page, *node) {
+func (t *Tx) pageNode(id pgid) (*page, *node) {
 	if n := t.node(id); n != nil {
 		return nil, n
 	}
@@ -118,7 +118,7 @@ func (t *Transaction) pageNode(id pgid) (*page, *node) {
 }
 
 // forEachPage iterates over every page within a given page and executes a function.
-func (t *Transaction) forEachPage(pgid pgid, depth int, fn func(*page, int)) {
+func (t *Tx) forEachPage(pgid pgid, depth int, fn func(*page, int)) {
 	p := t.page(pgid)
 
 	// Execute function.

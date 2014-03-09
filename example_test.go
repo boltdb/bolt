@@ -67,7 +67,7 @@ func ExampleDB_Do() {
 	defer db.Close()
 
 	// Execute several commands within a write transaction.
-	err := db.Do(func(t *RWTransaction) error {
+	err := db.Do(func(t *RWTx) error {
 		if err := t.CreateBucket("widgets"); err != nil {
 			return err
 		}
@@ -100,7 +100,7 @@ func ExampleDB_With() {
 	db.Put("people", []byte("susy"), []byte("que"))
 
 	// Access data from within a read-only transactional block.
-	db.With(func(t *Transaction) error {
+	db.With(func(t *Tx) error {
 		v := t.Bucket("people").Get([]byte("john"))
 		fmt.Printf("John's last name is %s.\n", string(v))
 		return nil
@@ -134,17 +134,17 @@ func ExampleDB_ForEach() {
 	// A liger is awesome.
 }
 
-func ExampleRWTransaction() {
+func ExampleRWTx() {
 	// Open the database.
 	var db DB
-	db.Open("/tmp/bolt/rwtransaction.db", 0666)
+	db.Open("/tmp/bolt/rwtx.db", 0666)
 	defer db.Close()
 
 	// Create a bucket.
 	db.CreateBucket("widgets")
 
 	// Create several keys in a transaction.
-	rwtxn, _ := db.RWTransaction()
+	rwtxn, _ := db.RWTx()
 	b := rwtxn.Bucket("widgets")
 	b.Put([]byte("john"), []byte("blue"))
 	b.Put([]byte("abby"), []byte("red"))
@@ -152,7 +152,7 @@ func ExampleRWTransaction() {
 	rwtxn.Commit()
 
 	// Iterate over the values in sorted key order.
-	txn, _ := db.Transaction()
+	txn, _ := db.Tx()
 	c := txn.Bucket("widgets").Cursor()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		fmt.Printf("%s likes %s\n", string(k), string(v))
@@ -165,10 +165,10 @@ func ExampleRWTransaction() {
 	// zephyr likes purple
 }
 
-func ExampleRWTransaction_rollback() {
+func ExampleRWTx_rollback() {
 	// Open the database.
 	var db DB
-	db.Open("/tmp/bolt/rwtransaction_rollback.db", 0666)
+	db.Open("/tmp/bolt/rwtx_rollback.db", 0666)
 	defer db.Close()
 
 	// Create a bucket.
@@ -178,7 +178,7 @@ func ExampleRWTransaction_rollback() {
 	db.Put("widgets", []byte("foo"), []byte("bar"))
 
 	// Update the key but rollback the transaction so it never saves.
-	rwtxn, _ := db.RWTransaction()
+	rwtxn, _ := db.RWTx()
 	b := rwtxn.Bucket("widgets")
 	b.Put([]byte("foo"), []byte("baz"))
 	rwtxn.Rollback()

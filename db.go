@@ -19,19 +19,19 @@ const maxMmapStep = 1 << 30 // 1GB
 // All data access is performed through transactions which can be obtained through the DB.
 // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
 type DB struct {
-	os            _os
-	syscall       _syscall
-	path          string
-	file          file
-	metafile      file
-	data          []byte
-	meta0         *meta
-	meta1         *meta
-	pageSize      int
-	opened        bool
-	rwtransaction *RWTransaction
-	transactions  []*Transaction
-	freelist      *freelist
+	os       _os
+	syscall  _syscall
+	path     string
+	file     file
+	metafile file
+	data     []byte
+	meta0    *meta
+	meta1    *meta
+	pageSize int
+	opened   bool
+	rwtx     *RWTx
+	txs      []*Tx
+	freelist *freelist
 
 	rwlock   sync.Mutex   // Allows only one writer at a time.
 	metalock sync.Mutex   // Protects meta page access.
@@ -112,7 +112,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 	}
 
 	// Read in the freelist.
-	db.freelist = &freelist{pending: make(map[txnid][]pgid)}
+	db.freelist = &freelist{pending: make(map[txid][]pgid)}
 	db.freelist.read(db.page(db.meta().freelist))
 
 	// Mark the database as opened and return.
@@ -127,8 +127,8 @@ func (db *DB) mmap(minsz int) error {
 	defer db.mmaplock.Unlock()
 
 	// Dereference all mmap references before unmapping.
-	if db.rwtransaction != nil {
-		db.rwtransaction.dereference()
+	if db.rwtx != nil {
+		db.rwtx.dereference()
 	}
 
 	// Unmap existing data before continuing.
@@ -218,7 +218,7 @@ func (db *DB) init() error {
 		m.freelist = 2
 		m.buckets = 3
 		m.pgid = 4
-		m.txnid = txnid(i)
+		m.txid = txid(i)
 	}
 
 	// Write an empty freelist at page 3.
@@ -259,11 +259,11 @@ func (db *DB) close() {
 	db.munmap()
 }
 
-// Transaction creates a read-only transaction.
+// Tx creates a read-only transaction.
 // Multiple read-only transactions can be used concurrently.
 //
 // IMPORTANT: You must close the transaction after you are finished or else the database will not reclaim old pages.
-func (db *DB) Transaction() (*Transaction, error) {
+func (db *DB) Tx() (*Tx, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
@@ -278,23 +278,23 @@ func (db *DB) Transaction() (*Transaction, error) {
 	}
 
 	// Create a transaction associated with the database.
-	t := &Transaction{}
+	t := &Tx{}
 	t.init(db)
 
 	// Keep track of transaction until it closes.
-	db.transactions = append(db.transactions, t)
+	db.txs = append(db.txs, t)
 
 	return t, nil
 }
 
-// RWTransaction creates a read/write transaction.
+// RWTx creates a read/write transaction.
 // Only one read/write transaction is allowed at a time.
 // You must call Commit() or Rollback() on the transaction to close it.
-func (db *DB) RWTransaction() (*RWTransaction, error) {
+func (db *DB) RWTx() (*RWTx, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
-	// Obtain writer lock. This is released by the RWTransaction when it closes.
+	// Obtain writer lock. This is released by the RWTx when it closes.
 	db.rwlock.Lock()
 
 	// Exit if the database is not open yet.
@@ -304,13 +304,13 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 	}
 
 	// Create a transaction associated with the database.
-	t := &RWTransaction{}
+	t := &RWTx{}
 	t.init(db)
-	db.rwtransaction = t
+	db.rwtx = t
 
 	// Free any pages associated with closed read-only transactions.
-	var minid txnid = 0xFFFFFFFFFFFFFFFF
-	for _, t := range db.transactions {
+	var minid txid = 0xFFFFFFFFFFFFFFFF
+	for _, t := range db.txs {
 		if t.id() < minid {
 			minid = t.id()
 		}
@@ -322,8 +322,8 @@ func (db *DB) RWTransaction() (*RWTransaction, error) {
 	return t, nil
 }
 
-// removeTransaction removes a transaction from the database.
-func (db *DB) removeTransaction(t *Transaction) {
+// removeTx removes a transaction from the database.
+func (db *DB) removeTx(t *Tx) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
@@ -331,21 +331,21 @@ func (db *DB) removeTransaction(t *Transaction) {
 	db.mmaplock.RUnlock()
 
 	// Remove the transaction.
-	for i, txn := range db.transactions {
+	for i, txn := range db.txs {
 		if txn == t {
-			db.transactions = append(db.transactions[:i], db.transactions[i+1:]...)
+			db.txs = append(db.txs[:i], db.txs[i+1:]...)
 			break
 		}
 	}
 }
 
-// Do executes a function within the context of a RWTransaction.
+// Do executes a function within the context of a RWTx.
 // If no error is returned from the function then the transaction is committed.
 // If an error is returned then the entire transaction is rolled back.
 // Any error that is returned from the function or returned from the commit is
 // returned from the Do() method.
-func (db *DB) Do(fn func(*RWTransaction) error) error {
-	t, err := db.RWTransaction()
+func (db *DB) Do(fn func(*RWTx) error) error {
+	t, err := db.RWTx()
 	if err != nil {
 		return err
 	}
@@ -359,10 +359,10 @@ func (db *DB) Do(fn func(*RWTransaction) error) error {
 	return t.Commit()
 }
 
-// With executes a function within the context of a Transaction.
+// With executes a function within the context of a transaction.
 // Any error that is returned from the function is returned from the With() method.
-func (db *DB) With(fn func(*Transaction) error) error {
-	t, err := db.Transaction()
+func (db *DB) With(fn func(*Tx) error) error {
+	t, err := db.Tx()
 	if err != nil {
 		return err
 	}
@@ -375,7 +375,7 @@ func (db *DB) With(fn func(*Transaction) error) error {
 // ForEach executes a function for each key/value pair in a bucket.
 // An error is returned if the bucket cannot be found.
 func (db *DB) ForEach(name string, fn func(k, v []byte) error) error {
-	return db.With(func(t *Transaction) error {
+	return db.With(func(t *Tx) error {
 		b := t.Bucket(name)
 		if b == nil {
 			return ErrBucketNotFound
@@ -387,7 +387,7 @@ func (db *DB) ForEach(name string, fn func(k, v []byte) error) error {
 // Bucket retrieves a reference to a bucket.
 // This is typically useful for checking the existence of a bucket.
 func (db *DB) Bucket(name string) (*Bucket, error) {
-	t, err := db.Transaction()
+	t, err := db.Tx()
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +397,7 @@ func (db *DB) Bucket(name string) (*Bucket, error) {
 
 // Buckets retrieves a list of all buckets in the database.
 func (db *DB) Buckets() ([]*Bucket, error) {
-	t, err := db.Transaction()
+	t, err := db.Tx()
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +409,7 @@ func (db *DB) Buckets() ([]*Bucket, error) {
 // This function can return an error if the bucket already exists, if the name
 // is blank, or the bucket name is too long.
 func (db *DB) CreateBucket(name string) error {
-	return db.Do(func(t *RWTransaction) error {
+	return db.Do(func(t *RWTx) error {
 		return t.CreateBucket(name)
 	})
 }
@@ -417,7 +417,7 @@ func (db *DB) CreateBucket(name string) error {
 // CreateBucketIfNotExists creates a new bucket with the given name if it doesn't already exist.
 // This function can return an error if the name is blank, or the bucket name is too long.
 func (db *DB) CreateBucketIfNotExists(name string) error {
-	return db.Do(func(t *RWTransaction) error {
+	return db.Do(func(t *RWTx) error {
 		return t.CreateBucketIfNotExists(name)
 	})
 }
@@ -425,7 +425,7 @@ func (db *DB) CreateBucketIfNotExists(name string) error {
 // DeleteBucket removes a bucket from the database.
 // Returns an error if the bucket does not exist.
 func (db *DB) DeleteBucket(name string) error {
-	return db.Do(func(t *RWTransaction) error {
+	return db.Do(func(t *RWTx) error {
 		return t.DeleteBucket(name)
 	})
 }
@@ -434,7 +434,7 @@ func (db *DB) DeleteBucket(name string) error {
 // This function can return an error if the bucket does not exist.
 func (db *DB) NextSequence(name string) (int, error) {
 	var seq int
-	err := db.Do(func(t *RWTransaction) error {
+	err := db.Do(func(t *RWTx) error {
 		b := t.Bucket(name)
 		if b == nil {
 			return ErrBucketNotFound
@@ -453,7 +453,7 @@ func (db *DB) NextSequence(name string) (int, error) {
 // Get retrieves the value for a key in a bucket.
 // Returns an error if the key does not exist.
 func (db *DB) Get(name string, key []byte) ([]byte, error) {
-	t, err := db.Transaction()
+	t, err := db.Tx()
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +482,7 @@ func (db *DB) Get(name string, key []byte) ([]byte, error) {
 // Put sets the value for a key in a bucket.
 // Returns an error if the bucket is not found, if key is blank, if the key is too large, or if the value is too large.
 func (db *DB) Put(name string, key []byte, value []byte) error {
-	return db.Do(func(t *RWTransaction) error {
+	return db.Do(func(t *RWTx) error {
 		b := t.Bucket(name)
 		if b == nil {
 			return ErrBucketNotFound
@@ -494,7 +494,7 @@ func (db *DB) Put(name string, key []byte, value []byte) error {
 // Delete removes a key from a bucket.
 // Returns an error if the bucket cannot be found.
 func (db *DB) Delete(name string, key []byte) error {
-	return db.Do(func(t *RWTransaction) error {
+	return db.Do(func(t *RWTx) error {
 		b := t.Bucket(name)
 		if b == nil {
 			return ErrBucketNotFound
@@ -508,7 +508,7 @@ func (db *DB) Delete(name string, key []byte) error {
 // using the database while a copy is in progress.
 func (db *DB) Copy(w io.Writer) error {
 	// Maintain a reader transaction so pages don't get reclaimed.
-	t, err := db.Transaction()
+	t, err := db.Tx()
 	if err != nil {
 		return err
 	}
@@ -549,15 +549,15 @@ func (db *DB) Stat() (*Stat, error) {
 	db.mmaplock.RLock()
 
 	var s = &Stat{
-		MmapSize:         len(db.data),
-		TransactionCount: len(db.transactions),
+		MmapSize: len(db.data),
+		TxCount:  len(db.txs),
 	}
 
 	// Release locks.
 	db.mmaplock.RUnlock()
 	db.metalock.Unlock()
 
-	err := db.Do(func(t *RWTransaction) error {
+	err := db.Do(func(t *RWTx) error {
 		s.PageCount = int(t.meta.pgid)
 		s.FreePageCount = len(db.freelist.all())
 		s.PageSize = db.pageSize
@@ -582,7 +582,7 @@ func (db *DB) pageInBuffer(b []byte, id pgid) *page {
 
 // meta retrieves the current meta page reference.
 func (db *DB) meta() *meta {
-	if db.meta0.txnid > db.meta1.txnid {
+	if db.meta0.txid > db.meta1.txid {
 		return db.meta0
 	}
 	return db.meta1
@@ -601,7 +601,7 @@ func (db *DB) allocate(count int) (*page, error) {
 	}
 
 	// Resize mmap() if we're at the end.
-	p.id = db.rwtransaction.meta.pgid
+	p.id = db.rwtx.meta.pgid
 	var minsz = int((p.id+pgid(count))+1) * db.pageSize
 	if minsz >= len(db.data) {
 		if err := db.mmap(minsz); err != nil {
@@ -610,7 +610,7 @@ func (db *DB) allocate(count int) (*page, error) {
 	}
 
 	// Move the page id high water mark.
-	db.rwtransaction.meta.pgid += pgid(count)
+	db.rwtx.meta.pgid += pgid(count)
 
 	return p, nil
 }
@@ -634,6 +634,6 @@ type Stat struct {
 	// resize it.
 	MmapSize int
 
-	// TransactionCount is the total number of reader transactions.
-	TransactionCount int
+	// TxCount is the total number of reader transactions.
+	TxCount int
 }

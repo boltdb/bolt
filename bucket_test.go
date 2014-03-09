@@ -27,7 +27,7 @@ func TestBucketGetNonExistent(t *testing.T) {
 func TestBucketGetFromNode(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.Do(func(txn *RWTransaction) error {
+		db.Do(func(txn *RWTx) error {
 			b := txn.Bucket("widgets")
 			b.Put([]byte("foo"), []byte("bar"))
 			value := b.Get([]byte("foo"))
@@ -54,7 +54,7 @@ func TestBucketPut(t *testing.T) {
 func TestBucketPutReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.With(func(txn *Transaction) error {
+		db.With(func(txn *Tx) error {
 			b := txn.Bucket("widgets")
 			err := b.Put([]byte("foo"), []byte("bar"))
 			assert.Equal(t, err, ErrBucketNotWritable)
@@ -81,7 +81,7 @@ func TestBucketDelete(t *testing.T) {
 func TestBucketDeleteReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.With(func(txn *Transaction) error {
+		db.With(func(txn *Tx) error {
 			b := txn.Bucket("widgets")
 			err := b.Delete([]byte("foo"))
 			assert.Equal(t, err, ErrBucketNotWritable)
@@ -120,7 +120,7 @@ func TestBucketNextSequence(t *testing.T) {
 func TestBucketNextSequenceReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.With(func(txn *Transaction) error {
+		db.With(func(txn *Tx) error {
 			b := txn.Bucket("widgets")
 			i, err := b.NextSequence()
 			assert.Equal(t, i, 0)
@@ -134,7 +134,7 @@ func TestBucketNextSequenceReadOnly(t *testing.T) {
 func TestBucketNextSequenceOverflow(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		db.Do(func(txn *RWTransaction) error {
+		db.Do(func(txn *RWTx) error {
 			b := txn.Bucket("widgets")
 			b.bucket.sequence = uint64(maxInt)
 			seq, err := b.NextSequence()
@@ -218,7 +218,7 @@ func TestBucketPutKeyTooLarge(t *testing.T) {
 // Ensure a bucket can calculate stats.
 func TestBucketStat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		db.Do(func(txn *RWTransaction) error {
+		db.Do(func(txn *RWTx) error {
 			// Add bucket with lots of keys.
 			txn.CreateBucket("widgets")
 			b := txn.Bucket("widgets")
@@ -241,7 +241,7 @@ func TestBucketStat(t *testing.T) {
 
 			return nil
 		})
-		db.With(func(txn *Transaction) error {
+		db.With(func(txn *Tx) error {
 			b := txn.Bucket("widgets")
 			stat := b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 15)
@@ -317,7 +317,7 @@ func TestBucketPutMultiple(t *testing.T) {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.CreateBucket("widgets")
-			rwtxn, _ := db.RWTransaction()
+			rwtxn, _ := db.RWTx()
 			b := rwtxn.Bucket("widgets")
 			for _, item := range items {
 				assert.NoError(t, b.Put(item.Key, item.Value))
@@ -325,7 +325,7 @@ func TestBucketPutMultiple(t *testing.T) {
 			assert.NoError(t, rwtxn.Commit())
 
 			// Verify all items exist.
-			txn, _ := db.Transaction()
+			txn, _ := db.Tx()
 			b = txn.Bucket("widgets")
 			for _, item := range items {
 				value := b.Get(item.Key)
@@ -351,7 +351,7 @@ func TestBucketDeleteQuick(t *testing.T) {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.CreateBucket("widgets")
-			rwtxn, _ := db.RWTransaction()
+			rwtxn, _ := db.RWTx()
 			b := rwtxn.Bucket("widgets")
 			for _, item := range items {
 				assert.NoError(t, b.Put(item.Key, item.Value))
@@ -363,7 +363,7 @@ func TestBucketDeleteQuick(t *testing.T) {
 				assert.NoError(t, db.Delete("widgets", item.Key))
 
 				// Anything before our deletion index should be nil.
-				txn, _ := db.Transaction()
+				txn, _ := db.Tx()
 				b := txn.Bucket("widgets")
 				for j, exp := range items {
 					if j > i {
