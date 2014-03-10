@@ -1,4 +1,4 @@
-Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https://drone.io/github.com/boltdb/bolt/latest) [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.png?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.png)](https://godoc.org/github.com/boltdb/bolt) ![Project status](http://img.shields.io/status/alpha.png?color=yellow)
+Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https://drone.io/github.com/boltdb/bolt/latest) [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.png?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.png)](https://godoc.org/github.com/boltdb/bolt) ![Project status](http://img.shields.io/status/beta.png?color=blue)
 ====
 
 ## Overview
@@ -14,7 +14,7 @@ Since Bolt is meant to be used as such a low-level piece of functionality, simpl
 
 ## Project Status
 
-Bolt is functionally complete and has nearly full unit test coverage. The library test suite also includes randomized black box testing to ensure database consistency and thread safety. However, Bolt is a new library so it does not have significant real world usage so please use with caution and report any bugs found.
+Bolt is functionally complete and has nearly full unit test coverage. The library test suite also includes randomized black box testing to ensure database consistency and thread safety. Bolt is currently in use in a few project, however, it is still at a beta stage so please use with caution and report any bugs found.
 
 
 ## Comparing Bolt vs LMDB
