@@ -190,12 +190,27 @@ func TestTxDeleteBucketNotFound(t *testing.T) {
 func TestTxCursorEmptyBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.CreateBucket("widgets")
-		tx, _ := db.Tx()
-		c := tx.Bucket("widgets").Cursor()
-		k, v := c.First()
-		assert.Nil(t, k)
-		assert.Nil(t, v)
-		tx.Commit()
+		db.With(func(tx *Tx) error {
+			c := tx.Bucket("widgets").Cursor()
+			k, v := c.First()
+			assert.Nil(t, k)
+			assert.Nil(t, v)
+			return nil
+		})
+	})
+}
+
+// Ensure that a Tx cursor can reverse iterate over an empty bucket without error.
+func TestCursorEmptyBucketReverse(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.CreateBucket("widgets")
+		db.With(func(tx *Tx) error {
+			c := tx.Bucket("widgets").Cursor()
+			k, v := c.Last()
+			assert.Nil(t, k)
+			assert.Nil(t, v)
+			return nil
+		})
 	})
 }
 
