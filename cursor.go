@@ -235,7 +235,7 @@ func (c *Cursor) nsearch(key []byte) {
 // keyValue returns the key and value of the current leaf element.
 func (c *Cursor) keyValue() ([]byte, []byte) {
 	ref := &c.stack[len(c.stack)-1]
-	if ref.index >= ref.count() {
+	if ref.count() == 0 || ref.index >= ref.count() {
 		return nil, nil
 	}
 
