@@ -217,6 +217,10 @@ func TestBucketPutKeyTooLarge(t *testing.T) {
 
 // Ensure a bucket can calculate stats.
 func TestBucketStat(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	withOpenDB(func(db *DB, path string) {
 		db.Do(func(tx *Tx) error {
 			// Add bucket with lots of keys.
@@ -273,6 +277,10 @@ func TestBucketStat(t *testing.T) {
 
 // Ensure that a bucket can write random keys and values across multiple transactions.
 func TestBucketPutSingle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	index := 0
 	f := func(items testdata) bool {
 		withOpenDB(func(db *DB, path string) {
@@ -313,6 +321,10 @@ func TestBucketPutSingle(t *testing.T) {
 
 // Ensure that a transaction can insert multiple key/value pairs at once.
 func TestBucketPutMultiple(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	f := func(items testdata) bool {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
@@ -347,6 +359,10 @@ func TestBucketPutMultiple(t *testing.T) {
 
 // Ensure that a transaction can delete all key/value pairs and return to a single leaf page.
 func TestBucketDeleteQuick(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	f := func(items testdata) bool {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.

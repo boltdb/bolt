@@ -13,6 +13,10 @@ import (
 
 // Ensure that multiple threads can use the DB without race detector errors.
 func TestParallelTxs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	var mutex sync.RWMutex
 
 	err := quick.Check(func(numReaders, batchSize uint, items testdata) bool {
