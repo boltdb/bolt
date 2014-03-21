@@ -19,11 +19,9 @@ const maxMmapStep = 1 << 30 // 1GB
 // All data access is performed through transactions which can be obtained through the DB.
 // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
 type DB struct {
-	os       _os
-	syscall  _syscall
 	path     string
-	file     file
-	metafile file
+	file     *os.File
+	metafile *os.File
 	data     []byte
 	meta0    *meta
 	meta1    *meta
@@ -60,15 +58,6 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
-	// Initialize OS/Syscall references.
-	// These are overridden by mocks during some tests.
-	if db.os == nil {
-		db.os = &sysos{}
-	}
-	if db.syscall == nil {
-		db.syscall = &syssyscall{}
-	}
-
 	// Exit if the database is currently open.
 	if db.opened {
 		return ErrDatabaseOpen
@@ -76,11 +65,11 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
-	if db.file, err = db.os.OpenFile(db.path, os.O_RDWR|os.O_CREATE, mode); err != nil {
+	if db.file, err = os.OpenFile(db.path, os.O_RDWR|os.O_CREATE, mode); err != nil {
 		db.close()
 		return err
 	}
-	if db.metafile, err = db.os.OpenFile(db.path, os.O_RDWR|os.O_SYNC, mode); err != nil {
+	if db.metafile, err = os.OpenFile(db.path, os.O_RDWR|os.O_SYNC, mode); err != nil {
 		db.close()
 		return err
 	}
@@ -132,7 +121,9 @@ func (db *DB) mmap(minsz int) error {
 	}
 
 	// Unmap existing data before continuing.
-	db.munmap()
+	if err := db.munmap(); err != nil {
+		return err
+	}
 
 	info, err := db.file.Stat()
 	if err != nil {
@@ -149,7 +140,7 @@ func (db *DB) mmap(minsz int) error {
 	size = db.mmapSize(size)
 
 	// Memory-map the data file as a byte slice.
-	if db.data, err = db.syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
+	if db.data, err = syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		return err
 	}
 
@@ -169,13 +160,14 @@ func (db *DB) mmap(minsz int) error {
 }
 
 // munmap unmaps the data file from memory.
-func (db *DB) munmap() {
+func (db *DB) munmap() error {
 	if db.data != nil {
-		if err := db.syscall.Munmap(db.data); err != nil {
-			panic("unmap error: " + err.Error())
+		if err := syscall.Munmap(db.data); err != nil {
+			return fmt.Errorf("unmap error: " + err.Error())
 		}
 		db.data = nil
 	}
+	return nil
 }
 
 // mmapSize determines the appropriate size for the mmap given the current size
@@ -200,7 +192,7 @@ func (db *DB) mmapSize(size int) int {
 // init creates a new database file and initializes its meta pages.
 func (db *DB) init() error {
 	// Set the page size to the OS page size.
-	db.pageSize = db.os.Getpagesize()
+	db.pageSize = os.Getpagesize()
 
 	// Create two meta pages on a buffer.
 	buf := make([]byte, db.pageSize*4)
@@ -243,20 +235,38 @@ func (db *DB) init() error {
 
 // Close releases all database resources.
 // All transactions must be closed before closing the database.
-func (db *DB) Close() {
+func (db *DB) Close() error {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
-	db.close()
+	return db.close()
 }
 
-func (db *DB) close() {
+func (db *DB) close() error {
 	db.opened = false
 
-	// TODO(benbjohnson): Undo everything in Open().
 	db.freelist = nil
 	db.path = ""
 
-	db.munmap()
+	// Close the mmap.
+	if err := db.munmap(); err != nil {
+		return err
+	}
+
+	// Close file handles.
+	if db.file != nil {
+		if err := db.file.Close(); err != nil {
+			return fmt.Errorf("db file close error: %s", err)
+		}
+		db.file = nil
+	}
+	if db.metafile != nil {
+		if err := db.metafile.Close(); err != nil {
+			return fmt.Errorf("db metafile close error: %s", err)
+		}
+		db.metafile = nil
+	}
+
+	return nil
 }
 
 // Tx creates a read-only transaction.
