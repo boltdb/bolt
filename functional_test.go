@@ -28,7 +28,9 @@ func TestParallelTxs(t *testing.T) {
 		var current testdata
 
 		withOpenDB(func(db *DB, path string) {
-			db.CreateBucket("widgets")
+			db.Do(func(tx *Tx) error {
+				return tx.CreateBucket("widgets")
+			})
 
 			// Maintain a set of concurrent readers.
 			var wg sync.WaitGroup

@@ -164,14 +164,6 @@ func TestDBTxErrDatabaseNotOpen(t *testing.T) {
 	})
 }
 
-// Ensure that a delete on a missing bucket returns an error.
-func TestDBDeleteFromMissingBucket(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		err := db.Delete("widgets", []byte("foo"))
-		assert.Equal(t, err, ErrBucketNotFound)
-	})
-}
-
 // Ensure that a read-write transaction can be retrieved.
 func TestDBRWTx(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -204,10 +196,12 @@ func TestDBTxBlock(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		value, _ := db.Get("widgets", []byte("foo"))
-		assert.Nil(t, value)
-		value, _ = db.Get("widgets", []byte("baz"))
-		assert.Equal(t, value, []byte("bat"))
+		err = db.With(func(tx *Tx) error {
+			assert.Nil(t, tx.Bucket("widgets").Get([]byte("foo")))
+			assert.Equal(t, []byte("bat"), tx.Bucket("widgets").Get([]byte("baz")))
+			return nil
+		})
+		assert.NoError(t, err)
 	})
 }
 
@@ -222,63 +216,15 @@ func TestDBTxBlockWhileClosed(t *testing.T) {
 	})
 }
 
-// Ensure a database returns an error when trying to attempt a for each on a missing bucket.
-func TestDBForEachBucketNotFound(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		err := db.ForEach("widgets", func(k, v []byte) error { return nil })
-		assert.Equal(t, err, ErrBucketNotFound)
-	})
-}
-
-// Ensure a closed database returns an error when executing a for each.
-func TestDBForEachWhileClosed(t *testing.T) {
-	withDB(func(db *DB, path string) {
-		err := db.ForEach("widgets", func(k, v []byte) error { return nil })
-		assert.Equal(t, err, ErrDatabaseNotOpen)
-	})
-}
-
-// Ensure a closed database returns an error when finding a bucket.
-func TestDBBucketWhileClosed(t *testing.T) {
-	withDB(func(db *DB, path string) {
-		b, err := db.Bucket("widgets")
-		assert.Equal(t, err, ErrDatabaseNotOpen)
-		assert.Nil(t, b)
-	})
-}
-
-// Ensure a closed database returns an error when finding all buckets.
-func TestDBBucketsWhileClosed(t *testing.T) {
-	withDB(func(db *DB, path string) {
-		b, err := db.Buckets()
-		assert.Equal(t, err, ErrDatabaseNotOpen)
-		assert.Nil(t, b)
-	})
-}
-
-// Ensure a closed database returns an error when getting a key.
-func TestDBGetWhileClosed(t *testing.T) {
-	withDB(func(db *DB, path string) {
-		value, err := db.Get("widgets", []byte("foo"))
-		assert.Equal(t, err, ErrDatabaseNotOpen)
-		assert.Nil(t, value)
-	})
-}
-
-// Ensure that an error is returned when inserting into a bucket that doesn't exist.
-func TestDBPutBucketNotFound(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		err := db.Put("widgets", []byte("foo"), []byte("bar"))
-		assert.Equal(t, err, ErrBucketNotFound)
-	})
-}
-
 // Ensure that the database can be copied to a file path.
 func TestDBCopyFile(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
-		db.Put("widgets", []byte("foo"), []byte("bar"))
-		db.Put("widgets", []byte("baz"), []byte("bat"))
+		db.Do(func(tx *Tx) error {
+			tx.CreateBucket("widgets")
+			tx.Bucket("widgets").Put([]byte("foo"), []byte("bar"))
+			tx.Bucket("widgets").Put([]byte("baz"), []byte("bat"))
+			return nil
+		})
 		assert.NoError(t, os.RemoveAll("/tmp/bolt.copyfile.db"))
 		assert.NoError(t, db.CopyFile("/tmp/bolt.copyfile.db", 0666))
 
@@ -286,10 +232,11 @@ func TestDBCopyFile(t *testing.T) {
 		assert.NoError(t, db2.Open("/tmp/bolt.copyfile.db", 0666))
 		defer db2.Close()
 
-		value, _ := db2.Get("widgets", []byte("foo"))
-		assert.Equal(t, value, []byte("bar"))
-		value, _ = db2.Get("widgets", []byte("baz"))
-		assert.Equal(t, value, []byte("bat"))
+		db2.With(func(tx *Tx) error {
+			assert.Equal(t, []byte("bar"), tx.Bucket("widgets").Get([]byte("foo")))
+			assert.Equal(t, []byte("bat"), tx.Bucket("widgets").Get([]byte("baz")))
+			return nil
+		})
 	})
 }
 
@@ -306,8 +253,12 @@ func TestDBStat(t *testing.T) {
 		})
 
 		// Delete some keys.
-		db.Delete("widgets", []byte("10"))
-		db.Delete("widgets", []byte("1000"))
+		db.Do(func(tx *Tx) error {
+			return tx.Bucket("widgets").Delete([]byte("10"))
+		})
+		db.Do(func(tx *Tx) error {
+			return tx.Bucket("widgets").Delete([]byte("1000"))
+		})
 
 		// Open some readers.
 		t0, _ := db.Tx()
@@ -367,9 +318,13 @@ func TestDBString(t *testing.T) {
 func BenchmarkDBPutSequential(b *testing.B) {
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
+		db.Do(func(tx *Tx) error {
+			return tx.CreateBucket("widgets")
+		})
 		for i := 0; i < b.N; i++ {
-			db.Put("widgets", []byte(strconv.Itoa(i)), value)
+			db.Do(func(tx *Tx) error {
+				return tx.Bucket("widgets").Put([]byte(strconv.Itoa(i)), value)
+			})
 		}
 	})
 }
@@ -379,9 +334,13 @@ func BenchmarkDBPutRandom(b *testing.B) {
 	indexes := rand.Perm(b.N)
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
-		db.CreateBucket("widgets")
+		db.Do(func(tx *Tx) error {
+			return tx.CreateBucket("widgets")
+		})
 		for i := 0; i < b.N; i++ {
-			db.Put("widgets", []byte(strconv.Itoa(indexes[i])), value)
+			db.Do(func(tx *Tx) error {
+				return tx.Bucket("widgets").Put([]byte(strconv.Itoa(indexes[i])), value)
+			})
 		}
 	})
 }
