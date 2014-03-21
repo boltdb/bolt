@@ -155,3 +155,9 @@ type BucketStat struct {
 	KeyCount          int
 	MaxDepth          int
 }
+
+type bucketsByName []*Bucket
+
+func (s bucketsByName) Len() int           { return len(s) }
+func (s bucketsByName) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s bucketsByName) Less(i, j int) bool { return s[i].name < s[j].name }
