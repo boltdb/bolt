@@ -420,3 +420,30 @@ func (t *Tx) forEachPage(pgid pgid, depth int, fn func(*page, int)) {
 		}
 	}
 }
+
+// Page returns page information for a given page number.
+// This is only available from writable transactions.
+func (t *Tx) Page(id int) (*PageInfo, error) {
+	if !t.writable {
+		return nil, ErrTxNotWritable
+	} else if pgid(id) >= t.meta.pgid {
+		return nil, nil
+	}
+
+	// Build the page info.
+	p := t.page(pgid(id))
+	info := &PageInfo{
+		ID:            id,
+		Count:         int(p.count),
+		OverflowCount: int(p.overflow),
+	}
+
+	// Determine the type (or if it's free).
+	if t.db.freelist.isFree(pgid(id)) {
+		info.Type = "free"
+	} else {
+		info.Type = p.typ()
+	}
+
+	return info, nil
+}
