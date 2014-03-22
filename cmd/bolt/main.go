@@ -23,14 +23,19 @@ func NewApp() *cli.App {
 		{
 			Name:   "get",
 			Usage:  "retrieve a value for given key",
-			Action: Get,
+			Action: GetCommand,
+		},
+		{
+			Name:   "keys",
+			Usage:  "retrieve a list of all keys in a bucket",
+			Action: KeysCommand,
 		},
 	}
 	return app
 }
 
-// Get retrieves the value for a given bucket/key.
-func Get(c *cli.Context) {
+// GetCommand retrieves the value for a given bucket/key.
+func GetCommand(c *cli.Context) {
 	path, name, key := c.Args().Get(0), c.Args().Get(1), c.Args().Get(2)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		fatal(err)
@@ -61,6 +66,41 @@ func Get(c *cli.Context) {
 
 		logger.Println(string(value))
 		return nil
+	})
+	if err != nil {
+		fatal(err)
+		return
+	}
+}
+
+// KeysCommand retrieves a list of keys for a given bucket.
+func KeysCommand(c *cli.Context) {
+	path, name := c.Args().Get(0), c.Args().Get(1)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fatal(err)
+		return
+	}
+
+	db, err := bolt.Open(path, 0600)
+	if err != nil {
+		fatal(err)
+		return
+	}
+	defer db.Close()
+
+	err = db.With(func(tx *bolt.Tx) error {
+		// Find bucket.
+		b := tx.Bucket(name)
+		if b == nil {
+			fatalf("bucket not found: %s", name)
+			return nil
+		}
+
+		// Iterate over each key.
+		return b.ForEach(func(key, _ []byte) error {
+			logger.Println(string(key))
+			return nil
+		})
 	})
 	if err != nil {
 		fatal(err)
