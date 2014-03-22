@@ -114,6 +114,28 @@ func TestKeysBucketNotFound(t *testing.T) {
 	})
 }
 
+// Ensure that a list of buckets can be retrieved.
+func TestBuckets(t *testing.T) {
+	SetTestMode(true)
+	open(func(db *bolt.DB) {
+		db.Do(func(tx *bolt.Tx) error {
+			tx.CreateBucket("woojits")
+			tx.CreateBucket("widgets")
+			tx.CreateBucket("whatchits")
+			return nil
+		})
+		output := run("buckets", db.Path())
+		assert.Equal(t, "whatchits\nwidgets\nwoojits", output)
+	})
+}
+
+// Ensure that an error is reported if the database is not found.
+func TestBucketsDBNotFound(t *testing.T) {
+	SetTestMode(true)
+	output := run("buckets", "no/such/db")
+	assert.Equal(t, "stat no/such/db: no such file or directory", output)
+}
+
 // open creates and opens a Bolt database in the temp directory.
 func open(fn func(*bolt.DB)) {
 	f, _ := ioutil.TempFile("", "bolt-")

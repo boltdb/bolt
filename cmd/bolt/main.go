@@ -37,6 +37,11 @@ func NewApp() *cli.App {
 			Action: KeysCommand,
 		},
 		{
+			Name:   "buckets",
+			Usage:  "Retrieves a list of all buckets",
+			Action: BucketsCommand,
+		},
+		{
 			Name:   "pages",
 			Usage:  "Dumps page information for a database",
 			Action: PagesCommand,
@@ -144,6 +149,33 @@ func KeysCommand(c *cli.Context) {
 			logger.Println(string(key))
 			return nil
 		})
+	})
+	if err != nil {
+		fatal(err)
+		return
+	}
+}
+
+// BucketsCommand retrieves a list of all buckets.
+func BucketsCommand(c *cli.Context) {
+	path := c.Args().Get(0)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fatal(err)
+		return
+	}
+
+	db, err := bolt.Open(path, 0600)
+	if err != nil {
+		fatal(err)
+		return
+	}
+	defer db.Close()
+
+	err = db.With(func(tx *bolt.Tx) error {
+		for _, b := range tx.Buckets() {
+			logger.Println(b.Name())
+		}
+		return nil
 	})
 	if err != nil {
 		fatal(err)
