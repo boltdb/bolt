@@ -23,17 +23,22 @@ func NewApp() *cli.App {
 	app.Commands = []cli.Command{
 		{
 			Name:   "get",
-			Usage:  "retrieve a value for given key",
+			Usage:  "Retrieve a value for given key in a bucket",
 			Action: GetCommand,
 		},
 		{
+			Name:   "set",
+			Usage:  "Sets a value for given key in a bucket",
+			Action: SetCommand,
+		},
+		{
 			Name:   "keys",
-			Usage:  "retrieve a list of all keys in a bucket",
+			Usage:  "Retrieve a list of all keys in a bucket",
 			Action: KeysCommand,
 		},
 		{
 			Name:   "pages",
-			Usage:  "dump page information for a database",
+			Usage:  "Dumps page information for a database",
 			Action: PagesCommand,
 		},
 	}
@@ -72,6 +77,38 @@ func GetCommand(c *cli.Context) {
 
 		logger.Println(string(value))
 		return nil
+	})
+	if err != nil {
+		fatal(err)
+		return
+	}
+}
+
+// SetCommand sets the value for a given key in a bucket.
+func SetCommand(c *cli.Context) {
+	path, name, key, value := c.Args().Get(0), c.Args().Get(1), c.Args().Get(2), c.Args().Get(3)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fatal(err)
+		return
+	}
+
+	db, err := bolt.Open(path, 0600)
+	if err != nil {
+		fatal(err)
+		return
+	}
+	defer db.Close()
+
+	err = db.Do(func(tx *bolt.Tx) error {
+		// Find bucket.
+		b := tx.Bucket(name)
+		if b == nil {
+			fatalf("bucket not found: %s", name)
+			return nil
+		}
+
+		// Set value for a given key.
+		return b.Put([]byte(key), []byte(value))
 	})
 	if err != nil {
 		fatal(err)
