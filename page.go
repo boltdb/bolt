@@ -119,3 +119,11 @@ func (n *leafPageElement) value() []byte {
 	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
 	return buf[n.pos+n.ksize : n.pos+n.ksize+n.vsize]
 }
+
+// PageInfo represents human readable information about a page.
+type PageInfo struct {
+	ID            int
+	Type          string
+	Count         int
+	OverflowCount int
+}

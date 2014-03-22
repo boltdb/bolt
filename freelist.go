@@ -70,6 +70,23 @@ func (f *freelist) release(txid txid) {
 	sort.Sort(reverseSortedPgids(f.ids))
 }
 
+// isFree returns whether a given page is in the free list.
+func (f *freelist) isFree(pgid pgid) bool {
+	for _, id := range f.ids {
+		if id == pgid {
+			return true
+		}
+	}
+	for _, m := range f.pending {
+		for _, id := range m {
+			if id == pgid {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // read initializes the freelist from a freelist page.
 func (f *freelist) read(p *page) {
 	ids := ((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[0:p.count]

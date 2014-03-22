@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/boltdb/bolt"
 	"github.com/codegangsta/cli"
@@ -29,6 +30,11 @@ func NewApp() *cli.App {
 			Name:   "keys",
 			Usage:  "retrieve a list of all keys in a bucket",
 			Action: KeysCommand,
+		},
+		{
+			Name:   "pages",
+			Usage:  "dump page information for a database",
+			Action: PagesCommand,
 		},
 	}
 	return app
@@ -106,6 +112,45 @@ func KeysCommand(c *cli.Context) {
 		fatal(err)
 		return
 	}
+}
+
+// PagesCommand prints a list of all pages in a database.
+func PagesCommand(c *cli.Context) {
+	path := c.Args().Get(0)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fatal(err)
+		return
+	}
+
+	db, err := bolt.Open(path, 0600)
+	if err != nil {
+		fatal(err)
+		return
+	}
+	defer db.Close()
+
+	logger.Println("ID       TYPE       ITEMS  OVRFLW")
+	logger.Println("======== ========== ====== ======")
+
+	db.Do(func(tx *bolt.Tx) error {
+		var id int
+		for {
+			p, err := tx.Page(id)
+			if err != nil {
+				fatalf("page error: %d: %s", id, err)
+			} else if p == nil {
+				break
+			}
+
+			var overflow string
+			if p.OverflowCount > 0 {
+				overflow = strconv.Itoa(p.OverflowCount)
+			}
+			logger.Printf("%-8d %-10s %-6d %-6s", p.ID, p.Type, p.Count, overflow)
+			id += 1 + p.OverflowCount
+		}
+		return nil
+	})
 }
 
 var logger = log.New(os.Stderr, "", 0)
