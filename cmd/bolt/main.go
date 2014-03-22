@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -80,7 +81,7 @@ func GetCommand(c *cli.Context) {
 			return nil
 		}
 
-		logger.Println(string(value))
+		println(string(value))
 		return nil
 	})
 	if err != nil {
@@ -146,7 +147,7 @@ func KeysCommand(c *cli.Context) {
 
 		// Iterate over each key.
 		return b.ForEach(func(key, _ []byte) error {
-			logger.Println(string(key))
+			println(string(key))
 			return nil
 		})
 	})
@@ -173,7 +174,7 @@ func BucketsCommand(c *cli.Context) {
 
 	err = db.With(func(tx *bolt.Tx) error {
 		for _, b := range tx.Buckets() {
-			logger.Println(b.Name())
+			println(b.Name())
 		}
 		return nil
 	})
@@ -198,8 +199,8 @@ func PagesCommand(c *cli.Context) {
 	}
 	defer db.Close()
 
-	logger.Println("ID       TYPE       ITEMS  OVRFLW")
-	logger.Println("======== ========== ====== ======")
+	println("ID       TYPE       ITEMS  OVRFLW")
+	println("======== ========== ====== ======")
 
 	db.Do(func(tx *bolt.Tx) error {
 		var id int
@@ -215,7 +216,7 @@ func PagesCommand(c *cli.Context) {
 			if p.OverflowCount > 0 {
 				overflow = strconv.Itoa(p.OverflowCount)
 			}
-			logger.Printf("%-8d %-10s %-6d %-6s", p.ID, p.Type, p.Count, overflow)
+			printf("%-8d %-10s %-6d %-6s\n", p.ID, p.Type, p.Count, overflow)
 			id += 1 + p.OverflowCount
 		}
 		return nil
@@ -224,6 +225,30 @@ func PagesCommand(c *cli.Context) {
 
 var logger = log.New(os.Stderr, "", 0)
 var logBuffer *bytes.Buffer
+
+func print(v ...interface{}) {
+	if testMode {
+		logger.Print(v...)
+	} else {
+		fmt.Print(v...)
+	}
+}
+
+func printf(format string, v ...interface{}) {
+	if testMode {
+		logger.Printf(format, v...)
+	} else {
+		fmt.Printf(format, v...)
+	}
+}
+
+func println(v ...interface{}) {
+	if testMode {
+		logger.Println(v...)
+	} else {
+		fmt.Println(v...)
+	}
+}
 
 func fatal(v ...interface{}) {
 	logger.Print(v...)
