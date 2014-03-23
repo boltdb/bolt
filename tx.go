@@ -337,7 +337,7 @@ func (t *Tx) write() error {
 		size := (int(p.overflow) + 1) * t.db.pageSize
 		buf := (*[maxAllocSize]byte)(unsafe.Pointer(p))[:size]
 		offset := int64(p.id) * int64(t.db.pageSize)
-		if _, err := t.db.file.WriteAt(buf, offset); err != nil {
+		if _, err := t.db.ops.writeAt(buf, offset); err != nil {
 			return err
 		}
 	}
@@ -359,7 +359,7 @@ func (t *Tx) writeMeta() error {
 	t.meta.write(p)
 
 	// Write the meta page to file.
-	if _, err := t.db.metafile.WriteAt(buf, int64(p.id)*int64(t.db.pageSize)); err != nil {
+	if _, err := t.db.ops.metaWriteAt(buf, int64(p.id)*int64(t.db.pageSize)); err != nil {
 		return err
 	}
 

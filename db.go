@@ -34,6 +34,11 @@ type DB struct {
 	rwlock   sync.Mutex   // Allows only one writer at a time.
 	metalock sync.Mutex   // Protects meta page access.
 	mmaplock sync.RWMutex // Protects mmap access during remapping.
+
+	ops struct {
+		writeAt     func(b []byte, off int64) (n int, err error)
+		metaWriteAt func(b []byte, off int64) (n int, err error)
+	}
 }
 
 // Path returns the path to currently open database file.
@@ -72,6 +77,14 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 	if db.metafile, err = os.OpenFile(db.path, os.O_RDWR|os.O_SYNC, mode); err != nil {
 		_ = db.close()
 		return err
+	}
+
+	// default values for test hooks
+	if db.ops.writeAt == nil {
+		db.ops.writeAt = db.file.WriteAt
+	}
+	if db.ops.metaWriteAt == nil {
+		db.ops.metaWriteAt = db.metafile.WriteAt
 	}
 
 	// Initialize the database if it doesn't exist.
@@ -226,7 +239,7 @@ func (db *DB) init() error {
 	p.count = 0
 
 	// Write the buffer to our data file.
-	if _, err := db.metafile.WriteAt(buf, 0); err != nil {
+	if _, err := db.ops.metaWriteAt(buf, 0); err != nil {
 		return err
 	}
 
