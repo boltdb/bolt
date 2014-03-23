@@ -55,7 +55,9 @@ func (b *Bucket) Get(key []byte) []byte {
 // If the key exist then its previous value will be overwritten.
 // Returns an error if the bucket was created from a read-only transaction, if the key is blank, if the key is too large, or if the value is too large.
 func (b *Bucket) Put(key []byte, value []byte) error {
-	if !b.Writable() {
+	if b.tx.db == nil {
+		return ErrTxClosed
+	} else if !b.Writable() {
 		return ErrBucketNotWritable
 	}
 
@@ -82,7 +84,9 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 // If the key does not exist then nothing is done and a nil error is returned.
 // Returns an error if the bucket was created from a read-only transaction.
 func (b *Bucket) Delete(key []byte) error {
-	if !b.Writable() {
+	if b.tx.db == nil {
+		return ErrTxClosed
+	} else if !b.Writable() {
 		return ErrBucketNotWritable
 	}
 
@@ -98,7 +102,9 @@ func (b *Bucket) Delete(key []byte) error {
 
 // NextSequence returns an autoincrementing integer for the bucket.
 func (b *Bucket) NextSequence() (int, error) {
-	if !b.Writable() {
+	if b.tx.db == nil {
+		return 0, ErrTxClosed
+	} else if !b.Writable() {
 		return 0, ErrBucketNotWritable
 	}
 
@@ -118,6 +124,9 @@ func (b *Bucket) NextSequence() (int, error) {
 // If the provided function returns an error then the iteration is stopped and
 // the error is returned to the caller.
 func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
+	if b.tx.db == nil {
+		return ErrTxClosed
+	}
 	c := b.Cursor()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		if err := fn(k, v); err != nil {
