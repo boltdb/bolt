@@ -111,6 +111,23 @@ func TestDBTxBlockWhileClosed(t *testing.T) {
 	})
 }
 
+// Ensure a panic occurs while trying to commit a managed transaction.
+func TestDBTxBlockWithManualCommitAndRollback(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Do(func(tx *Tx) error {
+			tx.CreateBucket("widgets")
+			assert.Panics(t, func() { tx.Commit() })
+			assert.Panics(t, func() { tx.Rollback() })
+			return nil
+		})
+		db.With(func(tx *Tx) error {
+			assert.Panics(t, func() { tx.Commit() })
+			assert.Panics(t, func() { tx.Rollback() })
+			return nil
+		})
+	})
+}
+
 // Ensure that the database can be copied to a file path.
 func TestDBCopyFile(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
