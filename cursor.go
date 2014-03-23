@@ -16,6 +16,7 @@ type Cursor struct {
 // First moves the cursor to the first item in the bucket and returns its key and value.
 // If the bucket is empty then a nil key and value are returned.
 func (c *Cursor) First() (key []byte, value []byte) {
+	_assert(c.tx.db != nil, "tx closed")
 	c.stack = c.stack[:0]
 	p, n := c.tx.pageNode(c.root)
 	c.stack = append(c.stack, elemRef{page: p, node: n, index: 0})
@@ -26,6 +27,7 @@ func (c *Cursor) First() (key []byte, value []byte) {
 // Last moves the cursor to the last item in the bucket and returns its key and value.
 // If the bucket is empty then a nil key and value are returned.
 func (c *Cursor) Last() (key []byte, value []byte) {
+	_assert(c.tx.db != nil, "tx closed")
 	c.stack = c.stack[:0]
 	p, n := c.tx.pageNode(c.root)
 	ref := elemRef{page: p, node: n}
@@ -38,6 +40,8 @@ func (c *Cursor) Last() (key []byte, value []byte) {
 // Next moves the cursor to the next item in the bucket and returns its key and value.
 // If the cursor is at the end of the bucket then a nil key and value are returned.
 func (c *Cursor) Next() (key []byte, value []byte) {
+	_assert(c.tx.db != nil, "tx closed")
+
 	// Attempt to move over one element until we're successful.
 	// Move up the stack as we hit the end of each page in our stack.
 	for i := len(c.stack) - 1; i >= 0; i-- {
@@ -62,6 +66,8 @@ func (c *Cursor) Next() (key []byte, value []byte) {
 // Prev moves the cursor to the previous item in the bucket and returns its key and value.
 // If the cursor is at the beginning of the bucket then a nil key and value are returned.
 func (c *Cursor) Prev() (key []byte, value []byte) {
+	_assert(c.tx.db != nil, "tx closed")
+
 	// Attempt to move back one element until we're successful.
 	// Move up the stack as we hit the beginning of each page in our stack.
 	for i := len(c.stack) - 1; i >= 0; i-- {
@@ -87,6 +93,8 @@ func (c *Cursor) Prev() (key []byte, value []byte) {
 // If the key does not exist then the next key is used. If no keys
 // follow, a nil value is returned.
 func (c *Cursor) Seek(seek []byte) (key []byte, value []byte) {
+	_assert(c.tx.db != nil, "tx closed")
+
 	// Start from root page/node and traverse to correct page.
 	c.stack = c.stack[:0]
 	c.search(seek, c.root)

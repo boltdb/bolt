@@ -20,6 +20,10 @@ var (
 	// read-only transaction.
 	ErrTxNotWritable = &Error{"tx not writable", nil}
 
+	// ErrTxClosed is returned when committing or rolling back a transaction
+	// that has already been committed or rolled back.
+	ErrTxClosed = &Error{"tx closed", nil}
+
 	// ErrBucketNotFound is returned when trying to access a bucket that has
 	// not been created yet.
 	ErrBucketNotFound = &Error{"bucket not found", nil}
