@@ -349,19 +349,26 @@ func (db *DB) removeTx(t *Tx) {
 	}
 }
 
-// Do executes a function within the context of a read-write transaction.
+// Do executes a function within the context of a read-write managed transaction.
 // If no error is returned from the function then the transaction is committed.
 // If an error is returned then the entire transaction is rolled back.
 // Any error that is returned from the function or returned from the commit is
 // returned from the Do() method.
+//
+// Attempting to manually commit or rollback within the function will cause a panic.
 func (db *DB) Do(fn func(*Tx) error) error {
 	t, err := db.RWTx()
 	if err != nil {
 		return err
 	}
 
+	// Mark as a managed tx so that the inner function cannot manually commit.
+	t.managed = true
+
 	// If an error is returned from the function then rollback and return error.
-	if err := fn(t); err != nil {
+	err = fn(t)
+	t.managed = false
+	if err != nil {
 		t.Rollback()
 		return err
 	}
@@ -369,8 +376,10 @@ func (db *DB) Do(fn func(*Tx) error) error {
 	return t.Commit()
 }
 
-// With executes a function within the context of a transaction.
+// With executes a function within the context of a managed transaction.
 // Any error that is returned from the function is returned from the With() method.
+//
+// Attempting to manually rollback within the function will cause a panic.
 func (db *DB) With(fn func(*Tx) error) error {
 	t, err := db.Tx()
 	if err != nil {
@@ -378,8 +387,14 @@ func (db *DB) With(fn func(*Tx) error) error {
 	}
 	defer t.Rollback()
 
+	// Mark as a managed tx so that the inner function cannot manually rollback.
+	t.managed = true
+
 	// If an error is returned from the function then pass it through.
-	return fn(t)
+	err = fn(t)
+	t.managed = false
+
+	return err
 }
 
 // Copy writes the entire database to a writer.

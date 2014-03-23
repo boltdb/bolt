@@ -18,6 +18,7 @@ type txid uint64
 // quickly grow.
 type Tx struct {
 	writable bool
+	managed  bool
 	db       *DB
 	meta     *meta
 	buckets  *buckets
@@ -155,7 +156,9 @@ func (t *Tx) DeleteBucket(name string) error {
 // Commit writes all changes to disk and updates the meta page.
 // Returns an error if a disk write error occurs.
 func (t *Tx) Commit() error {
-	if t.db == nil {
+	if t.managed {
+		panic("managed tx commit not allowed")
+	} else if t.db == nil {
 		return nil
 	} else if !t.writable {
 		t.Rollback()
@@ -194,6 +197,9 @@ func (t *Tx) Commit() error {
 
 // Rollback closes the transaction and ignores all previous updates.
 func (t *Tx) Rollback() {
+	if t.managed {
+		panic("managed tx rollback not allowed")
+	}
 	t.close()
 }
 
