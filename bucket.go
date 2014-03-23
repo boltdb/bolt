@@ -64,7 +64,7 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 		return ErrKeyRequired
 	} else if len(key) > MaxKeySize {
 		return ErrKeyTooLarge
-	} else if len(value) > MaxValueSize {
+	} else if int64(len(value)) > MaxValueSize {
 		return ErrValueTooLarge
 	}
 
