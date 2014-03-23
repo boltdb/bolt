@@ -173,7 +173,9 @@ func (t *Tx) Commit() error {
 
 	// Rebalance and spill data onto dirty pages.
 	t.rebalance()
-	t.spill()
+	if err := t.spill(); err != nil {
+		return err
+	}
 
 	// Spill buckets page.
 	p, err := t.allocate((t.buckets.size() / t.db.pageSize) + 1)
