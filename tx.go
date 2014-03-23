@@ -357,7 +357,9 @@ func (t *Tx) writeMeta() error {
 	t.meta.write(p)
 
 	// Write the meta page to file.
-	t.db.metafile.WriteAt(buf, int64(p.id)*int64(t.db.pageSize))
+	if _, err := t.db.metafile.WriteAt(buf, int64(p.id)*int64(t.db.pageSize)); err != nil {
+		return err
+	}
 
 	return nil
 }
