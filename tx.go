@@ -173,7 +173,9 @@ func (t *Tx) Commit() error {
 
 	// Rebalance and spill data onto dirty pages.
 	t.rebalance()
-	t.spill()
+	if err := t.spill(); err != nil {
+		return err
+	}
 
 	// Spill buckets page.
 	p, err := t.allocate((t.buckets.size() / t.db.pageSize) + 1)
@@ -357,7 +359,9 @@ func (t *Tx) writeMeta() error {
 	t.meta.write(p)
 
 	// Write the meta page to file.
-	t.db.metafile.WriteAt(buf, int64(p.id)*int64(t.db.pageSize))
+	if _, err := t.db.metafile.WriteAt(buf, int64(p.id)*int64(t.db.pageSize)); err != nil {
+		return err
+	}
 
 	return nil
 }
