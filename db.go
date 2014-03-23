@@ -432,7 +432,11 @@ func (db *DB) CopyFile(path string, mode os.FileMode) error {
 	}
 	defer f.Close()
 
-	return db.Copy(f)
+	err = db.Copy(f)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // Stat retrieves stats on the database and its page usage.
