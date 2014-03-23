@@ -329,6 +329,9 @@ func (t *Tx) write() error {
 			return err
 		}
 	}
+	if err := fdatasync(t.db.file); err != nil {
+		return err
+	}
 
 	// Clear out page cache.
 	t.pages = make(map[pgid]*page)
