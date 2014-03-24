@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -47,6 +48,67 @@ func TestDBReopen(t *testing.T) {
 		db.Open(path, 0666)
 		err := db.Open(path, 0666)
 		assert.Equal(t, err, ErrDatabaseOpen)
+	})
+}
+
+// Ensure that the database returns an error if the file handle cannot be open.
+func TestDBOpenFileError(t *testing.T) {
+	withDBFile(func(db *DB, path string) {
+		exp := &os.PathError{
+			Op:   "open",
+			Path: path + "/youre-not-my-real-parent",
+			Err:  syscall.ENOTDIR,
+		}
+		err := db.Open(path+"/youre-not-my-real-parent", 0666)
+		assert.Equal(t, err, exp)
+	})
+}
+
+// Ensure that write errors to the meta file handler during initialization are returned.
+func TestDBMetaInitWriteError(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		// Mock the file system.
+		db.ops.metaWriteAt = func(p []byte, offset int64) (n int, err error) { return 0, io.ErrShortWrite }
+
+		// Open the database.
+		err := db.Open(path, 0666)
+		assert.Equal(t, err, io.ErrShortWrite)
+	})
+}
+
+// Ensure that a database that is too small returns an error.
+func TestDBFileTooSmall(t *testing.T) {
+	withDBFile(func(db *DB, path string) {
+		// corrupt the database
+		err := os.Truncate(path, int64(os.Getpagesize()))
+		assert.NoError(t, err)
+
+		err = db.Open(path, 0666)
+		assert.Equal(t, err, &Error{"file size too small", nil})
+	})
+}
+
+// Ensure that corrupt meta0 page errors get returned.
+func TestDBCorruptMeta0(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		var m meta
+		m.magic = magic
+		m.version = version
+		m.pageSize = 0x8000
+
+		// Create a file with bad magic.
+		b := make([]byte, 0x10000)
+		p0, p1 := (*page)(unsafe.Pointer(&b[0x0000])), (*page)(unsafe.Pointer(&b[0x8000]))
+		p0.meta().magic = 0
+		p0.meta().version = version
+		p1.meta().magic = magic
+		p1.meta().version = version
+		err := ioutil.WriteFile(path, b, 0666)
+		assert.NoError(t, err)
+
+		// Open the database.
+		err = db.Open(path, 0666)
+		assert.Equal(t, err, &Error{"meta error", ErrInvalid})
 	})
 }
 
