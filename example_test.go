@@ -10,14 +10,14 @@ func init() {
 	os.MkdirAll("/tmp/bolt", 0777)
 }
 
-func ExampleDB_Do() {
+func ExampleDB_Update() {
 	// Open the database.
 	var db DB
 	db.Open("/tmp/bolt/db_do.db", 0666)
 	defer db.Close()
 
 	// Execute several commands within a write transaction.
-	err := db.Do(func(tx *Tx) error {
+	err := db.Update(func(tx *Tx) error {
 		if err := tx.CreateBucket("widgets"); err != nil {
 			return err
 		}
@@ -30,7 +30,7 @@ func ExampleDB_Do() {
 
 	// If our transactional block didn't return an error then our data is saved.
 	if err == nil {
-		db.With(func(tx *Tx) error {
+		db.View(func(tx *Tx) error {
 			value := tx.Bucket("widgets").Get([]byte("foo"))
 			fmt.Printf("The value of 'foo' is: %s\n", string(value))
 			return nil
@@ -41,14 +41,14 @@ func ExampleDB_Do() {
 	// The value of 'foo' is: bar
 }
 
-func ExampleDB_With() {
+func ExampleDB_View() {
 	// Open the database.
 	var db DB
 	db.Open("/tmp/bolt/db_with.db", 0666)
 	defer db.Close()
 
 	// Insert data into a bucket.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		tx.CreateBucket("people")
 		tx.Bucket("people").Put([]byte("john"), []byte("doe"))
 		tx.Bucket("people").Put([]byte("susy"), []byte("que"))
@@ -56,7 +56,7 @@ func ExampleDB_With() {
 	})
 
 	// Access data from within a read-only transactional block.
-	db.With(func(t *Tx) error {
+	db.View(func(t *Tx) error {
 		v := t.Bucket("people").Get([]byte("john"))
 		fmt.Printf("John's last name is %s.\n", string(v))
 		return nil
@@ -73,7 +73,7 @@ func ExampleTx_Put() {
 	defer db.Close()
 
 	// Start a write transaction.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		// Create a bucket.
 		tx.CreateBucket("widgets")
 
@@ -83,7 +83,7 @@ func ExampleTx_Put() {
 	})
 
 	// Read value back in a different read-only transaction.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		value := tx.Bucket("widgets").Get([]byte("foo"))
 		fmt.Printf("The value of 'foo' is: %s\n", string(value))
 		return nil
@@ -100,7 +100,7 @@ func ExampleTx_Delete() {
 	defer db.Close()
 
 	// Start a write transaction.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		// Create a bucket.
 		tx.CreateBucket("widgets")
 		b := tx.Bucket("widgets")
@@ -115,12 +115,12 @@ func ExampleTx_Delete() {
 	})
 
 	// Delete the key in a different write transaction.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		return tx.Bucket("widgets").Delete([]byte("foo"))
 	})
 
 	// Retrieve the key again.
-	db.With(func(tx *Tx) error {
+	db.View(func(tx *Tx) error {
 		value := tx.Bucket("widgets").Get([]byte("foo"))
 		if value == nil {
 			fmt.Printf("The value of 'foo' is now: nil\n")
@@ -140,7 +140,7 @@ func ExampleTx_ForEach() {
 	defer db.Close()
 
 	// Insert data into a bucket.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		tx.CreateBucket("animals")
 		b := tx.Bucket("animals")
 		b.Put([]byte("dog"), []byte("fun"))
@@ -161,19 +161,19 @@ func ExampleTx_ForEach() {
 	// A liger is awesome.
 }
 
-func ExampleTx() {
+func ExampleBegin_ReadOnly() {
 	// Open the database.
 	var db DB
 	db.Open("/tmp/bolt/tx.db", 0666)
 	defer db.Close()
 
 	// Create a bucket.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		return tx.CreateBucket("widgets")
 	})
 
 	// Create several keys in a transaction.
-	tx, _ := db.RWTx()
+	tx, _ := db.Begin(true)
 	b := tx.Bucket("widgets")
 	b.Put([]byte("john"), []byte("blue"))
 	b.Put([]byte("abby"), []byte("red"))
@@ -181,7 +181,7 @@ func ExampleTx() {
 	tx.Commit()
 
 	// Iterate over the values in sorted key order.
-	tx, _ = db.Tx()
+	tx, _ = db.Begin(false)
 	c := tx.Bucket("widgets").Cursor()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		fmt.Printf("%s likes %s\n", string(k), string(v))
@@ -201,23 +201,23 @@ func ExampleTx_rollback() {
 	defer db.Close()
 
 	// Create a bucket.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		return tx.CreateBucket("widgets")
 	})
 
 	// Set a value for a key.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		return tx.Bucket("widgets").Put([]byte("foo"), []byte("bar"))
 	})
 
 	// Update the key but rollback the transaction so it never saves.
-	tx, _ := db.RWTx()
+	tx, _ := db.Begin(true)
 	b := tx.Bucket("widgets")
 	b.Put([]byte("foo"), []byte("baz"))
 	tx.Rollback()
 
 	// Ensure that our original value is still set.
-	db.With(func(tx *Tx) error {
+	db.View(func(tx *Tx) error {
 		value := tx.Bucket("widgets").Get([]byte("foo"))
 		fmt.Printf("The value for 'foo' is still: %s\n", string(value))
 		return nil
@@ -234,7 +234,7 @@ func ExampleDB_CopyFile() {
 	defer db.Close()
 
 	// Create a bucket and a key.
-	db.Do(func(tx *Tx) error {
+	db.Update(func(tx *Tx) error {
 		tx.CreateBucket("widgets")
 		tx.Bucket("widgets").Put([]byte("foo"), []byte("bar"))
 		return nil
@@ -249,7 +249,7 @@ func ExampleDB_CopyFile() {
 	defer db2.Close()
 
 	// Ensure that the key exists in the copy.
-	db2.With(func(tx *Tx) error {
+	db2.View(func(tx *Tx) error {
 		value := tx.Bucket("widgets").Get([]byte("foo"))
 		fmt.Printf("The value for 'foo' in the clone is: %s\n", string(value))
 		return nil
