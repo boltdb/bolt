@@ -293,11 +293,22 @@ func (db *DB) close() error {
 	return nil
 }
 
-// Tx creates a read-only transaction.
-// Multiple read-only transactions can be used concurrently.
+// Begin starts a new transaction.
+// Multiple read-only transactions can be used concurrently but only one
+// write transaction can be used at a time. Starting multiple write transactions
+// will cause the calls to block and be serialized until the current write
+// transaction finishes.
 //
-// IMPORTANT: You must close the transaction after you are finished or else the database will not reclaim old pages.
-func (db *DB) Tx() (*Tx, error) {
+// IMPORTANT: You must close read-only transactions after you are finished or
+// else the database will not reclaim old pages.
+func (db *DB) Begin(writable bool) (*Tx, error) {
+	if writable {
+		return db.beginRWTx()
+	}
+	return db.beginTx()
+}
+
+func (db *DB) beginTx() (*Tx, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
@@ -321,10 +332,7 @@ func (db *DB) Tx() (*Tx, error) {
 	return t, nil
 }
 
-// RWTx creates a read/write transaction.
-// Only one read/write transaction is allowed at a time.
-// You must call Commit() or Rollback() on the transaction to close it.
-func (db *DB) RWTx() (*Tx, error) {
+func (db *DB) beginRWTx() (*Tx, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
@@ -373,15 +381,15 @@ func (db *DB) removeTx(t *Tx) {
 	}
 }
 
-// Do executes a function within the context of a read-write managed transaction.
+// Update executes a function within the context of a read-write managed transaction.
 // If no error is returned from the function then the transaction is committed.
 // If an error is returned then the entire transaction is rolled back.
 // Any error that is returned from the function or returned from the commit is
-// returned from the Do() method.
+// returned from the Update() method.
 //
 // Attempting to manually commit or rollback within the function will cause a panic.
-func (db *DB) Do(fn func(*Tx) error) error {
-	t, err := db.RWTx()
+func (db *DB) Update(fn func(*Tx) error) error {
+	t, err := db.Begin(true)
 	if err != nil {
 		return err
 	}
@@ -400,12 +408,12 @@ func (db *DB) Do(fn func(*Tx) error) error {
 	return t.Commit()
 }
 
-// With executes a function within the context of a managed transaction.
-// Any error that is returned from the function is returned from the With() method.
+// View executes a function within the context of a managed read-only transaction.
+// Any error that is returned from the function is returned from the View() method.
 //
 // Attempting to manually rollback within the function will cause a panic.
-func (db *DB) With(fn func(*Tx) error) error {
-	t, err := db.Tx()
+func (db *DB) View(fn func(*Tx) error) error {
+	t, err := db.Begin(false)
 	if err != nil {
 		return err
 	}
@@ -433,7 +441,7 @@ func (db *DB) With(fn func(*Tx) error) error {
 // using the database while a copy is in progress.
 func (db *DB) Copy(w io.Writer) error {
 	// Maintain a reader transaction so pages don't get reclaimed.
-	t, err := db.Tx()
+	t, err := db.Begin(false)
 	if err != nil {
 		return err
 	}
@@ -492,7 +500,7 @@ func (db *DB) Stat() (*Stat, error) {
 	db.mmaplock.RUnlock()
 	db.metalock.Unlock()
 
-	err := db.Do(func(t *Tx) error {
+	err := db.Update(func(t *Tx) error {
 		s.PageCount = int(t.meta.pgid)
 		s.FreePageCount = len(db.freelist.all())
 		s.PageSize = db.pageSize
