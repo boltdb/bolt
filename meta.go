@@ -1,6 +1,19 @@
 package bolt
 
+import (
+	"errors"
+)
+
 const magic uint32 = 0xED0CDAED
+
+var (
+	// ErrInvalid is returned when a data file is not a Bolt-formatted database.
+	ErrInvalid = errors.New("invalid database")
+
+	// ErrVersionMismatch is returned when the data file was created with a
+	// different version of Bolt.
+	ErrVersionMismatch = errors.New("version mismatch")
+)
 
 type meta struct {
 	magic    uint32

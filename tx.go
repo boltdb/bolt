@@ -1,8 +1,19 @@
 package bolt
 
 import (
+	"errors"
 	"sort"
 	"unsafe"
+)
+
+var (
+	// ErrTxNotWritable is returned when performing a write operation on a
+	// read-only transaction.
+	ErrTxNotWritable = errors.New("tx not writable")
+
+	// ErrTxClosed is returned when committing or rolling back a transaction
+	// that has already been committed or rolled back.
+	ErrTxClosed = errors.New("tx closed")
 )
 
 // txid represents the internal transaction identifier.

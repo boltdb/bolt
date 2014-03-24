@@ -2,6 +2,40 @@ package bolt
 
 import (
 	"bytes"
+	"errors"
+)
+
+var (
+	// ErrBucketNotFound is returned when trying to access a bucket that has
+	// not been created yet.
+	ErrBucketNotFound = errors.New("bucket not found")
+
+	// ErrBucketExists is returned when creating a bucket that already exists.
+	ErrBucketExists = errors.New("bucket already exists")
+
+	// ErrBucketNameRequired is returned when creating a bucket with a blank name.
+	ErrBucketNameRequired = errors.New("bucket name required")
+
+	// ErrBucketNameTooLarge is returned when creating a bucket with a name
+	// that is longer than MaxBucketNameSize.
+	ErrBucketNameTooLarge = errors.New("bucket name too large")
+
+	// ErrBucketNotWritable is returned when changing data on a bucket
+	// reference that was created from a read-only transaction.
+	ErrBucketNotWritable = errors.New("bucket not writable")
+
+	// ErrKeyRequired is returned when inserting a zero-length key.
+	ErrKeyRequired = errors.New("key required")
+
+	// ErrKeyTooLarge is returned when inserting a key that is larger than MaxKeySize.
+	ErrKeyTooLarge = errors.New("key too large")
+
+	// ErrValueTooLarge is returned when inserting a value that is larger than MaxValueSize.
+	ErrValueTooLarge = errors.New("value too large")
+
+	// ErrSequenceOverflow is returned when the next sequence number will be
+	// larger than the maximum integer size.
+	ErrSequenceOverflow = errors.New("sequence overflow")
 )
 
 // Bucket represents a collection of key/value pairs inside the database.
