@@ -42,6 +42,13 @@ There are also several differences between Bolt and LMDB:
 So why use Bolt? The goal of Bolt is provide a simple, fast data store that is easily integrated into Go projects. The library does not require CGO so it is compatible with `go get` and you can easily build static binaries with it. We are not accepting additional functionality into the library so the API and file format are stable. Bolt also has near 100% unit test coverage and also includes heavy black box testing using the [testing/quick](http://golang.org/pkg/testing/quick/) package.
 
 
+## Other Projects Using Bolt
+
+Below is a list of public, open source projects that use Bolt:
+
+* [Skybox Analytics](https://github.com/skybox/skybox)
+
+If you are using Bolt in a project please send a pull request to add it to the list.
 
 
 ## Internals
