@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"errors"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -53,14 +55,12 @@ func TestDBReopen(t *testing.T) {
 
 // Ensure that the database returns an error if the file handle cannot be open.
 func TestDBOpenFileError(t *testing.T) {
-	withDBFile(func(db *DB, path string) {
-		exp := &os.PathError{
-			Op:   "open",
-			Path: path + "/youre-not-my-real-parent",
-			Err:  syscall.ENOTDIR,
-		}
+	withDB(func(db *DB, path string) {
 		err := db.Open(path+"/youre-not-my-real-parent", 0666)
-		assert.Equal(t, err, exp)
+		if err, _ := err.(*os.PathError); assert.Error(t, err) {
+			assert.Equal(t, path+"/youre-not-my-real-parent", err.Path)
+			assert.Equal(t, "open", err.Op)
+		}
 	})
 }
 
@@ -78,13 +78,14 @@ func TestDBMetaInitWriteError(t *testing.T) {
 
 // Ensure that a database that is too small returns an error.
 func TestDBFileTooSmall(t *testing.T) {
-	withDBFile(func(db *DB, path string) {
-		// corrupt the database
-		err := os.Truncate(path, int64(os.Getpagesize()))
-		assert.NoError(t, err)
+	withOpenDB(func(db *DB, path string) {
+		db.Close()
 
-		err = db.Open(path, 0666)
-		assert.Equal(t, err, &Error{"file size too small", nil})
+		// corrupt the database
+		assert.NoError(t, os.Truncate(path, int64(os.Getpagesize())))
+
+		err := db.Open(path, 0666)
+		assert.Equal(t, errors.New("file size too small"), err)
 	})
 }
 
@@ -108,7 +109,7 @@ func TestDBCorruptMeta0(t *testing.T) {
 
 		// Open the database.
 		err = db.Open(path, 0666)
-		assert.Equal(t, err, &Error{"meta error", ErrInvalid})
+		assert.Equal(t, err, errors.New("meta error: invalid database"))
 	})
 }
 

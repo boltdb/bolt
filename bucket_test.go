@@ -2,6 +2,7 @@ package bolt
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -203,12 +204,12 @@ func TestBucketForEachShortCircuit(t *testing.T) {
 			err := tx.Bucket("widgets").ForEach(func(k, v []byte) error {
 				index++
 				if bytes.Equal(k, []byte("baz")) {
-					return &Error{"marker", nil}
+					return errors.New("marker")
 				}
 				return nil
 			})
-			assert.Equal(t, err, &Error{"marker", nil})
-			assert.Equal(t, index, 2)
+			assert.Equal(t, errors.New("marker"), err)
+			assert.Equal(t, 2, index)
 			return nil
 		})
 	})

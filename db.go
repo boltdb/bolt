@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,16 @@ const minMmapSize = 1 << 22 // 4MB
 
 // The largest step that can be taken when remapping the mmap.
 const maxMmapStep = 1 << 30 // 1GB
+
+var (
+	// ErrDatabaseNotOpen is returned when a DB instance is accessed before it
+	// is opened or after it is closed.
+	ErrDatabaseNotOpen = errors.New("database not open")
+
+	// ErrDatabaseOpen is returned when opening a database that is
+	// already open.
+	ErrDatabaseOpen = errors.New("database already open")
+)
 
 // DB represents a collection of buckets persisted to a file on disk.
 // All data access is performed through transactions which can be obtained through the DB.
@@ -89,7 +100,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 	// Initialize the database if it doesn't exist.
 	if info, err := db.file.Stat(); err != nil {
-		return &Error{"stat error", err}
+		return fmt.Errorf("stat error: %s", err)
 	} else if info.Size() == 0 {
 		// Initialize new files with meta pages.
 		if err := db.init(); err != nil {
@@ -101,7 +112,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 			m := db.pageInBuffer(buf[:], 0).meta()
 			if err := m.validate(); err != nil {
-				return &Error{"meta error", err}
+				return fmt.Errorf("meta error: %s", err)
 			}
 			db.pageSize = int(m.pageSize)
 		}
@@ -140,9 +151,9 @@ func (db *DB) mmap(minsz int) error {
 
 	info, err := db.file.Stat()
 	if err != nil {
-		return &Error{"mmap stat error", err}
+		return fmt.Errorf("mmap stat error: %s", err)
 	} else if int(info.Size()) < db.pageSize*2 {
-		return &Error{"file size too small", err}
+		return fmt.Errorf("file size too small")
 	}
 
 	// Ensure the size is at least the minimum size.
@@ -163,10 +174,10 @@ func (db *DB) mmap(minsz int) error {
 
 	// Validate the meta pages.
 	if err := db.meta0.validate(); err != nil {
-		return &Error{"meta0 error", err}
+		return fmt.Errorf("meta0 error: %s", err)
 	}
 	if err := db.meta1.validate(); err != nil {
-		return &Error{"meta1 error", err}
+		return fmt.Errorf("meta1 error: %s", err)
 	}
 
 	return nil
@@ -529,7 +540,7 @@ func (db *DB) allocate(count int) (*page, error) {
 	var minsz = int((p.id+pgid(count))+1) * db.pageSize
 	if minsz >= len(db.data) {
 		if err := db.mmap(minsz); err != nil {
-			return nil, &Error{"mmap allocate error", err}
+			return nil, fmt.Errorf("mmap allocate error: %s", err)
 		}
 	}
 
