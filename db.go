@@ -66,11 +66,11 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
 	if db.file, err = os.OpenFile(db.path, os.O_RDWR|os.O_CREATE, mode); err != nil {
-		db.close()
+		_ = db.close()
 		return err
 	}
 	if db.metafile, err = os.OpenFile(db.path, os.O_RDWR|os.O_SYNC, mode); err != nil {
-		db.close()
+		_ = db.close()
 		return err
 	}
 
@@ -96,7 +96,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 
 	// Memory map the data file.
 	if err := db.mmap(0); err != nil {
-		db.close()
+		_ = db.close()
 		return err
 	}
 
@@ -369,7 +369,7 @@ func (db *DB) Do(fn func(*Tx) error) error {
 	err = fn(t)
 	t.managed = false
 	if err != nil {
-		t.Rollback()
+		_ = t.Rollback()
 		return err
 	}
 
@@ -385,7 +385,6 @@ func (db *DB) With(fn func(*Tx) error) error {
 	if err != nil {
 		return err
 	}
-	defer t.Rollback()
 
 	// Mark as a managed tx so that the inner function cannot manually rollback.
 	t.managed = true
@@ -393,8 +392,16 @@ func (db *DB) With(fn func(*Tx) error) error {
 	// If an error is returned from the function then pass it through.
 	err = fn(t)
 	t.managed = false
+	if err != nil {
+		_ = t.Rollback()
+		return err
+	}
 
-	return err
+	if err := t.Rollback(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Copy writes the entire database to a writer.
@@ -406,20 +413,26 @@ func (db *DB) Copy(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer t.Rollback()
 
 	// Open reader on the database.
 	f, err := os.Open(db.path)
 	if err != nil {
+		_ = t.Rollback()
 		return err
 	}
-	defer f.Close()
 
 	// Copy everything.
 	if _, err := io.Copy(w, f); err != nil {
+		_ = t.Rollback()
+		_ = f.Close()
 		return err
 	}
-	return nil
+
+	if err := t.Rollback(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // CopyFile copies the entire database to file at the given path.
@@ -430,10 +443,10 @@ func (db *DB) CopyFile(path string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	err = db.Copy(f)
 	if err != nil {
+		_ = f.Close()
 		return err
 	}
 	return f.Close()

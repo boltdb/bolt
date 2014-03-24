@@ -18,10 +18,15 @@ cpuprofile: fmt
 	@go test -c
 	@./bolt.test -test.v -test.run="^X" -test.bench=$(BENCH) -test.cpuprofile cpu.prof
 
+# go get github.com/kisielk/errcheck
+errcheck:
+	@echo "=== errcheck ==="
+	@errcheck github.com/boltdb/bolt
+
 fmt:
 	@go fmt ./...
 
-test: fmt
+test: fmt errcheck
 	@echo "=== TESTS ==="
 	@go test -v -cover -test.run=$(TEST)
 	@echo ""
