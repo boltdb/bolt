@@ -453,13 +453,24 @@ func (db *DB) Copy(w io.Writer) error {
 		return err
 	}
 
-	// Copy everything.
+	// Copy the meta pages.
+	db.metalock.Lock()
+	_, err = io.CopyN(w, f, int64(db.pageSize*2))
+	db.metalock.Unlock()
+	if err != nil {
+		_ = t.Rollback()
+		_ = f.Close()
+		return fmt.Errorf("meta copy: %s", err)
+	}
+
+	// Copy data pages.
 	if _, err := io.Copy(w, f); err != nil {
 		_ = t.Rollback()
 		_ = f.Close()
 		return err
 	}
 
+	// Close read transaction and exit.
 	if err := t.Rollback(); err != nil {
 		_ = f.Close()
 		return err
