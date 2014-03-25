@@ -230,7 +230,7 @@ func TestTxDeleteBucket(t *testing.T) {
 
 		db.Update(func(tx *Tx) error {
 			// Verify that the bucket's page is free.
-			assert.Equal(t, []pgid{root}, db.freelist.all())
+			assert.Equal(t, []pgid{6, root, 3}, db.freelist.all())
 
 			// Create the bucket again and make sure there's not a phantom value.
 			assert.NoError(t, tx.CreateBucket("widgets"))

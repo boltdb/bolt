@@ -244,11 +244,11 @@ func TestDBStat(t *testing.T) {
 		// Obtain stats.
 		stat, err := db.Stat()
 		assert.NoError(t, err)
-		assert.Equal(t, stat.PageCount, 128)
-		assert.Equal(t, stat.FreePageCount, 2)
-		assert.Equal(t, stat.PageSize, 4096)
-		assert.Equal(t, stat.MmapSize, 4194304)
-		assert.Equal(t, stat.TxCount, 2)
+		assert.Equal(t, 126, stat.PageCount)
+		assert.Equal(t, 3, stat.FreePageCount)
+		assert.Equal(t, 4096, stat.PageSize)
+		assert.Equal(t, 4194304, stat.MmapSize)
+		assert.Equal(t, 2, stat.TxCount)
 
 		// Close readers.
 		t0.Rollback()
@@ -280,6 +280,48 @@ func TestDBMmapSize(t *testing.T) {
 	assert.Equal(t, db.mmapSize(10000000), 20000768)
 	assert.Equal(t, db.mmapSize((1<<30)-1), 2147483648)
 	assert.Equal(t, db.mmapSize(1<<30), 1<<31)
+}
+
+// Ensure that database pages are in expected order and type.
+func TestDBConsistency(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			return tx.CreateBucket("widgets")
+		})
+
+		for i := 0; i < 10; i++ {
+			db.Update(func(tx *Tx) error {
+				assert.NoError(t, tx.Bucket("widgets").Put([]byte("foo"), []byte("bar")))
+				return nil
+			})
+		}
+		db.Update(func(tx *Tx) error {
+			if p, _ := tx.Page(0); assert.NotNil(t, p) {
+				assert.Equal(t, "meta", p.Type)
+			}
+			if p, _ := tx.Page(1); assert.NotNil(t, p) {
+				assert.Equal(t, "meta", p.Type)
+			}
+			if p, _ := tx.Page(2); assert.NotNil(t, p) {
+				assert.Equal(t, "freelist", p.Type)
+			}
+			if p, _ := tx.Page(3); assert.NotNil(t, p) {
+				assert.Equal(t, "free", p.Type)
+			}
+			if p, _ := tx.Page(4); assert.NotNil(t, p) {
+				assert.Equal(t, "buckets", p.Type)
+			}
+			if p, _ := tx.Page(5); assert.NotNil(t, p) {
+				assert.Equal(t, "leaf", p.Type)
+			}
+			if p, _ := tx.Page(6); assert.NotNil(t, p) {
+				assert.Equal(t, "free", p.Type)
+			}
+			p, _ := tx.Page(7)
+			assert.Nil(t, p)
+			return nil
+		})
+	})
 }
 
 // Ensure that a database can return a string representation of itself.
