@@ -24,6 +24,10 @@ func TestParallelTxs(t *testing.T) {
 		numReaders = (numReaders % 10) + 1
 		batchSize = (batchSize % 50) + 1
 
+		// warn("")
+		// warn("================================================================")
+		// warn("numReaders:", numReaders, "batchSize", batchSize)
+
 		// Maintain the current dataset.
 		var current testdata
 
@@ -50,7 +54,10 @@ func TestParallelTxs(t *testing.T) {
 
 					go func() {
 						mutex.RLock()
-						local := current
+						local := make(map[string][]byte)
+						for _, item := range current {
+							local[string(item.Key)] = item.Value
+						}
 						tx, err := db.Begin(false)
 						mutex.RUnlock()
 						if err == ErrDatabaseNotOpen {
@@ -61,9 +68,9 @@ func TestParallelTxs(t *testing.T) {
 						}
 
 						// Verify all data is in for local data list.
-						for _, item := range local {
-							value := tx.Bucket("widgets").Get(item.Key)
-							if !assert.NoError(t, err) || !assert.Equal(t, value, item.Value) {
+						for k, v := range local {
+							value := tx.Bucket("widgets").Get([]byte(k))
+							if !assert.NoError(t, err) || !assert.Equal(t, value, v, fmt.Sprintf("reader (%p)", tx)) {
 								tx.Rollback()
 								wg.Done()
 								t.FailNow()
@@ -94,9 +101,12 @@ func TestParallelTxs(t *testing.T) {
 					t.FailNow()
 				}
 
+				// warnf("[writer] BEGIN (%d)", currentBatchSize)
+
 				// Insert whole batch.
 				b := tx.Bucket("widgets")
 				for _, item := range batchItems {
+					// warnf("[writer] PUT %x: %x", trunc(item.Key, 3), trunc(item.Value, 3))
 					err := b.Put(item.Key, item.Value)
 					if !assert.NoError(t, err) {
 						t.FailNow()
@@ -105,6 +115,7 @@ func TestParallelTxs(t *testing.T) {
 
 				// Commit and update the current list.
 				mutex.Lock()
+				// warnf("[writer] COMMIT\n\n")
 				err = tx.Commit()
 				current = append(current, batchItems...)
 				mutex.Unlock()
