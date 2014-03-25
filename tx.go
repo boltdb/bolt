@@ -195,13 +195,14 @@ func (t *Tx) Commit() error {
 	}
 	t.buckets.write(p)
 
+	// Free previous bucket page and update meta.
+	t.db.freelist.free(t.id(), t.page(t.meta.buckets))
+	t.meta.buckets = p.id
+
 	// Write dirty pages to disk.
 	if err := t.write(); err != nil {
 		return err
 	}
-
-	// Update the meta.
-	t.meta.buckets = p.id
 
 	// Write meta to disk.
 	if err := t.writeMeta(); err != nil {
