@@ -61,6 +61,14 @@ func NewApp() *cli.App {
 				Pages(path)
 			},
 		},
+		{
+			Name:  "check",
+			Usage: "Performs a consistency check on the database",
+			Action: func(c *cli.Context) {
+				path := c.Args().Get(0)
+				Check(path)
+			},
+		},
 	}
 	return app
 }

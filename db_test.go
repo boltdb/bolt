@@ -78,7 +78,8 @@ func TestDBMetaInitWriteError(t *testing.T) {
 
 // Ensure that a database that is too small returns an error.
 func TestDBFileTooSmall(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
+	withDB(func(db *DB, path string) {
+		assert.NoError(t, db.Open(path, 0666))
 		db.Close()
 
 		// corrupt the database
@@ -130,6 +131,7 @@ func TestDBBeginRW(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, tx.DB(), db)
 		assert.Equal(t, tx.Writable(), true)
+		assert.NoError(t, tx.Commit())
 	})
 }
 
@@ -382,7 +384,26 @@ func withOpenDB(fn func(*DB, string)) {
 		}
 		defer db.Close()
 		fn(db, path)
+
+		// Check database consistency after every test.
+		mustCheck(db)
 	})
+}
+
+// mustCheck runs a consistency check on the database and panics if any errors are found.
+func mustCheck(db *DB) {
+	if err := db.Check(); err != nil {
+		// Copy db off first.
+		db.CopyFile("/tmp/check.db", 0600)
+
+		if errors, ok := err.(ErrorList); ok {
+			for _, err := range errors {
+				warn(err)
+			}
+		}
+		warn(err)
+		panic("check failure: see /tmp/check.db")
+	}
 }
 
 func trunc(b []byte, length int) []byte {

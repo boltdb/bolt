@@ -271,6 +271,7 @@ func TestBucketStat(t *testing.T) {
 
 			return nil
 		})
+		mustCheck(db)
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket("widgets")
 			stat := b.Stat()
