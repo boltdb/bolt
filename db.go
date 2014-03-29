@@ -523,6 +523,63 @@ func (db *DB) Stat() (*Stat, error) {
 	return s, nil
 }
 
+// Check performs several consistency checks on the database.
+// An error is returned if any inconsistency is found.
+func (db *DB) Check() error {
+	return db.Update(func(tx *Tx) error {
+		var errors ErrorList
+
+		// Track every reachable page.
+		reachable := make(map[pgid]*page)
+		reachable[0] = tx.page(0) // meta0
+		reachable[1] = tx.page(1) // meta1
+		reachable[tx.meta.buckets] = tx.page(tx.meta.buckets)
+		reachable[tx.meta.freelist] = tx.page(tx.meta.freelist)
+
+		// Check each reachable page within each bucket.
+		for _, bucket := range tx.Buckets() {
+			// warnf("[bucket] %s", bucket.name)
+			tx.forEachPage(bucket.root, 0, func(p *page, _ int) {
+				// Ensure each page is only referenced once.
+				for i := pgid(0); i <= pgid(p.overflow); i++ {
+					var id = p.id + i
+					if _, ok := reachable[id]; ok {
+						errors = append(errors, fmt.Errorf("page %d: multiple references", int(id)))
+					}
+					reachable[id] = p
+				}
+
+				// Retrieve page info.
+				info, err := tx.Page(int(p.id))
+				// warnf("[page] %d + %d (%s)", p.id, p.overflow, info.Type)
+				if err != nil {
+					errors = append(errors, err)
+				} else if info == nil {
+					errors = append(errors, fmt.Errorf("page %d: out of bounds: %d", int(p.id), int(tx.meta.pgid)))
+				} else if info.Type != "branch" && info.Type != "leaf" {
+					errors = append(errors, fmt.Errorf("page %d: invalid type: %s", int(p.id), info.Type))
+				}
+			})
+		}
+
+		// Ensure all pages below high water mark are either reachable or freed.
+		for i := pgid(0); i < tx.meta.pgid; i++ {
+			_, isReachable := reachable[i]
+			if !isReachable && !db.freelist.isFree(i) {
+				errors = append(errors, fmt.Errorf("page %d: unreachable unfreed", int(i)))
+			}
+		}
+
+		// TODO(benbjohnson): Ensure that only one buckets page exists.
+
+		if len(errors) > 0 {
+			return errors
+		}
+
+		return nil
+	})
+}
+
 // page retrieves a page reference from the mmap based on the current page size.
 func (db *DB) page(id pgid) *page {
 	pos := id * pgid(db.pageSize)

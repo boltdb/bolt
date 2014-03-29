@@ -258,6 +258,7 @@ func (n *node) rebalance() {
 			// Remove old child.
 			child.parent = nil
 			delete(n.tx.nodes, child.pgid)
+			child.free()
 		}
 
 		return
@@ -318,6 +319,7 @@ func (n *node) rebalance() {
 		n.inodes = append(n.inodes, target.inodes...)
 		n.parent.del(target.key)
 		delete(n.tx.nodes, target.pgid)
+		target.free()
 	} else {
 		// Reparent all child nodes being moved.
 		for _, inode := range n.inodes {
@@ -331,6 +333,7 @@ func (n *node) rebalance() {
 		n.parent.del(n.key)
 		n.parent.put(target.key, target.inodes[0].key, nil, target.pgid)
 		delete(n.tx.nodes, n.pgid)
+		n.free()
 	}
 
 	// Either this node or the target node was deleted from the parent so rebalance it.
@@ -354,6 +357,13 @@ func (n *node) dereference() {
 		value := make([]byte, len(inode.value))
 		copy(value, inode.value)
 		inode.value = value
+	}
+}
+
+// free adds the node's underlying page to the freelist.
+func (n *node) free() {
+	if n.pgid != 0 {
+		n.tx.db.freelist.free(n.tx.id(), n.tx.page(n.pgid))
 	}
 }
 

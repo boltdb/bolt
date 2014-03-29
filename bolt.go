@@ -15,6 +15,14 @@ func Open(path string, mode os.FileMode) (*DB, error) {
 	return db, nil
 }
 
+// ErrorList represents a slice of errors.
+type ErrorList []error
+
+// Error returns a readable count of the errors in the list.
+func (l ErrorList) Error() string {
+	return fmt.Sprintf("%d errors occurred", len(l))
+}
+
 // _assert will panic with a given formatted message if the given condition is false.
 func _assert(condition bool, msg string, v ...interface{}) {
 	if !condition {
