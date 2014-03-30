@@ -28,6 +28,19 @@ func TestOpen(t *testing.T) {
 	db.Close()
 }
 
+func TestOpenCheck(t *testing.T) {
+	path := "/tmp/bolt-test.db"
+
+	db, err := Open(path, 0666)
+	assert.NoError(t, err)
+	assert.NotNil(t, db)
+
+	err = db.Check()
+	assert.NoError(t, err)
+
+	db.Close()
+}
+
 // Ensure that opening a database with a bad path returns an error.
 func TestOpenBadPath(t *testing.T) {
 	db, err := Open("/../bad-path", 0666)
