@@ -47,6 +47,7 @@ So why use Bolt? The goal of Bolt is provide a simple, fast data store that is e
 Below is a list of public, open source projects that use Bolt:
 
 * [Skybox Analytics](https://github.com/skybox/skybox)
+* [DVID](https://github.com/janelia-flyem/dvid) - Added Bolt as optional storage engine and testing it against Basho-tuned leveldb.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
 
