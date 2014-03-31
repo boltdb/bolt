@@ -12,6 +12,11 @@ type freelist struct {
 	pending map[txid][]pgid
 }
 
+// size returns the size of the page after serialization.
+func (f *freelist) size() int {
+	return pageHeaderSize + (int(unsafe.Sizeof(pgid(0))) * len(f.all()))
+}
+
 // all returns a list of all free ids and all pending ids in one sorted list.
 func (f *freelist) all() []pgid {
 	ids := make([]pgid, len(f.ids))
