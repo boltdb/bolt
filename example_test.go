@@ -12,8 +12,7 @@ func init() {
 
 func ExampleDB_Update() {
 	// Open the database.
-	var db DB
-	db.Open("/tmp/bolt/db_do.db", 0666)
+	db, _ := Open("/tmp/bolt/db_do.db", 0666)
 	defer db.Close()
 
 	// Execute several commands within a write transaction.
@@ -43,8 +42,7 @@ func ExampleDB_Update() {
 
 func ExampleDB_View() {
 	// Open the database.
-	var db DB
-	db.Open("/tmp/bolt/db_with.db", 0666)
+	db, _ := Open("/tmp/bolt/db_with.db", 0666)
 	defer db.Close()
 
 	// Insert data into a bucket.
@@ -68,8 +66,7 @@ func ExampleDB_View() {
 
 func ExampleTx_Put() {
 	// Open the database.
-	var db DB
-	db.Open("/tmp/bolt/db_put.db", 0666)
+	db, _ := Open("/tmp/bolt/db_put.db", 0666)
 	defer db.Close()
 
 	// Start a write transaction.
@@ -95,8 +92,7 @@ func ExampleTx_Put() {
 
 func ExampleTx_Delete() {
 	// Open the database.
-	var db DB
-	db.Open("/tmp/bolt/db_delete.db", 0666)
+	db, _ := Open("/tmp/bolt/db_delete.db", 0666)
 	defer db.Close()
 
 	// Start a write transaction.
@@ -135,8 +131,7 @@ func ExampleTx_Delete() {
 
 func ExampleTx_ForEach() {
 	// Open the database.
-	var db DB
-	db.Open("/tmp/bolt/tx_foreach.db", 0666)
+	db, _ := Open("/tmp/bolt/tx_foreach.db", 0666)
 	defer db.Close()
 
 	// Insert data into a bucket.
@@ -163,8 +158,7 @@ func ExampleTx_ForEach() {
 
 func ExampleBegin_ReadOnly() {
 	// Open the database.
-	var db DB
-	db.Open("/tmp/bolt/tx.db", 0666)
+	db, _ := Open("/tmp/bolt/tx.db", 0666)
 	defer db.Close()
 
 	// Create a bucket.
@@ -196,8 +190,7 @@ func ExampleBegin_ReadOnly() {
 
 func ExampleTx_rollback() {
 	// Open the database.
-	var db DB
-	db.Open("/tmp/bolt/tx_rollback.db", 0666)
+	db, _ := Open("/tmp/bolt/tx_rollback.db", 0666)
 	defer db.Close()
 
 	// Create a bucket.
@@ -229,8 +222,7 @@ func ExampleTx_rollback() {
 
 func ExampleDB_CopyFile() {
 	// Open the database.
-	var db DB
-	db.Open("/tmp/bolt/db_copy.db", 0666)
+	db, _ := Open("/tmp/bolt/db_copy.db", 0666)
 	defer db.Close()
 
 	// Create a bucket and a key.
@@ -244,8 +236,7 @@ func ExampleDB_CopyFile() {
 	db.CopyFile("/tmp/bolt/db_copy_2.db", 0666)
 
 	// Open the cloned database.
-	var db2 DB
-	db2.Open("/tmp/bolt/db_copy_2.db", 0666)
+	db2, _ := Open("/tmp/bolt/db_copy_2.db", 0666)
 	defer db2.Close()
 
 	// Ensure that the key exists in the copy.

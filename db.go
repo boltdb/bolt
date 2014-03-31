@@ -67,44 +67,35 @@ func (db *DB) String() string {
 	return fmt.Sprintf("DB<%q>", db.path)
 }
 
-// Open opens a data file at the given path and initializes the database.
+// Open creates and opens a database at the given path.
 // If the file does not exist then it will be created automatically.
-func (db *DB) Open(path string, mode os.FileMode) error {
-	var err error
-	db.metalock.Lock()
-	defer db.metalock.Unlock()
-
-	// Exit if the database is currently open.
-	if db.opened {
-		return ErrDatabaseOpen
-	}
+func Open(path string, mode os.FileMode) (*DB, error) {
+	var db = &DB{opened: true}
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
+
+	var err error
 	if db.file, err = os.OpenFile(db.path, os.O_RDWR|os.O_CREATE, mode); err != nil {
 		_ = db.close()
-		return err
+		return nil, err
 	}
 	if db.metafile, err = os.OpenFile(db.path, os.O_RDWR|os.O_SYNC, mode); err != nil {
 		_ = db.close()
-		return err
+		return nil, err
 	}
 
-	// default values for test hooks
-	if db.ops.writeAt == nil {
-		db.ops.writeAt = db.file.WriteAt
-	}
-	if db.ops.metaWriteAt == nil {
-		db.ops.metaWriteAt = db.metafile.WriteAt
-	}
+	// Default values for test hooks
+	db.ops.writeAt = db.file.WriteAt
+	db.ops.metaWriteAt = db.metafile.WriteAt
 
 	// Initialize the database if it doesn't exist.
 	if info, err := db.file.Stat(); err != nil {
-		return fmt.Errorf("stat error: %s", err)
+		return nil, fmt.Errorf("stat error: %s", err)
 	} else if info.Size() == 0 {
 		// Initialize new files with meta pages.
 		if err := db.init(); err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		// Read the first meta page to determine the page size.
@@ -112,7 +103,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 			m := db.pageInBuffer(buf[:], 0).meta()
 			if err := m.validate(); err != nil {
-				return fmt.Errorf("meta error: %s", err)
+				return nil, fmt.Errorf("meta error: %s", err)
 			}
 			db.pageSize = int(m.pageSize)
 		}
@@ -121,7 +112,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 	// Memory map the data file.
 	if err := db.mmap(0); err != nil {
 		_ = db.close()
-		return err
+		return nil, err
 	}
 
 	// Read in the freelist.
@@ -129,8 +120,7 @@ func (db *DB) Open(path string, mode os.FileMode) error {
 	db.freelist.read(db.page(db.meta().freelist))
 
 	// Mark the database as opened and return.
-	db.opened = true
-	return nil
+	return db, nil
 }
 
 // mmap opens the underlying memory-mapped file and initializes the meta references.
