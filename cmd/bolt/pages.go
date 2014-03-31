@@ -39,7 +39,10 @@ func Pages(path string) {
 				overflow = strconv.Itoa(p.OverflowCount)
 			}
 			printf("%-8d %-10s %-6d %-6s\n", p.ID, p.Type, p.Count, overflow)
-			id += 1 + p.OverflowCount
+			id += 1
+			if p.Type != "free" {
+				id += p.OverflowCount
+			}
 		}
 		return nil
 	})

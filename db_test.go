@@ -53,6 +53,18 @@ func TestDBReopen(t *testing.T) {
 	})
 }
 
+// Ensure that a re-opened database is consistent.
+func TestOpenCheck(t *testing.T) {
+	withDB(func(db *DB, path string) {
+		assert.NoError(t, db.Open(path, 0666))
+		assert.NoError(t, db.Check())
+		db.Close()
+
+		assert.NoError(t, db.Open(path, 0666))
+		assert.NoError(t, db.Check())
+	})
+}
+
 // Ensure that the database returns an error if the file handle cannot be open.
 func TestDBOpenFileError(t *testing.T) {
 	withDB(func(db *DB, path string) {
@@ -246,8 +258,8 @@ func TestDBStat(t *testing.T) {
 		// Obtain stats.
 		stat, err := db.Stat()
 		assert.NoError(t, err)
-		assert.Equal(t, 126, stat.PageCount)
-		assert.Equal(t, 3, stat.FreePageCount)
+		assert.Equal(t, 127, stat.PageCount)
+		assert.Equal(t, 4, stat.FreePageCount)
 		assert.Equal(t, 4096, stat.PageSize)
 		assert.Equal(t, 4194304, stat.MmapSize)
 		assert.Equal(t, 2, stat.TxCount)
@@ -305,21 +317,24 @@ func TestDBConsistency(t *testing.T) {
 				assert.Equal(t, "meta", p.Type)
 			}
 			if p, _ := tx.Page(2); assert.NotNil(t, p) {
-				assert.Equal(t, "freelist", p.Type)
+				assert.Equal(t, "free", p.Type)
 			}
 			if p, _ := tx.Page(3); assert.NotNil(t, p) {
 				assert.Equal(t, "free", p.Type)
 			}
 			if p, _ := tx.Page(4); assert.NotNil(t, p) {
-				assert.Equal(t, "buckets", p.Type)
+				assert.Equal(t, "freelist", p.Type)
 			}
 			if p, _ := tx.Page(5); assert.NotNil(t, p) {
-				assert.Equal(t, "leaf", p.Type)
+				assert.Equal(t, "buckets", p.Type)
 			}
 			if p, _ := tx.Page(6); assert.NotNil(t, p) {
+				assert.Equal(t, "leaf", p.Type)
+			}
+			if p, _ := tx.Page(7); assert.NotNil(t, p) {
 				assert.Equal(t, "free", p.Type)
 			}
-			p, _ := tx.Page(7)
+			p, _ := tx.Page(8)
 			assert.Nil(t, p)
 			return nil
 		})

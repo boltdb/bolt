@@ -271,6 +271,10 @@ func (db *DB) close() error {
 	db.freelist = nil
 	db.path = ""
 
+	// Clear ops.
+	db.ops.writeAt = nil
+	db.ops.metaWriteAt = nil
+
 	// Close the mmap.
 	if err := db.munmap(); err != nil {
 		return err
@@ -533,8 +537,12 @@ func (db *DB) Check() error {
 		reachable := make(map[pgid]*page)
 		reachable[0] = tx.page(0) // meta0
 		reachable[1] = tx.page(1) // meta1
-		reachable[tx.meta.buckets] = tx.page(tx.meta.buckets)
-		reachable[tx.meta.freelist] = tx.page(tx.meta.freelist)
+		for i := uint32(0); i <= tx.page(tx.meta.buckets).overflow; i++ {
+			reachable[tx.meta.buckets+pgid(i)] = tx.page(tx.meta.buckets)
+		}
+		for i := uint32(0); i <= tx.page(tx.meta.freelist).overflow; i++ {
+			reachable[tx.meta.freelist+pgid(i)] = tx.page(tx.meta.freelist)
+		}
 
 		// Check each reachable page within each bucket.
 		for _, bucket := range tx.Buckets() {
