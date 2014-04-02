@@ -65,6 +65,10 @@ func (b *Bucket) Writable() bool {
 // The cursor is only valid as long as the transaction is open.
 // Do not use a cursor after the transaction is closed.
 func (b *Bucket) Cursor() *Cursor {
+	// Update transaction statistics.
+	b.tx.stats.CursorCount++
+
+	// Allocate and return a cursor.
 	return &Cursor{
 		tx:    b.tx,
 		root:  b.root,

@@ -3,6 +3,7 @@ package bolt
 import (
 	"errors"
 	"sort"
+	"time"
 	"unsafe"
 )
 
@@ -36,6 +37,7 @@ type Tx struct {
 	nodes    map[pgid]*node
 	pages    map[pgid]*page
 	pending  []*node
+	stats    TxStats
 }
 
 // init initializes the transaction.
@@ -73,6 +75,11 @@ func (t *Tx) DB() *DB {
 // Writable returns whether the transaction can perform write operations.
 func (t *Tx) Writable() bool {
 	return t.writable
+}
+
+// Stats retrieves a copy of the current transaction statistics.
+func (t *Tx) Stats() TxStats {
+	return t.stats
 }
 
 // Bucket retrieves a bucket by name.
@@ -182,11 +189,17 @@ func (t *Tx) Commit() error {
 
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
 
-	// Rebalance and spill data onto dirty pages.
+	// Rebalance nodes which have had deletions.
+	var startTime = time.Now()
 	t.rebalance()
+	t.stats.RebalanceTime += time.Since(startTime)
+
+	// spill data onto dirty pages.
+	startTime = time.Now()
 	if err := t.spill(); err != nil {
 		return err
 	}
+	t.stats.SpillTime += time.Since(startTime)
 
 	// Spill buckets page.
 	p, err := t.allocate((t.buckets.size() / t.db.pageSize) + 1)
@@ -210,6 +223,7 @@ func (t *Tx) Commit() error {
 	t.meta.freelist = p.id
 
 	// Write dirty pages to disk.
+	startTime = time.Now()
 	if err := t.write(); err != nil {
 		return err
 	}
@@ -218,6 +232,7 @@ func (t *Tx) Commit() error {
 	if err := t.writeMeta(); err != nil {
 		return err
 	}
+	t.stats.WriteTime += time.Since(startTime)
 
 	return nil
 }
@@ -236,6 +251,12 @@ func (t *Tx) Rollback() error {
 func (t *Tx) close() {
 	if t.writable {
 		t.db.rwlock.Unlock()
+
+		// Merge statistics.
+		t.db.metalock.Lock()
+		t.db.stats.TxStats.add(&t.stats)
+		t.db.metalock.Unlock()
+
 	} else {
 		t.db.removeTx(t)
 	}
@@ -251,6 +272,10 @@ func (t *Tx) allocate(count int) (*page, error) {
 
 	// Save to our page cache.
 	t.pages[p.id] = p
+
+	// Update statistics.
+	t.stats.PageCount++
+	t.stats.PageAlloc += count * t.db.pageSize
 
 	return p, nil
 }
@@ -329,6 +354,9 @@ func (t *Tx) spill() error {
 			if newNode.parent != nil {
 				newNode.parent.put(oldKey, newNode.inodes[0].key, nil, newNode.pgid)
 			}
+
+			// Update the statistics.
+			t.stats.Spill++
 		}
 
 		t.pending = nil
@@ -362,6 +390,9 @@ func (t *Tx) write() error {
 		if _, err := t.db.ops.writeAt(buf, offset); err != nil {
 			return err
 		}
+
+		// Update statistics.
+		t.stats.Write++
 	}
 	if err := fdatasync(t.db.file); err != nil {
 		return err
@@ -388,6 +419,9 @@ func (t *Tx) writeMeta() error {
 		return err
 	}
 
+	// Update statistics.
+	t.stats.Write++
+
 	return nil
 }
 
@@ -408,6 +442,9 @@ func (t *Tx) node(pgid pgid, parent *node) *node {
 	n.read(t.page(pgid))
 	t.nodes[pgid] = n
 
+	// Update statistics.
+	t.stats.NodeCount++
+
 	return n
 }
 
@@ -420,6 +457,9 @@ func (t *Tx) dereference() {
 	for _, n := range t.pending {
 		n.dereference()
 	}
+
+	// Update statistics
+	t.stats.NodeDeref += len(t.nodes) + len(t.pending)
 }
 
 // page returns a reference to the page with a given id.
@@ -490,4 +530,63 @@ func (t *Tx) Page(id int) (*PageInfo, error) {
 	}
 
 	return info, nil
+}
+
+// TxStats represents statistics about the actions performed by the transaction.
+type TxStats struct {
+	// Page statistics.
+	PageCount int // number of page allocations
+	PageAlloc int // total bytes allocated
+
+	// Cursor statistics.
+	CursorCount int // number of cursors created
+
+	// Node statistics
+	NodeCount int // number of node allocations
+	NodeDeref int // number of node dereferences
+
+	// Rebalance statistics.
+	Rebalance     int           // number of node rebalances
+	RebalanceTime time.Duration // total time spent rebalancing
+
+	// Spill statistics.
+	Spill     int           // number of node spilled
+	SpillTime time.Duration // total time spent spilling
+
+	// Write statistics.
+	Write     int           // number of writes performed
+	WriteTime time.Duration // total time spent writing to disk
+}
+
+func (s *TxStats) add(other *TxStats) {
+	s.PageCount += other.PageCount
+	s.PageAlloc += other.PageAlloc
+	s.CursorCount += other.CursorCount
+	s.NodeCount += other.NodeCount
+	s.NodeDeref += other.NodeDeref
+	s.Rebalance += other.Rebalance
+	s.RebalanceTime += other.RebalanceTime
+	s.Spill += other.Spill
+	s.SpillTime += other.SpillTime
+	s.Write += other.Write
+	s.WriteTime += other.WriteTime
+}
+
+// Sub calculates and returns the difference between two sets of transaction stats.
+// This is useful when obtaining stats at two different points and time and
+// you need the performance counters that occurred within that time span.
+func (s *TxStats) Sub(other *TxStats) TxStats {
+	var diff TxStats
+	diff.PageCount = s.PageCount - other.PageCount
+	diff.PageAlloc = s.PageAlloc - other.PageAlloc
+	diff.CursorCount = s.CursorCount - other.CursorCount
+	diff.NodeCount = s.NodeCount - other.NodeCount
+	diff.NodeDeref = s.NodeDeref - other.NodeDeref
+	diff.Rebalance = s.Rebalance - other.Rebalance
+	diff.RebalanceTime = s.RebalanceTime - other.RebalanceTime
+	diff.Spill = s.Spill - other.Spill
+	diff.SpillTime = s.SpillTime - other.SpillTime
+	diff.Write = s.Write - other.Write
+	diff.WriteTime = s.WriteTime - other.WriteTime
+	return diff
 }
