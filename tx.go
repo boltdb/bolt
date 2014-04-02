@@ -381,7 +381,10 @@ func (t *Tx) writeMeta() error {
 	t.meta.write(p)
 
 	// Write the meta page to file.
-	if _, err := t.db.ops.metaWriteAt(buf, int64(p.id)*int64(t.db.pageSize)); err != nil {
+	if _, err := t.db.ops.writeAt(buf, int64(p.id)*int64(t.db.pageSize)); err != nil {
+		return err
+	}
+	if err := fdatasync(t.db.file); err != nil {
 		return err
 	}
 
