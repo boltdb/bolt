@@ -341,7 +341,6 @@ func TestBucketPutSingle(t *testing.T) {
 			}
 		})
 
-		fmt.Fprint(os.Stderr, ".")
 		index++
 		return true
 	}
@@ -385,7 +384,6 @@ func TestBucketPutMultiple(t *testing.T) {
 				return nil
 			})
 		})
-		fmt.Fprint(os.Stderr, ".")
 		return true
 	}
 	if err := quick.Check(f, qconfig()); err != nil {
@@ -442,7 +440,6 @@ func TestBucketDeleteQuick(t *testing.T) {
 				})
 			}
 		})
-		fmt.Fprint(os.Stderr, ".")
 		return true
 	}
 	if err := quick.Check(f, qconfig()); err != nil {

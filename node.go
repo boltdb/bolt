@@ -233,6 +233,9 @@ func (n *node) rebalance() {
 	}
 	n.unbalanced = false
 
+	// Update statistics.
+	n.tx.stats.Rebalance++
+
 	// Ignore if node is above threshold (25%) and has enough keys.
 	var threshold = n.tx.db.pageSize / 4
 	if n.size() > threshold && len(n.inodes) > n.minKeys() {

@@ -40,6 +40,7 @@ type DB struct {
 	rwtx     *Tx
 	txs      []*Tx
 	freelist *freelist
+	stats    Stats
 
 	rwlock   sync.Mutex   // Allows only one writer at a time.
 	metalock sync.Mutex   // Protects meta page access.
@@ -374,6 +375,9 @@ func (db *DB) removeTx(t *Tx) {
 			break
 		}
 	}
+
+	// Merge statistics.
+	db.stats.TxStats.add(&t.stats)
 }
 
 // Update executes a function within the context of a read-write managed transaction.
@@ -490,32 +494,12 @@ func (db *DB) CopyFile(path string, mode os.FileMode) error {
 	return f.Close()
 }
 
-// Stat retrieves stats on the database and its page usage.
-// Returns an error if the database is not open.
-func (db *DB) Stat() (*Stat, error) {
-	// Obtain meta & mmap locks.
+// Stats retrieves ongoing performance stats for the database.
+// This is only updated when a transaction closes.
+func (db *DB) Stats() Stats {
 	db.metalock.Lock()
-	db.mmaplock.RLock()
-
-	var s = &Stat{
-		MmapSize: len(db.data),
-		TxCount:  len(db.txs),
-	}
-
-	// Release locks.
-	db.mmaplock.RUnlock()
-	db.metalock.Unlock()
-
-	err := db.Update(func(t *Tx) error {
-		s.PageCount = int(t.meta.pgid)
-		s.FreePageCount = len(db.freelist.all())
-		s.PageSize = db.pageSize
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return s, nil
+	defer db.metalock.Unlock()
+	return db.stats
 }
 
 // Check performs several consistency checks on the database.
@@ -625,25 +609,20 @@ func (db *DB) allocate(count int) (*page, error) {
 	return p, nil
 }
 
-// Stat represents stats on the database such as free pages and sizes.
-type Stat struct {
-	// PageCount is the total number of allocated pages. This is a high water
-	// mark in the database that represents how many pages have actually been
-	// used. This will be smaller than the MmapSize / PageSize.
-	PageCount int
+// Stats represents statistics about the database.
+type Stats struct {
+	TxStats TxStats // global, ongoing stats.
+}
 
-	// FreePageCount is the total number of pages which have been previously
-	// allocated but are no longer used.
-	FreePageCount int
+// Sub calculates and returns the difference between two sets of database stats.
+// This is useful when obtaining stats at two different points and time and
+// you need the performance counters that occurred within that time span.
+func (s *Stats) Sub(other *Stats) Stats {
+	var diff Stats
+	diff.TxStats = s.TxStats.Sub(&other.TxStats)
+	return diff
+}
 
-	// PageSize is the size, in bytes, of individual database pages.
-	PageSize int
-
-	// MmapSize is the mmap-allocated size of the data file. When the data file
-	// grows beyond this size, the database will obtain a lock on the mmap and
-	// resize it.
-	MmapSize int
-
-	// TxCount is the total number of reader transactions.
-	TxCount int
+func (s *Stats) add(other *Stats) {
+	s.TxStats.add(&other.TxStats)
 }

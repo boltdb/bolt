@@ -137,7 +137,6 @@ func TestParallelTxs(t *testing.T) {
 			// Wait for readers to finish.
 			wg.Wait()
 		})
-		fmt.Fprint(os.Stderr, ".")
 		return true
 	}, qconfig())
 	assert.NoError(t, err)
