@@ -32,7 +32,6 @@ var (
 type DB struct {
 	path     string
 	file     *os.File
-	metafile *os.File
 	data     []byte
 	meta0    *meta
 	meta1    *meta
@@ -47,8 +46,7 @@ type DB struct {
 	mmaplock sync.RWMutex // Protects mmap access during remapping.
 
 	ops struct {
-		writeAt     func(b []byte, off int64) (n int, err error)
-		metaWriteAt func(b []byte, off int64) (n int, err error)
+		writeAt func(b []byte, off int64) (n int, err error)
 	}
 }
 
@@ -80,14 +78,9 @@ func Open(path string, mode os.FileMode) (*DB, error) {
 		_ = db.close()
 		return nil, err
 	}
-	if db.metafile, err = os.OpenFile(db.path, os.O_RDWR|os.O_SYNC, mode); err != nil {
-		_ = db.close()
-		return nil, err
-	}
 
 	// Default values for test hooks
 	db.ops.writeAt = db.file.WriteAt
-	db.ops.metaWriteAt = db.metafile.WriteAt
 
 	// Initialize the database if it doesn't exist.
 	if info, err := db.file.Stat(); err != nil {
@@ -240,7 +233,10 @@ func (db *DB) init() error {
 	p.count = 0
 
 	// Write the buffer to our data file.
-	if _, err := db.ops.metaWriteAt(buf, 0); err != nil {
+	if _, err := db.ops.writeAt(buf, 0); err != nil {
+		return err
+	}
+	if err := fdatasync(db.file); err != nil {
 		return err
 	}
 
@@ -263,7 +259,6 @@ func (db *DB) close() error {
 
 	// Clear ops.
 	db.ops.writeAt = nil
-	db.ops.metaWriteAt = nil
 
 	// Close the mmap.
 	if err := db.munmap(); err != nil {
@@ -273,15 +268,9 @@ func (db *DB) close() error {
 	// Close file handles.
 	if db.file != nil {
 		if err := db.file.Close(); err != nil {
-			return fmt.Errorf("db file close error: %s", err)
+			return fmt.Errorf("db file close: %s", err)
 		}
 		db.file = nil
-	}
-	if db.metafile != nil {
-		if err := db.metafile.Close(); err != nil {
-			return fmt.Errorf("db metafile close error: %s", err)
-		}
-		db.metafile = nil
 	}
 
 	return nil
