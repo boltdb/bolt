@@ -105,7 +105,7 @@ func Open(path string, mode os.FileMode) (*DB, error) {
 		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 			m := db.pageInBuffer(buf[:], 0).meta()
 			if err := m.validate(); err != nil {
-				return nil, fmt.Errorf("meta error: %s", err)
+				return nil, fmt.Errorf("meta0 error: %s", err)
 			}
 			db.pageSize = int(m.pageSize)
 		}

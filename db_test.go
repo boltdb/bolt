@@ -117,8 +117,41 @@ func TestDBCorruptMeta0(t *testing.T) {
 
 		// Open the database.
 		_, err = Open(path, 0666)
-		assert.Equal(t, err, errors.New("meta error: invalid database"))
+		assert.Equal(t, err, errors.New("meta0 error: invalid database"))
 	})
+}
+
+// Ensure that a corrupt meta page checksum causes the open to fail.
+func TestDBMetaChecksumError(t *testing.T) {
+	for i := 0; i < 2; i++ {
+		withTempPath(func(path string) {
+			db, err := Open(path, 0600)
+			pageSize := db.pageSize
+			db.Update(func(tx *Tx) error {
+				return tx.CreateBucket("widgets")
+			})
+			db.Update(func(tx *Tx) error {
+				return tx.CreateBucket("woojits")
+			})
+			db.Close()
+
+			// Change a single byte in the meta page.
+			f, _ := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+			f.WriteAt([]byte{1}, int64((i*pageSize)+(pageHeaderSize+12)))
+			f.Sync()
+			f.Close()
+
+			// Reopen the database.
+			_, err = Open(path, 0600)
+			if assert.Error(t, err) {
+				if i == 0 {
+					assert.Equal(t, "meta0 error: checksum error", err.Error())
+				} else {
+					assert.Equal(t, "meta1 error: checksum error", err.Error())
+				}
+			}
+		})
+	}
 }
 
 // Ensure that a database cannot open a transaction when it's not open.
