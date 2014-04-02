@@ -79,6 +79,14 @@ func Open(path string, mode os.FileMode) (*DB, error) {
 		return nil, err
 	}
 
+	// Lock file so that other processes using Bolt cannot use the database
+	// at the same time. This would cause corruption since the two processes
+	// would write meta pages and free pages separately.
+	if err := syscall.Flock(int(db.file.Fd()), syscall.LOCK_EX); err != nil {
+		_ = db.close()
+		return nil, err
+	}
+
 	// Default values for test hooks
 	db.ops.writeAt = db.file.WriteAt
 
@@ -267,6 +275,10 @@ func (db *DB) close() error {
 
 	// Close file handles.
 	if db.file != nil {
+		// Unlock the file.
+		_ = syscall.Flock(int(db.file.Fd()), syscall.LOCK_UN)
+
+		// Close the file descriptor.
 		if err := db.file.Close(); err != nil {
 			return fmt.Errorf("db file close: %s", err)
 		}
