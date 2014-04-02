@@ -34,11 +34,19 @@ func Pages(path string) {
 				break
 			}
 
-			var overflow string
-			if p.OverflowCount > 0 {
-				overflow = strconv.Itoa(p.OverflowCount)
+			// Only display count and overflow if this is a non-free page.
+			var count, overflow string
+			if p.Type != "free" {
+				count = strconv.Itoa(p.Count)
+				if p.OverflowCount > 0 {
+					overflow = strconv.Itoa(p.OverflowCount)
+				}
 			}
-			printf("%-8d %-10s %-6d %-6s\n", p.ID, p.Type, p.Count, overflow)
+
+			// Print table row.
+			printf("%-8d %-10s %-6s %-6s\n", p.ID, p.Type, count, overflow)
+
+			// Move to the next non-overflow page.
 			id += 1
 			if p.Type != "free" {
 				id += p.OverflowCount
