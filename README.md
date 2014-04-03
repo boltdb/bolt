@@ -48,6 +48,7 @@ Below is a list of public, open source projects that use Bolt:
 
 * [Skybox Analytics](https://github.com/skybox/skybox) - A standalone funnel analysis tool for web analytics.
 * [DVID](https://github.com/janelia-flyem/dvid) - Added Bolt as optional storage engine and testing it against Basho-tuned leveldb.
+* [Scuttlebutt](https://github.com/benbjohnson/scuttlebutt) - Uses Bolt to store and process all Twitter mentions of GitHub projects.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
 
