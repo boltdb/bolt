@@ -54,8 +54,8 @@ func ExampleDB_View() {
 	})
 
 	// Access data from within a read-only transactional block.
-	db.View(func(t *Tx) error {
-		v := t.Bucket("people").Get([]byte("john"))
+	db.View(func(tx *Tx) error {
+		v := tx.Bucket("people").Get([]byte("john"))
 		fmt.Printf("John's last name is %s.\n", string(v))
 		return nil
 	})

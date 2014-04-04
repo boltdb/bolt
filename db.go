@@ -361,7 +361,7 @@ func (db *DB) beginRWTx() (*Tx, error) {
 }
 
 // removeTx removes a transaction from the database.
-func (db *DB) removeTx(t *Tx) {
+func (db *DB) removeTx(tx *Tx) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
@@ -369,15 +369,15 @@ func (db *DB) removeTx(t *Tx) {
 	db.mmaplock.RUnlock()
 
 	// Remove the transaction.
-	for i, tx := range db.txs {
-		if tx == t {
+	for i, t := range db.txs {
+		if t == tx {
 			db.txs = append(db.txs[:i], db.txs[i+1:]...)
 			break
 		}
 	}
 
 	// Merge statistics.
-	db.stats.TxStats.add(&t.stats)
+	db.stats.TxStats.add(&tx.stats)
 }
 
 // Update executes a function within the context of a read-write managed transaction.

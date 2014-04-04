@@ -259,7 +259,7 @@ func (c *Cursor) keyValue() ([]byte, []byte) {
 }
 
 // node returns the node that the cursor is currently positioned on.
-func (c *Cursor) node(t *Tx) *node {
+func (c *Cursor) node(tx *Tx) *node {
 	_assert(len(c.stack) > 0, "accessing a node with a zero-length cursor stack")
 
 	// If the top of the stack is a leaf node then just return it.
@@ -270,7 +270,7 @@ func (c *Cursor) node(t *Tx) *node {
 	// Start from root and traverse down the hierarchy.
 	var n = c.stack[0].node
 	if n == nil {
-		n = t.node(c.stack[0].page.id, nil)
+		n = tx.node(c.stack[0].page.id, nil)
 	}
 	for _, ref := range c.stack[:len(c.stack)-1] {
 		_assert(!n.isLeaf, "expected branch node")
