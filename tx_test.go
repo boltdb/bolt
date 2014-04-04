@@ -514,33 +514,37 @@ func TestTx_OnCommit_Rollback(t *testing.T) {
 
 // Benchmark the performance iterating over a cursor.
 func BenchmarkTxCursor(b *testing.B) {
-	indexes := rand.Perm(b.N)
-	value := []byte(strings.Repeat("0", 64))
+	var total = 50000
+	indexes := rand.Perm(total)
+	value := []byte(strings.Repeat("0", 100))
 
+	warn("X", b.N)
 	withOpenDB(func(db *DB, path string) {
 		// Write data to bucket.
 		db.Update(func(tx *Tx) error {
 			tx.CreateBucket("widgets")
 			bucket := tx.Bucket("widgets")
-			for i := 0; i < b.N; i++ {
-				bucket.Put([]byte(strconv.Itoa(indexes[i])), value)
+			for i := 0; i < total; i++ {
+				bucket.Put([]byte(fmt.Sprintf("%016d", indexes[i])), value)
 			}
 			return nil
 		})
 		b.ResetTimer()
 
 		// Iterate over bucket using cursor.
-		db.View(func(tx *Tx) error {
-			count := 0
-			c := tx.Bucket("widgets").Cursor()
-			for k, _ := c.First(); k != nil; k, _ = c.Next() {
-				count++
-			}
-			if count != b.N {
-				b.Fatalf("wrong count: %d; expected: %d", count, b.N)
-			}
-			return nil
-		})
+		for i := 0; i < b.N; i++ {
+			db.View(func(tx *Tx) error {
+				count := 0
+				c := tx.Bucket("widgets").Cursor()
+				for k, _ := c.First(); k != nil; k, _ = c.Next() {
+					count++
+				}
+				if count != total {
+					b.Fatalf("wrong count: %d; expected: %d", count, total)
+				}
+				return nil
+			})
+		}
 	})
 }
 
