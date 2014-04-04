@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -482,6 +483,33 @@ func TestTxCursorIterateReverse(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Fprint(os.Stderr, "\n")
+}
+
+// Ensure that Tx commit handlers are called after a transaction successfully commits.
+func TestTx_OnCommit(t *testing.T) {
+	var x int
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.OnCommit(func() { x += 1 })
+			tx.OnCommit(func() { x += 2 })
+			return tx.CreateBucket("widgets")
+		})
+	})
+	assert.Equal(t, 3, x)
+}
+
+// Ensure that Tx commit handlers are NOT called after a transaction rolls back.
+func TestTx_OnCommit_Rollback(t *testing.T) {
+	var x int
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.OnCommit(func() { x += 1 })
+			tx.OnCommit(func() { x += 2 })
+			tx.CreateBucket("widgets")
+			return errors.New("rollback this commit")
+		})
+	})
+	assert.Equal(t, 0, x)
 }
 
 // Benchmark the performance iterating over a cursor.
