@@ -8,7 +8,7 @@ import (
 
 // node represents an in-memory, deserialized page.
 type node struct {
-	tx         *Tx
+	bucket     *Bucket
 	isLeaf     bool
 	unbalanced bool
 	key        []byte
@@ -45,18 +45,10 @@ func (n *node) pageElementSize() int {
 	return branchPageElementSize
 }
 
-// root returns the root node in the tree.
-func (n *node) root() *node {
-	if n.parent == nil {
-		return n
-	}
-	return n.parent.root()
-}
-
 // childAt returns the child node at a given index.
 func (n *node) childAt(index int) *node {
 	_assert(!n.isLeaf, "invalid childAt(%d) on a leaf node", index)
-	return n.tx.node(n.inodes[index].pgid, n)
+	return n.bucket.node(n.inodes[index].pgid, n)
 }
 
 // childIndex returns the index of a given child node.
@@ -95,7 +87,7 @@ func (n *node) prevSibling() *node {
 }
 
 // put inserts a key/value.
-func (n *node) put(oldKey, newKey, value []byte, pgid pgid) {
+func (n *node) put(oldKey, newKey, value []byte, pgid pgid, flags uint32) {
 	// Find insertion index.
 	index := sort.Search(len(n.inodes), func(i int) bool { return bytes.Compare(n.inodes[i].key, oldKey) != -1 })
 
@@ -107,6 +99,7 @@ func (n *node) put(oldKey, newKey, value []byte, pgid pgid) {
 	}
 
 	inode := &n.inodes[index]
+	inode.flags = flags
 	inode.key = newKey
 	inode.value = value
 	inode.pgid = pgid
@@ -139,6 +132,7 @@ func (n *node) read(p *page) {
 		inode := &n.inodes[i]
 		if n.isLeaf {
 			elem := p.leafPageElement(uint16(i))
+			inode.flags = elem.flags
 			inode.key = elem.key()
 			inode.value = elem.value()
 		} else {
@@ -173,6 +167,7 @@ func (n *node) write(p *page) {
 		if n.isLeaf {
 			elem := p.leafPageElement(uint16(i))
 			elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
+			elem.flags = item.flags
 			elem.ksize = uint32(len(item.key))
 			elem.vsize = uint32(len(item.value))
 		} else {
@@ -214,7 +209,7 @@ func (n *node) split(pageSize int) []*node {
 		if len(current.inodes) >= minKeysPerPage && i < len(inodes)-minKeysPerPage && size+elemSize > threshold {
 			size = pageHeaderSize
 			nodes = append(nodes, current)
-			current = &node{tx: n.tx, isLeaf: n.isLeaf}
+			current = &node{bucket: n.bucket, isLeaf: n.isLeaf}
 		}
 
 		size += elemSize
@@ -234,10 +229,10 @@ func (n *node) rebalance() {
 	n.unbalanced = false
 
 	// Update statistics.
-	n.tx.stats.Rebalance++
+	n.bucket.tx.stats.Rebalance++
 
 	// Ignore if node is above threshold (25%) and has enough keys.
-	var threshold = n.tx.db.pageSize / 4
+	var threshold = n.bucket.tx.db.pageSize / 4
 	if n.size() > threshold && len(n.inodes) > n.minKeys() {
 		return
 	}
@@ -247,20 +242,20 @@ func (n *node) rebalance() {
 		// If root node is a branch and only has one node then collapse it.
 		if !n.isLeaf && len(n.inodes) == 1 {
 			// Move child's children up.
-			child := n.tx.nodes[n.inodes[0].pgid]
+			child := n.bucket.nodes[n.inodes[0].pgid]
 			n.isLeaf = child.isLeaf
 			n.inodes = child.inodes[:]
 
 			// Reparent all child nodes being moved.
 			for _, inode := range n.inodes {
-				if child, ok := n.tx.nodes[inode.pgid]; ok {
+				if child, ok := n.bucket.nodes[inode.pgid]; ok {
 					child.parent = n
 				}
 			}
 
 			// Remove old child.
 			child.parent = nil
-			delete(n.tx.nodes, child.pgid)
+			delete(n.bucket.nodes, child.pgid)
 			child.free()
 		}
 
@@ -282,18 +277,18 @@ func (n *node) rebalance() {
 	if target.numChildren() > target.minKeys() {
 		if useNextSibling {
 			// Reparent and move node.
-			if child, ok := n.tx.nodes[target.inodes[0].pgid]; ok {
+			if child, ok := n.bucket.nodes[target.inodes[0].pgid]; ok {
 				child.parent = n
 			}
 			n.inodes = append(n.inodes, target.inodes[0])
 			target.inodes = target.inodes[1:]
 
 			// Update target key on parent.
-			target.parent.put(target.key, target.inodes[0].key, nil, target.pgid)
+			target.parent.put(target.key, target.inodes[0].key, nil, target.pgid, 0)
 			target.key = target.inodes[0].key
 		} else {
 			// Reparent and move node.
-			if child, ok := n.tx.nodes[target.inodes[len(target.inodes)-1].pgid]; ok {
+			if child, ok := n.bucket.nodes[target.inodes[len(target.inodes)-1].pgid]; ok {
 				child.parent = n
 			}
 			n.inodes = append(n.inodes, inode{})
@@ -303,7 +298,7 @@ func (n *node) rebalance() {
 		}
 
 		// Update parent key for node.
-		n.parent.put(n.key, n.inodes[0].key, nil, n.pgid)
+		n.parent.put(n.key, n.inodes[0].key, nil, n.pgid, 0)
 		n.key = n.inodes[0].key
 
 		return
@@ -313,7 +308,7 @@ func (n *node) rebalance() {
 	if useNextSibling {
 		// Reparent all child nodes being moved.
 		for _, inode := range target.inodes {
-			if child, ok := n.tx.nodes[inode.pgid]; ok {
+			if child, ok := n.bucket.nodes[inode.pgid]; ok {
 				child.parent = n
 			}
 		}
@@ -321,12 +316,12 @@ func (n *node) rebalance() {
 		// Copy over inodes from target and remove target.
 		n.inodes = append(n.inodes, target.inodes...)
 		n.parent.del(target.key)
-		delete(n.tx.nodes, target.pgid)
+		delete(n.bucket.nodes, target.pgid)
 		target.free()
 	} else {
 		// Reparent all child nodes being moved.
 		for _, inode := range n.inodes {
-			if child, ok := n.tx.nodes[inode.pgid]; ok {
+			if child, ok := n.bucket.nodes[inode.pgid]; ok {
 				child.parent = target
 			}
 		}
@@ -334,8 +329,8 @@ func (n *node) rebalance() {
 		// Copy over inodes to target and remove node.
 		target.inodes = append(target.inodes, n.inodes...)
 		n.parent.del(n.key)
-		n.parent.put(target.key, target.inodes[0].key, nil, target.pgid)
-		delete(n.tx.nodes, n.pgid)
+		n.parent.put(target.key, target.inodes[0].key, nil, target.pgid, 0)
+		delete(n.bucket.nodes, n.pgid)
 		n.free()
 	}
 
@@ -366,7 +361,7 @@ func (n *node) dereference() {
 // free adds the node's underlying page to the freelist.
 func (n *node) free() {
 	if n.pgid != 0 {
-		n.tx.db.freelist.free(n.tx.id(), n.tx.page(n.pgid))
+		n.bucket.tx.db.freelist.free(n.bucket.tx.id(), n.bucket.tx.page(n.pgid))
 	}
 }
 
@@ -381,6 +376,7 @@ func (s nodesByDepth) Less(i, j int) bool { return s[i].depth > s[j].depth }
 // It can be used to point to elements in a page or point
 // to an element which hasn't been added to a page yet.
 type inode struct {
+	flags uint32
 	pgid  pgid
 	key   []byte
 	value []byte

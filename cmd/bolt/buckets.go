@@ -21,10 +21,10 @@ func Buckets(path string) {
 	defer db.Close()
 
 	err = db.View(func(tx *bolt.Tx) error {
-		for _, b := range tx.Buckets() {
-			println(b.Name())
-		}
-		return nil
+		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
+			println(string(name))
+			return nil
+		})
 	})
 	if err != nil {
 		fatal(err)

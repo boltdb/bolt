@@ -8,21 +8,21 @@ import (
 )
 
 // Ensure that a page is added to a transaction's freelist.
-func TestFreelistFree(t *testing.T) {
+func TestFreelist_free(t *testing.T) {
 	f := &freelist{pending: make(map[txid][]pgid)}
 	f.free(100, &page{id: 12})
 	assert.Equal(t, f.pending[100], []pgid{12})
 }
 
 // Ensure that a page and its overflow is added to a transaction's freelist.
-func TestFreelistFreeOverflow(t *testing.T) {
+func TestFreelist_free_overflow(t *testing.T) {
 	f := &freelist{pending: make(map[txid][]pgid)}
 	f.free(100, &page{id: 12, overflow: 3})
 	assert.Equal(t, f.pending[100], []pgid{12, 13, 14, 15})
 }
 
 // Ensure that a transaction's free pages can be released.
-func TestFreelistRelease(t *testing.T) {
+func TestFreelist_release(t *testing.T) {
 	f := &freelist{pending: make(map[txid][]pgid)}
 	f.free(100, &page{id: 12, overflow: 1})
 	f.free(100, &page{id: 9})
@@ -35,7 +35,7 @@ func TestFreelistRelease(t *testing.T) {
 }
 
 // Ensure that a freelist can find contiguous blocks of pages.
-func TestFreelistAllocate(t *testing.T) {
+func TestFreelist_allocate(t *testing.T) {
 	f := &freelist{ids: []pgid{18, 13, 12, 9, 7, 6, 5, 4, 3}}
 	assert.Equal(t, f.allocate(2), pgid(12))
 	assert.Equal(t, f.allocate(1), pgid(18))
@@ -48,7 +48,7 @@ func TestFreelistAllocate(t *testing.T) {
 }
 
 // Ensure that a freelist can deserialize from a freelist page.
-func TestFreelistRead(t *testing.T) {
+func TestFreelist_read(t *testing.T) {
 	// Create a page.
 	var buf [4096]byte
 	page := (*page)(unsafe.Pointer(&buf[0]))
@@ -71,7 +71,7 @@ func TestFreelistRead(t *testing.T) {
 }
 
 // Ensure that a freelist can serialize into a freelist page.
-func TestFreelistWrite(t *testing.T) {
+func TestFreelist_write(t *testing.T) {
 	// Create a freelist and write it to a page.
 	var buf [4096]byte
 	f := &freelist{ids: []pgid{12, 39}, pending: make(map[txid][]pgid)}

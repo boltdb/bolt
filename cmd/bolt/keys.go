@@ -22,7 +22,7 @@ func Keys(path, name string) {
 
 	err = db.View(func(tx *bolt.Tx) error {
 		// Find bucket.
-		b := tx.Bucket(name)
+		b := tx.Bucket([]byte(name))
 		if b == nil {
 			fatalf("bucket not found: %s", name)
 			return nil

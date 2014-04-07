@@ -25,7 +25,7 @@ type meta struct {
 	version  uint32
 	pageSize uint32
 	flags    uint32
-	buckets  pgid
+	root     bucket
 	freelist pgid
 	pgid     pgid
 	txid     txid

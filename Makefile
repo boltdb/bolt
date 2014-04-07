@@ -10,7 +10,7 @@ cloc:
 	@cloc --not-match-f='Makefile|_test.go' .
 
 cover: fmt
-	go test -coverprofile=$(COVERPROFILE) -test.run=$(TEST) .
+	go test -coverprofile=$(COVERPROFILE) -test.run=$(TEST) $(COVERFLAG) .
 	go tool cover -html=$(COVERPROFILE)
 	rm $(COVERPROFILE)
 
@@ -32,6 +32,6 @@ test: fmt errcheck
 	@echo ""
 	@echo ""
 	@echo "=== RACE DETECTOR ==="
-	@go test -v -race -test.run=Parallel
+	@go test -v -race -test.run="TestSimulate_(100op|1000op|10000op)"
 
 .PHONY: bench cloc cover cpuprofile fmt memprofile test
