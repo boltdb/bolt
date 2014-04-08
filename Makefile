@@ -26,7 +26,15 @@ errcheck:
 fmt:
 	@go fmt ./...
 
+get:
+	@go get -d ./...
+
+build: get
+	@mkdir -p bin
+	@go build -a -o bin/bolt-`git rev-parse --short HEAD` ./cmd/bolt
+
 test: fmt errcheck
+	@go get github.com/stretchr/testify/assert
 	@echo "=== TESTS ==="
 	@go test -v -cover -test.run=$(TEST)
 	@echo ""
