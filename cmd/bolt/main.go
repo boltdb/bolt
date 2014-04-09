@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/codegangsta/cli"
 )
@@ -88,6 +89,25 @@ func NewApp() *cli.App {
 			Action: func(c *cli.Context) {
 				path := c.Args().Get(0)
 				Check(path)
+			},
+		},
+		{
+			Name:  "generate",
+			Usage: "Generate data for benchmarks",
+			Action: func(c *cli.Context) {
+				numEvents, err := strconv.Atoi(c.Args().Get(0))
+				if err != nil {
+					fatal(err)
+				}
+				destPath := c.Args().Get(1)
+				Generate(numEvents, destPath)
+			},
+		},
+		{
+			Name:  "bench",
+			Usage: "Run benchmarks on a given dataset",
+			Action: func(c *cli.Context) {
+				Bench()
 			},
 		},
 	}
