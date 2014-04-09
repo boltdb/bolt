@@ -9,6 +9,8 @@ import (
 	"github.com/codegangsta/cli"
 )
 
+var branch, commit string
+
 func main() {
 	log.SetFlags(0)
 	NewApp().Run(os.Args)
@@ -19,7 +21,7 @@ func NewApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "bolt"
 	app.Usage = "BoltDB toolkit"
-	app.Version = "0.1.0"
+	app.Version = fmt.Sprintf("0.1.0 (%s %s)", branch, commit)
 	app.Commands = []cli.Command{
 		{
 			Name:  "get",

@@ -1,6 +1,9 @@
 TEST=.
 BENCH=.
 COVERPROFILE=/tmp/c.out
+BRANCH=`git rev-parse --abbrev-ref HEAD`
+COMMIT=`git rev-parse --short HEAD`
+GOLDFLAGS="-X main.branch $(BRANCH) -X main.commit $(COMMIT)"
 
 bench: benchpreq
 	go test -v -test.bench=$(BENCH)
@@ -31,7 +34,7 @@ get:
 
 build: get
 	@mkdir -p bin
-	@go build -a -o bin/bolt-`git rev-parse --short HEAD` ./cmd/bolt
+	@go build -ldflags=$(GOLDFLAGS) -a -o bin/bolt-`git rev-parse --short HEAD` ./cmd/bolt
 
 test: fmt errcheck
 	@go get github.com/stretchr/testify/assert
