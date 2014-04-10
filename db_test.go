@@ -5,11 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"regexp"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -320,37 +317,6 @@ func TestDBString(t *testing.T) {
 	db := &DB{path: "/tmp/foo"}
 	assert.Equal(t, db.String(), `DB<"/tmp/foo">`)
 	assert.Equal(t, db.GoString(), `bolt.DB{path:"/tmp/foo"}`)
-}
-
-// Benchmark the performance of single put transactions in random order.
-func BenchmarkDBPutSequential(b *testing.B) {
-	value := []byte(strings.Repeat("0", 64))
-	withOpenDB(func(db *DB, path string) {
-		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket("widgets")
-		})
-		for i := 0; i < b.N; i++ {
-			db.Update(func(tx *Tx) error {
-				return tx.Bucket("widgets").Put([]byte(strconv.Itoa(i)), value)
-			})
-		}
-	})
-}
-
-// Benchmark the performance of single put transactions in random order.
-func BenchmarkDBPutRandom(b *testing.B) {
-	indexes := rand.Perm(b.N)
-	value := []byte(strings.Repeat("0", 64))
-	withOpenDB(func(db *DB, path string) {
-		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket("widgets")
-		})
-		for i := 0; i < b.N; i++ {
-			db.Update(func(tx *Tx) error {
-				return tx.Bucket("widgets").Put([]byte(strconv.Itoa(indexes[i])), value)
-			})
-		}
-	})
 }
 
 // withTempPath executes a function with a database reference.
