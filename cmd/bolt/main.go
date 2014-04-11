@@ -107,7 +107,8 @@ func NewApp() *cli.App {
 			Name:  "bench",
 			Usage: "Run benchmarks on a given dataset",
 			Action: func(c *cli.Context) {
-				Bench()
+				srcPath := c.Args().Get(0)
+				Bench(srcPath, "read", "sequential", 1)
 			},
 		},
 	}

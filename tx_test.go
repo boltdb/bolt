@@ -365,6 +365,47 @@ func benchmarkTxPutSequential(b *testing.B, total int) {
 	})
 }
 
+// func BenchmarkParallel_1items_1threads(b *testing.B)    { benchmarkParallel(1, 1) }
+// func BenchmarkParallel_1items_10threads(b *testing.B)   { benchmarkParallel(1, 10) }
+// func BenchmarkParallel_1items_100threads(b *testing.B)  { benchmarkParallel(1, 100) }
+// func BenchmarkParallel_1items_1000threads(b *testing.B) { benchmarkParallel(1, 1000) }
+
+// func BenchmarkParallel_10items_1threads(b *testing.B)    { benchmarkParallel(10, 1) }
+// func BenchmarkParallel_10items_10threads(b *testing.B)   { benchmarkParallel(10, 10) }
+// func BenchmarkParallel_10items_100threads(b *testing.B)  { benchmarkParallel(10, 100) }
+// func BenchmarkParallel_10items_1000threads(b *testing.B) { benchmarkParallel(10, 1000) }
+
+// func BenchmarkParallel_100items_1threads(b *testing.B)    { benchmarkParallel(100, 1) }
+// func BenchmarkParallel_100items_10threads(b *testing.B)   { benchmarkParallel(100, 10) }
+// func BenchmarkParallel_100items_100threads(b *testing.B)  { benchmarkParallel(100, 100) }
+// func BenchmarkParallel_100items_1000threads(b *testing.B) { benchmarkParallel(100, 1000) }
+
+// func BenchmarkParallel_1000items_1threads(b *testing.B)    { benchmarkParallel(1000, 1) }
+// func BenchmarkParallel_1000items_10threads(b *testing.B)   { benchmarkParallel(1000, 10) }
+// func BenchmarkParallel_1000items_100threads(b *testing.B)  { benchmarkParallel(1000, 100) }
+// func BenchmarkParallel_1000items_1000threads(b *testing.B) { benchmarkParallel(1000, 1000) }
+
+// func benchmarkParallel(b *testing.B, itemCount, parallelism int) {
+// 	// Setup database.
+// 	for i := 0; i < itemCount; i++ {
+// 		// ... insert key/values here ...
+// 	}
+// 	b.ResetTimer()
+
+// 	// Keep running a fixed number of parallel reads until we run out of time.
+// 	for i := 0; i < b.N; i++ {
+// 		var wg sync.WaitGroup
+// 		for j := 0; j < parallelism; j++ {
+// 			wg.Add(1)
+// 			go func() {
+// 				// ... execute read here ...
+// 				wg.Done()
+// 			}()
+// 		}
+// 		wg.Wait()
+// 	}
+// }
+
 func ExampleTx_Rollback() {
 	// Open the database.
 	db, _ := Open(tempfile(), 0666)

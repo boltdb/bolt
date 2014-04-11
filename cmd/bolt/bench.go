@@ -1,43 +1,43 @@
 package main
 
 import (
-	"os"
+	"testing"
 
 	"github.com/boltdb/bolt"
 )
 
-// Run benchmarks on a given dataset.
-func Bench() {
-	path := "bench"
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		fatal(err)
-		return
-	}
+// Import converts an exported database dump into a new database.
+// parallelism: integer representing number of concurrent reads/writes
+// readWriteMode: 'read' or 'write'
+// traversalPattern: 'sequentrial' or 'random'
+func Bench(inputPath string, readWriteMode string, traversalPattern string, parallelism int) {
 
-	db, err := bolt.Open(path, 0600)
-	if err != nil {
-		fatal(err)
-		return
-	}
-	defer db.Close()
+	// cursor/sequential reads
+	// random reads
 
-	bucketName := "widgets"
-	key := "key1"
-	value := "value1"
+	// sequential writes
+	// random writes
 
-	err = db.Update(func(tx *bolt.Tx) error {
-		// Find bucket.
-		b := tx.Bucket(bucketName)
-		if b == nil {
-			fatalf("bucket not found: %s", bucketName)
-			return nil
-		}
+	// reading from many buckets
+	// writing to many buckets
 
-		// Set value for a given key.
-		return b.Put([]byte(key), []byte(value))
-	})
-	if err != nil {
-		fatal(err)
-		return
-	}
+	// read from many paths
+	// writing to many paths
+
+	// bucket size/messages
+	// bucket depth
+
+	// concurrency
+
+	// chart/graph
+
+	// profile
+
+	// benchmarks for getting all keys
+
+	b := bolt.NewBenchmark(inputPath, readWriteMode, traversalPattern, parallelism)
+
+	result := testing.Benchmark(b.Run)
+
+	println(result)
 }

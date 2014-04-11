@@ -23,6 +23,11 @@ func Import(path string, input string) {
 		fatal(err)
 	}
 
+	// Import all of the buckets.
+	importBuckets(path, root)
+}
+
+func importBuckets(path string, root []*rawMessage) {
 	// Open the database.
 	db, err := bolt.Open(path, 0600)
 	if err != nil {
