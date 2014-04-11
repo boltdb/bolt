@@ -47,6 +47,6 @@ test: fmt errcheck
 	@echo ""
 	@echo ""
 	@echo "=== RACE DETECTOR ==="
-	@go test -v -race -test.run="TestSimulate_(100op|1000op|10000op)"
+	@go test -v -race -test.run="TestSimulate_(100op|1000op)"
 
 .PHONY: bench cloc cover cpuprofile fmt memprofile test
