@@ -241,12 +241,16 @@ func TestTx_OnCommit_Rollback(t *testing.T) {
 }
 
 // Benchmark the performance iterating over a cursor.
-func BenchmarkTxCursor(b *testing.B) {
-	var total = 50000
+func BenchmarkTxCursor1(b *testing.B)     { benchmarkTxCursor(b, 1) }
+func BenchmarkTxCursor10(b *testing.B)    { benchmarkTxCursor(b, 10) }
+func BenchmarkTxCursor100(b *testing.B)   { benchmarkTxCursor(b, 100) }
+func BenchmarkTxCursor1000(b *testing.B)  { benchmarkTxCursor(b, 1000) }
+func BenchmarkTxCursor10000(b *testing.B) { benchmarkTxCursor(b, 10000) }
+
+func benchmarkTxCursor(b *testing.B, total int) {
 	indexes := rand.Perm(total)
 	value := []byte(strings.Repeat("0", 100))
 
-	warn("X", b.N)
 	withOpenDB(func(db *DB, path string) {
 		// Write data to bucket.
 		db.Update(func(tx *Tx) error {
@@ -277,8 +281,14 @@ func BenchmarkTxCursor(b *testing.B) {
 }
 
 // Benchmark the performance of bulk put transactions in random order.
-func BenchmarkTxPutRandom(b *testing.B) {
-	indexes := rand.Perm(b.N)
+func BenchmarkTxPutRandom1(b *testing.B)     { benchmarkTxPutRandom(b, 1) }
+func BenchmarkTxPutRandom10(b *testing.B)    { benchmarkTxPutRandom(b, 10) }
+func BenchmarkTxPutRandom100(b *testing.B)   { benchmarkTxPutRandom(b, 100) }
+func BenchmarkTxPutRandom1000(b *testing.B)  { benchmarkTxPutRandom(b, 1000) }
+func BenchmarkTxPutRandom10000(b *testing.B) { benchmarkTxPutRandom(b, 10000) }
+
+func benchmarkTxPutRandom(b *testing.B, total int) {
+	indexes := rand.Perm(total)
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
@@ -286,22 +296,30 @@ func BenchmarkTxPutRandom(b *testing.B) {
 		})
 		var tx *Tx
 		var bucket *Bucket
-		for i := 0; i < b.N; i++ {
-			if i%1000 == 0 {
-				if tx != nil {
-					tx.Commit()
+		for j := 0; j < b.N; j++ {
+			for i := 0; i < total; i++ {
+				if i%1000 == 0 {
+					if tx != nil {
+						tx.Commit()
+					}
+					tx, _ = db.Begin(true)
+					bucket = tx.Bucket([]byte("widgets"))
 				}
-				tx, _ = db.Begin(true)
-				bucket = tx.Bucket([]byte("widgets"))
+				bucket.Put([]byte(strconv.Itoa(indexes[i])), value)
 			}
-			bucket.Put([]byte(strconv.Itoa(indexes[i])), value)
 		}
 		tx.Commit()
 	})
 }
 
 // Benchmark the performance of bulk put transactions in sequential order.
-func BenchmarkTxPutSequential(b *testing.B) {
+func BenchmarkTxPutSequential1(b *testing.B)     { benchmarkTxPutSequential(b, 1) }
+func BenchmarkTxPutSequential10(b *testing.B)    { benchmarkTxPutSequential(b, 10) }
+func BenchmarkTxPutSequential100(b *testing.B)   { benchmarkTxPutSequential(b, 100) }
+func BenchmarkTxPutSequential1000(b *testing.B)  { benchmarkTxPutSequential(b, 1000) }
+func BenchmarkTxPutSequential10000(b *testing.B) { benchmarkTxPutSequential(b, 10000) }
+
+func benchmarkTxPutSequential(b *testing.B, total int) {
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
@@ -309,8 +327,10 @@ func BenchmarkTxPutSequential(b *testing.B) {
 		})
 		db.Update(func(tx *Tx) error {
 			bucket := tx.Bucket([]byte("widgets"))
-			for i := 0; i < b.N; i++ {
-				bucket.Put([]byte(strconv.Itoa(i)), value)
+			for j := 0; j < b.N; j++ {
+				for i := 0; i < total; i++ {
+					bucket.Put([]byte(strconv.Itoa(i)), value)
+				}
 			}
 			return nil
 		})

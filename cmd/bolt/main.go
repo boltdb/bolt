@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 
 	"github.com/codegangsta/cli"
 )
+
+var branch, commit string
 
 func main() {
 	log.SetFlags(0)
@@ -19,7 +22,7 @@ func NewApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "bolt"
 	app.Usage = "BoltDB toolkit"
-	app.Version = "0.1.0"
+	app.Version = fmt.Sprintf("0.1.0 (%s %s)", branch, commit)
 	app.Commands = []cli.Command{
 		{
 			Name:  "get",
@@ -51,6 +54,24 @@ func NewApp() *cli.App {
 			Action: func(c *cli.Context) {
 				path := c.Args().Get(0)
 				Buckets(path)
+			},
+		},
+		{
+			Name:  "import",
+			Usage: "Imports from a JSON dump into a database",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "input"},
+			},
+			Action: func(c *cli.Context) {
+				Import(c.Args().Get(0), c.String("input"))
+			},
+		},
+		{
+			Name:  "export",
+			Usage: "Exports a database to JSON",
+			Action: func(c *cli.Context) {
+				path := c.Args().Get(0)
+				Export(path)
 			},
 		},
 		{
@@ -141,4 +162,11 @@ func SetTestMode(value bool) {
 	} else {
 		logger = log.New(os.Stderr, "", 0)
 	}
+}
+
+// rawMessage represents a JSON element in the import/export document.
+type rawMessage struct {
+	Type  string          `json:"type,omitempty"`
+	Key   []byte          `json:"key"`
+	Value json.RawMessage `json:"value"`
 }

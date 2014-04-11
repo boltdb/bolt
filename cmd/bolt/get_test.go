@@ -11,13 +11,14 @@ import (
 // Ensure that a value can be retrieved from the CLI.
 func TestGet(t *testing.T) {
 	SetTestMode(true)
-	open(func(db *bolt.DB) {
+	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
 			tx.CreateBucket("widgets")
 			tx.Bucket("widgets").Put([]byte("foo"), []byte("bar"))
 			return nil
 		})
-		output := run("get", db.Path(), "widgets", "foo")
+		db.Close()
+		output := run("get", path, "widgets", "foo")
 		assert.Equal(t, "bar", output)
 	})
 }
@@ -32,8 +33,9 @@ func TestGetDBNotFound(t *testing.T) {
 // Ensure that an error is reported if the bucket is not found.
 func TestGetBucketNotFound(t *testing.T) {
 	SetTestMode(true)
-	open(func(db *bolt.DB) {
-		output := run("get", db.Path(), "widgets", "foo")
+	open(func(db *bolt.DB, path string) {
+		db.Close()
+		output := run("get", path, "widgets", "foo")
 		assert.Equal(t, "bucket not found: widgets", output)
 	})
 }
@@ -41,11 +43,12 @@ func TestGetBucketNotFound(t *testing.T) {
 // Ensure that an error is reported if the key is not found.
 func TestGetKeyNotFound(t *testing.T) {
 	SetTestMode(true)
-	open(func(db *bolt.DB) {
+	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
 			return tx.CreateBucket("widgets")
 		})
-		output := run("get", db.Path(), "widgets", "foo")
+		db.Close()
+		output := run("get", path, "widgets", "foo")
 		assert.Equal(t, "key not found: foo", output)
 	})
 }
