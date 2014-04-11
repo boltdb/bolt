@@ -41,7 +41,7 @@ func Import(path string, input string) {
 			}
 
 			// Create the bucket if it doesn't exist.
-			if err := tx.CreateBucketIfNotExists(string(message.Key)); err != nil {
+			if err := tx.CreateBucketIfNotExists(message.Key); err != nil {
 				return fmt.Errorf("create bucket: %s", err)
 			}
 
@@ -52,7 +52,7 @@ func Import(path string, input string) {
 			}
 
 			// Import all the values into the bucket.
-			b := tx.Bucket(string(message.Key))
+			b := tx.Bucket(message.Key)
 			if err := importBucket(b, children); err != nil {
 				return fmt.Errorf("import bucket: %s", err)
 			}
@@ -67,7 +67,28 @@ func Import(path string, input string) {
 func importBucket(b *bolt.Bucket, children []*rawMessage) error {
 	// Decode each message into a key/value pair.
 	for _, child := range children {
-		// Decode the base64 value.
+		// Bucket messages are handled recursively.
+		if child.Type == "bucket" {
+			// Create the bucket if it doesn't exist.
+			if err := b.CreateBucketIfNotExists(child.Key); err != nil {
+				return fmt.Errorf("create bucket: %s", err)
+			}
+
+			// Decode child messages.
+			var subchildren []*rawMessage
+			if err := json.Unmarshal(child.Value, &subchildren); err != nil {
+				return fmt.Errorf("decode children: %s", err)
+			}
+
+			// Import subbucket.
+			subbucket := b.Bucket(child.Key)
+			if err := importBucket(subbucket, subchildren); err != nil {
+				return fmt.Errorf("import bucket: %s", err)
+			}
+			continue
+		}
+
+		// Non-bucket values are decoded from base64.
 		var value []byte
 		if err := json.Unmarshal(child.Value, &value); err != nil {
 			return fmt.Errorf("decode value: %s", err)

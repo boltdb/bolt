@@ -13,7 +13,7 @@ func TestSet(t *testing.T) {
 	SetTestMode(true)
 	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
-			tx.CreateBucket("widgets")
+			tx.CreateBucket([]byte("widgets"))
 			return nil
 		})
 		db.Close()

@@ -22,7 +22,7 @@ func Set(path, name, key, value string) {
 
 	err = db.Update(func(tx *bolt.Tx) error {
 		// Find bucket.
-		b := tx.Bucket(name)
+		b := tx.Bucket([]byte(name))
 		if b == nil {
 			fatalf("bucket not found: %s", name)
 			return nil

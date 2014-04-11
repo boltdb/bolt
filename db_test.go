@@ -5,8 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -31,14 +34,14 @@ func TestOpen(t *testing.T) {
 }
 
 // Ensure that opening a database with a bad path returns an error.
-func TestOpenBadPath(t *testing.T) {
+func TestOpen_BadPath(t *testing.T) {
 	db, err := Open("/../bad-path", 0666)
 	assert.Error(t, err)
 	assert.Nil(t, db)
 }
 
 // Ensure that a database can be opened without error.
-func TestDBOpen(t *testing.T) {
+func TestDB_Open(t *testing.T) {
 	withTempPath(func(path string) {
 		db, err := Open(path, 0666)
 		assert.NotNil(t, db)
@@ -49,7 +52,7 @@ func TestDBOpen(t *testing.T) {
 }
 
 // Ensure that a re-opened database is consistent.
-func TestOpenCheck(t *testing.T) {
+func TestOpen_Check(t *testing.T) {
 	withTempPath(func(path string) {
 		db, err := Open(path, 0666)
 		assert.NoError(t, err)
@@ -64,7 +67,7 @@ func TestOpenCheck(t *testing.T) {
 }
 
 // Ensure that the database returns an error if the file handle cannot be open.
-func TestDBOpenFileError(t *testing.T) {
+func TestDB_Open_FileError(t *testing.T) {
 	withTempPath(func(path string) {
 		_, err := Open(path+"/youre-not-my-real-parent", 0666)
 		if err, _ := err.(*os.PathError); assert.Error(t, err) {
@@ -75,12 +78,12 @@ func TestDBOpenFileError(t *testing.T) {
 }
 
 // Ensure that write errors to the meta file handler during initialization are returned.
-func TestDBMetaInitWriteError(t *testing.T) {
+func TestDB_Open_MetaInitWriteError(t *testing.T) {
 	t.Skip("pending")
 }
 
 // Ensure that a database that is too small returns an error.
-func TestDBFileTooSmall(t *testing.T) {
+func TestDB_Open_FileTooSmall(t *testing.T) {
 	withTempPath(func(path string) {
 		db, err := Open(path, 0666)
 		assert.NoError(t, err)
@@ -95,7 +98,7 @@ func TestDBFileTooSmall(t *testing.T) {
 }
 
 // Ensure that corrupt meta0 page errors get returned.
-func TestDBCorruptMeta0(t *testing.T) {
+func TestDB_Open_CorruptMeta0(t *testing.T) {
 	withTempPath(func(path string) {
 		var m meta
 		m.magic = magic
@@ -119,16 +122,16 @@ func TestDBCorruptMeta0(t *testing.T) {
 }
 
 // Ensure that a corrupt meta page checksum causes the open to fail.
-func TestDBMetaChecksumError(t *testing.T) {
+func TestDB_Open_MetaChecksumError(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		withTempPath(func(path string) {
 			db, err := Open(path, 0600)
 			pageSize := db.pageSize
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket("widgets")
+				return tx.CreateBucket([]byte("widgets"))
 			})
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket("woojits")
+				return tx.CreateBucket([]byte("woojits"))
 			})
 			db.Close()
 
@@ -152,7 +155,7 @@ func TestDBMetaChecksumError(t *testing.T) {
 }
 
 // Ensure that a database cannot open a transaction when it's not open.
-func TestDBTxErrDatabaseNotOpen(t *testing.T) {
+func TestDB_Begin_DatabaseNotOpen(t *testing.T) {
 	var db DB
 	tx, err := db.Begin(false)
 	assert.Nil(t, tx)
@@ -160,7 +163,7 @@ func TestDBTxErrDatabaseNotOpen(t *testing.T) {
 }
 
 // Ensure that a read-write transaction can be retrieved.
-func TestDBBeginRW(t *testing.T) {
+func TestDB_BeginRW(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		tx, err := db.Begin(true)
 		assert.NotNil(t, tx)
@@ -172,7 +175,7 @@ func TestDBBeginRW(t *testing.T) {
 }
 
 // Ensure that opening a transaction while the DB is closed returns an error.
-func TestDBRWTxOpenWithClosedDB(t *testing.T) {
+func TestDB_BeginRW_Closed(t *testing.T) {
 	var db DB
 	tx, err := db.Begin(true)
 	assert.Equal(t, err, ErrDatabaseNotOpen)
@@ -180,11 +183,11 @@ func TestDBRWTxOpenWithClosedDB(t *testing.T) {
 }
 
 // Ensure a database can provide a transactional block.
-func TestDBTxBlock(t *testing.T) {
+func TestDB_Update(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		err := db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			b := tx.Bucket("widgets")
+			tx.CreateBucket([]byte("widgets"))
+			b := tx.Bucket([]byte("widgets"))
 			b.Put([]byte("foo"), []byte("bar"))
 			b.Put([]byte("baz"), []byte("bat"))
 			b.Delete([]byte("foo"))
@@ -192,8 +195,8 @@ func TestDBTxBlock(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		err = db.View(func(tx *Tx) error {
-			assert.Nil(t, tx.Bucket("widgets").Get([]byte("foo")))
-			assert.Equal(t, []byte("bat"), tx.Bucket("widgets").Get([]byte("baz")))
+			assert.Nil(t, tx.Bucket([]byte("widgets")).Get([]byte("foo")))
+			assert.Equal(t, []byte("bat"), tx.Bucket([]byte("widgets")).Get([]byte("baz")))
 			return nil
 		})
 		assert.NoError(t, err)
@@ -201,20 +204,20 @@ func TestDBTxBlock(t *testing.T) {
 }
 
 // Ensure a closed database returns an error while running a transaction block
-func TestDBTxBlockWhileClosed(t *testing.T) {
+func TestDB_Update_Closed(t *testing.T) {
 	var db DB
 	err := db.Update(func(tx *Tx) error {
-		tx.CreateBucket("widgets")
+		tx.CreateBucket([]byte("widgets"))
 		return nil
 	})
 	assert.Equal(t, err, ErrDatabaseNotOpen)
 }
 
 // Ensure a panic occurs while trying to commit a managed transaction.
-func TestDBTxBlockWithManualCommitAndRollback(t *testing.T) {
+func TestDB_Update_ManualCommitAndRollback(t *testing.T) {
 	var db DB
 	db.Update(func(tx *Tx) error {
-		tx.CreateBucket("widgets")
+		tx.CreateBucket([]byte("widgets"))
 		assert.Panics(t, func() { tx.Commit() })
 		assert.Panics(t, func() { tx.Rollback() })
 		return nil
@@ -226,37 +229,58 @@ func TestDBTxBlockWithManualCommitAndRollback(t *testing.T) {
 	})
 }
 
-// Ensure that the database can be copied to a file path.
-func TestDBCopyFile(t *testing.T) {
+// Ensure a database can return an error through a read-only transactional block.
+func TestDB_View_Error(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
+		err := db.View(func(tx *Tx) error {
+			return errors.New("xxx")
+		})
+		assert.Equal(t, errors.New("xxx"), err)
+	})
+}
+
+// Ensure that the database can be copied to a file path.
+func TestDB_CopyFile(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		var dest = tempfile()
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			tx.Bucket("widgets").Put([]byte("foo"), []byte("bar"))
-			tx.Bucket("widgets").Put([]byte("baz"), []byte("bat"))
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
+			tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("bat"))
 			return nil
 		})
-		assert.NoError(t, os.RemoveAll("/tmp/bolt.copyfile.db"))
-		assert.NoError(t, db.CopyFile("/tmp/bolt.copyfile.db", 0666))
+		assert.NoError(t, db.CopyFile(dest, 0600))
 
-		db2, err := Open("/tmp/bolt.copyfile.db", 0666)
+		db2, err := Open(dest, 0600)
 		assert.NoError(t, err)
 		defer db2.Close()
 
 		db2.View(func(tx *Tx) error {
-			assert.Equal(t, []byte("bar"), tx.Bucket("widgets").Get([]byte("foo")))
-			assert.Equal(t, []byte("bat"), tx.Bucket("widgets").Get([]byte("baz")))
+			assert.Equal(t, []byte("bar"), tx.Bucket([]byte("widgets")).Get([]byte("foo")))
+			assert.Equal(t, []byte("bat"), tx.Bucket([]byte("widgets")).Get([]byte("baz")))
 			return nil
 		})
 	})
 }
 
 // Ensure that an error is returned when a database write fails.
-func TestDBWriteFail(t *testing.T) {
+func TestDB_Commit_WriteFail(t *testing.T) {
 	t.Skip("pending") // TODO(benbjohnson)
 }
 
+// Ensure that DB stats can be returned.
+func TestDB_Stats(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			return tx.CreateBucket([]byte("widgets"))
+		})
+		stats := db.Stats()
+		assert.Equal(t, 3, stats.TxStats.PageCount)
+	})
+}
+
 // Ensure that the mmap grows appropriately.
-func TestDBMmapSize(t *testing.T) {
+func TestDB_mmapSize(t *testing.T) {
 	db := &DB{pageSize: 4096}
 	assert.Equal(t, db.mmapSize(0), minMmapSize)
 	assert.Equal(t, db.mmapSize(16384), minMmapSize)
@@ -268,15 +292,15 @@ func TestDBMmapSize(t *testing.T) {
 }
 
 // Ensure that database pages are in expected order and type.
-func TestDBConsistency(t *testing.T) {
+func TestDB_Consistency(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket("widgets")
+			return tx.CreateBucket([]byte("widgets"))
 		})
 
 		for i := 0; i < 10; i++ {
 			db.Update(func(tx *Tx) error {
-				assert.NoError(t, tx.Bucket("widgets").Put([]byte("foo"), []byte("bar")))
+				assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
 				return nil
 			})
 		}
@@ -297,7 +321,7 @@ func TestDBConsistency(t *testing.T) {
 				assert.Equal(t, "freelist", p.Type)
 			}
 			if p, _ := tx.Page(5); assert.NotNil(t, p) {
-				assert.Equal(t, "buckets", p.Type)
+				assert.Equal(t, "leaf", p.Type) // root leaf
 			}
 			if p, _ := tx.Page(6); assert.NotNil(t, p) {
 				assert.Equal(t, "leaf", p.Type)
@@ -313,20 +337,187 @@ func TestDBConsistency(t *testing.T) {
 }
 
 // Ensure that a database can return a string representation of itself.
-func TestDBString(t *testing.T) {
-	db := &DB{path: "/tmp/foo"}
-	assert.Equal(t, db.String(), `DB<"/tmp/foo">`)
-	assert.Equal(t, db.GoString(), `bolt.DB{path:"/tmp/foo"}`)
+func TestDB_String(t *testing.T) {
+	db := &DB{path: "/foo/bar"}
+	assert.Equal(t, db.String(), `DB<"/foo/bar">`)
+	assert.Equal(t, db.GoString(), `bolt.DB{path:"/foo/bar"}`)
+}
+
+// Ensure that DB stats can be substracted from one another.
+func TestDBStats_Sub(t *testing.T) {
+	var a, b Stats
+	a.TxStats.PageCount = 3
+	b.TxStats.PageCount = 10
+	diff := b.Sub(&a)
+	assert.Equal(t, 7, diff.TxStats.PageCount)
+}
+
+// Benchmark the performance of single put transactions in random order.
+func BenchmarkDB_Put_Sequential(b *testing.B) {
+	value := []byte(strings.Repeat("0", 64))
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			return tx.CreateBucket([]byte("widgets"))
+		})
+		for i := 0; i < b.N; i++ {
+			db.Update(func(tx *Tx) error {
+				return tx.Bucket([]byte("widgets")).Put([]byte(strconv.Itoa(i)), value)
+			})
+		}
+	})
+}
+
+// Benchmark the performance of single put transactions in random order.
+func BenchmarkDB_Put_Random(b *testing.B) {
+	indexes := rand.Perm(b.N)
+	value := []byte(strings.Repeat("0", 64))
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			return tx.CreateBucket([]byte("widgets"))
+		})
+		for i := 0; i < b.N; i++ {
+			db.Update(func(tx *Tx) error {
+				return tx.Bucket([]byte("widgets")).Put([]byte(strconv.Itoa(indexes[i])), value)
+			})
+		}
+	})
+}
+
+func ExampleDB_Update() {
+	// Open the database.
+	db, _ := Open(tempfile(), 0666)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Execute several commands within a write transaction.
+	err := db.Update(func(tx *Tx) error {
+		if err := tx.CreateBucket([]byte("widgets")); err != nil {
+			return err
+		}
+		b := tx.Bucket([]byte("widgets"))
+		if err := b.Put([]byte("foo"), []byte("bar")); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	// If our transactional block didn't return an error then our data is saved.
+	if err == nil {
+		db.View(func(tx *Tx) error {
+			value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
+			fmt.Printf("The value of 'foo' is: %s\n", string(value))
+			return nil
+		})
+	}
+
+	// Output:
+	// The value of 'foo' is: bar
+}
+
+func ExampleDB_View() {
+	// Open the database.
+	db, _ := Open(tempfile(), 0666)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Insert data into a bucket.
+	db.Update(func(tx *Tx) error {
+		tx.CreateBucket([]byte("people"))
+		b := tx.Bucket([]byte("people"))
+		b.Put([]byte("john"), []byte("doe"))
+		b.Put([]byte("susy"), []byte("que"))
+		return nil
+	})
+
+	// Access data from within a read-only transactional block.
+	db.View(func(tx *Tx) error {
+		v := tx.Bucket([]byte("people")).Get([]byte("john"))
+		fmt.Printf("John's last name is %s.\n", string(v))
+		return nil
+	})
+
+	// Output:
+	// John's last name is doe.
+}
+
+func ExampleDB_Begin_ReadOnly() {
+	// Open the database.
+	db, _ := Open(tempfile(), 0666)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Create a bucket.
+	db.Update(func(tx *Tx) error {
+		return tx.CreateBucket([]byte("widgets"))
+	})
+
+	// Create several keys in a transaction.
+	tx, _ := db.Begin(true)
+	b := tx.Bucket([]byte("widgets"))
+	b.Put([]byte("john"), []byte("blue"))
+	b.Put([]byte("abby"), []byte("red"))
+	b.Put([]byte("zephyr"), []byte("purple"))
+	tx.Commit()
+
+	// Iterate over the values in sorted key order.
+	tx, _ = db.Begin(false)
+	c := tx.Bucket([]byte("widgets")).Cursor()
+	for k, v := c.First(); k != nil; k, v = c.Next() {
+		fmt.Printf("%s likes %s\n", string(k), string(v))
+	}
+	tx.Rollback()
+
+	// Output:
+	// abby likes red
+	// john likes blue
+	// zephyr likes purple
+}
+
+func ExampleDB_CopyFile() {
+	// Open the database.
+	db, _ := Open(tempfile(), 0666)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Create a bucket and a key.
+	db.Update(func(tx *Tx) error {
+		tx.CreateBucket([]byte("widgets"))
+		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
+		return nil
+	})
+
+	// Copy the database to another file.
+	toFile := tempfile()
+	db.CopyFile(toFile, 0666)
+	defer os.Remove(toFile)
+
+	// Open the cloned database.
+	db2, _ := Open(toFile, 0666)
+	defer db2.Close()
+
+	// Ensure that the key exists in the copy.
+	db2.View(func(tx *Tx) error {
+		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
+		fmt.Printf("The value for 'foo' in the clone is: %s\n", string(value))
+		return nil
+	})
+
+	// Output:
+	// The value for 'foo' in the clone is: bar
+}
+
+// tempfile returns a temporary file path.
+func tempfile() string {
+	f, _ := ioutil.TempFile("", "bolt-")
+	f.Close()
+	os.Remove(f.Name())
+	return f.Name()
 }
 
 // withTempPath executes a function with a database reference.
 func withTempPath(fn func(string)) {
-	f, _ := ioutil.TempFile("", "bolt-")
-	path := f.Name()
-	f.Close()
-	os.Remove(path)
+	path := tempfile()
 	defer os.RemoveAll(path)
-
 	fn(path)
 }
 
@@ -354,7 +545,8 @@ func withOpenDB(fn func(*DB, string)) {
 func mustCheck(db *DB) {
 	if err := db.Check(); err != nil {
 		// Copy db off first.
-		db.CopyFile("/tmp/check.db", 0600)
+		var path = tempfile()
+		db.CopyFile(path, 0600)
 
 		if errors, ok := err.(ErrorList); ok {
 			for _, err := range errors {
@@ -362,7 +554,7 @@ func mustCheck(db *DB) {
 			}
 		}
 		warn(err)
-		panic("check failure: see /tmp/check.db")
+		panic("check failure: " + path)
 	}
 }
 
@@ -390,4 +582,12 @@ func logStats(db *DB) {
 
 func truncDuration(d time.Duration) string {
 	return regexp.MustCompile(`^(\d+)(\.\d+)`).ReplaceAllString(d.String(), "$1")
+}
+
+// copyAndFailNow copies a database to a new location and then fails then test.
+func copyAndFailNow(t *testing.T, db *DB) {
+	path := tempfile()
+	db.CopyFile(path, 0600)
+	fmt.Println("db copied to: ", path)
+	t.FailNow()
 }

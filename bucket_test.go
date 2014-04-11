@@ -14,11 +14,11 @@ import (
 )
 
 // Ensure that a bucket that gets a non-existent key returns nil.
-func TestBucketGetNonExistent(t *testing.T) {
+func TestBucket_Get_NonExistent(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			value := tx.Bucket("widgets").Get([]byte("foo"))
+			tx.CreateBucket([]byte("widgets"))
+			value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 			assert.Nil(t, value)
 			return nil
 		})
@@ -26,11 +26,11 @@ func TestBucketGetNonExistent(t *testing.T) {
 }
 
 // Ensure that a bucket can read a value that is not flushed yet.
-func TestBucketGetFromNode(t *testing.T) {
+func TestBucket_Get_FromNode(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			b := tx.Bucket("widgets")
+			tx.CreateBucket([]byte("widgets"))
+			b := tx.Bucket([]byte("widgets"))
 			b.Put([]byte("foo"), []byte("bar"))
 			value := b.Get([]byte("foo"))
 			assert.Equal(t, value, []byte("bar"))
@@ -39,84 +39,278 @@ func TestBucketGetFromNode(t *testing.T) {
 	})
 }
 
-// Ensure that a bucket can write a key/value.
-func TestBucketPut(t *testing.T) {
+// Ensure that a bucket retrieved via Get() returns a nil.
+func TestBucket_Get_IncompatibleValue(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			err := tx.Bucket("widgets").Put([]byte("foo"), []byte("bar"))
+			tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			assert.Nil(t, tx.Bucket([]byte("widgets")).Get([]byte("foo")))
+			return nil
+		})
+	})
+}
+
+// Ensure that a bucket can write a key/value.
+func TestBucket_Put(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			err := tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
 			assert.NoError(t, err)
-			value := tx.Bucket("widgets").Get([]byte("foo"))
+			value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 			assert.Equal(t, value, []byte("bar"))
 			return nil
 		})
 	})
 }
 
-// Ensure that setting a value on a read-only bucket returns an error.
-func TestBucketPutReadOnly(t *testing.T) {
+// Ensure that a bucket can rewrite a key in the same transaction.
+func TestBucket_Put_Repeat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
+			tx.CreateBucket([]byte("widgets"))
+			b := tx.Bucket([]byte("widgets"))
+			assert.NoError(t, b.Put([]byte("foo"), []byte("bar")))
+			assert.NoError(t, b.Put([]byte("foo"), []byte("baz")))
+			value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
+			assert.Equal(t, value, []byte("baz"))
+			return nil
+		})
+	})
+}
+
+// Ensure that a bucket can write a bunch of large values.
+func TestBucket_Put_Large(t *testing.T) {
+	var count = 100
+	var factor = 200
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			b := tx.Bucket([]byte("widgets"))
+			for i := 1; i < count; i++ {
+				assert.NoError(t, b.Put([]byte(strings.Repeat("0", i*factor)), []byte(strings.Repeat("X", (count-i)*factor))))
+			}
 			return nil
 		})
 		db.View(func(tx *Tx) error {
-			b := tx.Bucket("widgets")
+			b := tx.Bucket([]byte("widgets"))
+			for i := 1; i < count; i++ {
+				value := b.Get([]byte(strings.Repeat("0", i*factor)))
+				assert.Equal(t, []byte(strings.Repeat("X", (count-i)*factor)), value)
+			}
+			return nil
+		})
+	})
+}
+
+// Ensure that a setting a value on a key with a bucket value returns an error.
+func TestBucket_Put_IncompatibleValue(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			assert.Equal(t, ErrIncompatibleValue, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
+			return nil
+		})
+	})
+}
+
+// Ensure that a setting a value while the transaction is closed returns an error.
+func TestBucket_Put_Closed(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		tx, _ := db.Begin(true)
+		tx.CreateBucket([]byte("widgets"))
+		b := tx.Bucket([]byte("widgets"))
+		tx.Rollback()
+		assert.Equal(t, ErrTxClosed, b.Put([]byte("foo"), []byte("bar")))
+	})
+}
+
+// Ensure that setting a value on a read-only bucket returns an error.
+func TestBucket_Put_ReadOnly(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			return nil
+		})
+		db.View(func(tx *Tx) error {
+			b := tx.Bucket([]byte("widgets"))
 			err := b.Put([]byte("foo"), []byte("bar"))
-			assert.Equal(t, err, ErrBucketNotWritable)
+			assert.Equal(t, err, ErrTxNotWritable)
 			return nil
 		})
 	})
 }
 
 // Ensure that a bucket can delete an existing key.
-func TestBucketDelete(t *testing.T) {
+func TestBucket_Delete(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			tx.Bucket("widgets").Put([]byte("foo"), []byte("bar"))
-			err := tx.Bucket("widgets").Delete([]byte("foo"))
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
+			err := tx.Bucket([]byte("widgets")).Delete([]byte("foo"))
 			assert.NoError(t, err)
-			value := tx.Bucket("widgets").Get([]byte("foo"))
+			value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 			assert.Nil(t, value)
 			return nil
 		})
 	})
 }
 
-// Ensure that deleting a key on a read-only bucket returns an error.
-func TestBucketDeleteReadOnly(t *testing.T) {
+// Ensure that deleting a bucket using Delete() returns an error.
+func TestBucket_Delete_Bucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
+			tx.CreateBucket([]byte("widgets"))
+			b := tx.Bucket([]byte("widgets"))
+			assert.NoError(t, b.CreateBucket([]byte("foo")))
+			assert.Equal(t, ErrIncompatibleValue, b.Delete([]byte("foo")))
+			return nil
+		})
+	})
+}
+
+// Ensure that deleting a key on a read-only bucket returns an error.
+func TestBucket_Delete_ReadOnly(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
 			return nil
 		})
 		db.View(func(tx *Tx) error {
-			b := tx.Bucket("widgets")
+			b := tx.Bucket([]byte("widgets"))
 			err := b.Delete([]byte("foo"))
-			assert.Equal(t, err, ErrBucketNotWritable)
+			assert.Equal(t, err, ErrTxNotWritable)
+			return nil
+		})
+	})
+}
+
+// Ensure that a deleting value while the transaction is closed returns an error.
+func TestBucket_Delete_Closed(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		tx, _ := db.Begin(true)
+		tx.CreateBucket([]byte("widgets"))
+		b := tx.Bucket([]byte("widgets"))
+		tx.Rollback()
+		assert.Equal(t, ErrTxClosed, b.Delete([]byte("foo")))
+	})
+}
+
+// Ensure that deleting a bucket causes nested buckets to be deleted.
+func TestBucket_DeleteBucket_Nested(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).CreateBucket([]byte("bar")))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).Bucket([]byte("bar")).Put([]byte("baz"), []byte("bat")))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).DeleteBucket([]byte("foo")))
+			return nil
+		})
+	})
+}
+
+// Ensure that deleting a bucket causes nested buckets to be deleted after they have been committed.
+func TestBucket_DeleteBucket_Nested2(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).CreateBucket([]byte("bar")))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).Bucket([]byte("bar")).Put([]byte("baz"), []byte("bat")))
+			return nil
+		})
+		db.Update(func(tx *Tx) error {
+			assert.NotNil(t, tx.Bucket([]byte("widgets")))
+			assert.NotNil(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")))
+			assert.NotNil(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).Bucket([]byte("bar")))
+			assert.Equal(t, []byte("bat"), tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).Bucket([]byte("bar")).Get([]byte("baz")))
+			assert.NoError(t, tx.DeleteBucket([]byte("widgets")))
+			return nil
+		})
+		db.View(func(tx *Tx) error {
+			assert.Nil(t, tx.Bucket([]byte("widgets")))
+			return nil
+		})
+	})
+}
+
+// Ensure that deleting a child bucket with multiple pages causes all pages to get collected.
+func TestBucket_DeleteBucket_Large(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			b := tx.Bucket([]byte("widgets")).Bucket([]byte("foo"))
+			for i := 0; i < 1000; i++ {
+				assert.NoError(t, b.Put([]byte(fmt.Sprintf("%d", i)), []byte(fmt.Sprintf("%0100d", i))))
+			}
+			return nil
+		})
+		db.Update(func(tx *Tx) error {
+			assert.NoError(t, tx.DeleteBucket([]byte("widgets")))
+			return nil
+		})
+
+		// NOTE: Consistency check in withOpenDB() will error if pages not freed properly.
+	})
+}
+
+// Ensure that a simple value retrieved via Bucket() returns a nil.
+func TestBucket_Bucket_IncompatibleValue(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
+			assert.Nil(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")))
+			return nil
+		})
+	})
+}
+
+// Ensure that creating a bucket on an existing non-bucket key returns an error.
+func TestBucket_CreateBucket_IncompatibleValue(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
+			assert.Equal(t, ErrIncompatibleValue, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			return nil
+		})
+	})
+}
+
+// Ensure that deleting a bucket on an existing non-bucket key returns an error.
+func TestBucket_DeleteBucket_IncompatibleValue(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
+			assert.Equal(t, ErrIncompatibleValue, tx.Bucket([]byte("widgets")).DeleteBucket([]byte("foo")))
 			return nil
 		})
 	})
 }
 
 // Ensure that a bucket can return an autoincrementing sequence.
-func TestBucketNextSequence(t *testing.T) {
+func TestBucket_NextSequence(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			tx.CreateBucket("woojits")
+			tx.CreateBucket([]byte("widgets"))
+			tx.CreateBucket([]byte("woojits"))
 
 			// Make sure sequence increments.
-			seq, err := tx.Bucket("widgets").NextSequence()
+			seq, err := tx.Bucket([]byte("widgets")).NextSequence()
 			assert.NoError(t, err)
 			assert.Equal(t, seq, 1)
-			seq, err = tx.Bucket("widgets").NextSequence()
+			seq, err = tx.Bucket([]byte("widgets")).NextSequence()
 			assert.NoError(t, err)
 			assert.Equal(t, seq, 2)
 
 			// Buckets should be separate.
-			seq, err = tx.Bucket("woojits").NextSequence()
+			seq, err = tx.Bucket([]byte("woojits")).NextSequence()
 			assert.NoError(t, err)
 			assert.Equal(t, seq, 1)
 			return nil
@@ -125,31 +319,31 @@ func TestBucketNextSequence(t *testing.T) {
 }
 
 // Ensure that retrieving the next sequence on a read-only bucket returns an error.
-func TestBucketNextSequenceReadOnly(t *testing.T) {
+func TestBucket_NextSequence_ReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
+			tx.CreateBucket([]byte("widgets"))
 			return nil
 		})
 		db.View(func(tx *Tx) error {
-			b := tx.Bucket("widgets")
+			b := tx.Bucket([]byte("widgets"))
 			i, err := b.NextSequence()
 			assert.Equal(t, i, 0)
-			assert.Equal(t, err, ErrBucketNotWritable)
+			assert.Equal(t, err, ErrTxNotWritable)
 			return nil
 		})
 	})
 }
 
 // Ensure that incrementing past the maximum sequence number will return an error.
-func TestBucketNextSequenceOverflow(t *testing.T) {
+func TestBucket_NextSequence_Overflow(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
+			tx.CreateBucket([]byte("widgets"))
 			return nil
 		})
 		db.Update(func(tx *Tx) error {
-			b := tx.Bucket("widgets")
+			b := tx.Bucket([]byte("widgets"))
 			b.bucket.sequence = uint64(maxInt)
 			seq, err := b.NextSequence()
 			assert.Equal(t, err, ErrSequenceOverflow)
@@ -159,17 +353,29 @@ func TestBucketNextSequenceOverflow(t *testing.T) {
 	})
 }
 
-// Ensure a database can loop over all key/value pairs in a bucket.
-func TestBucketForEach(t *testing.T) {
+// Ensure that retrieving the next sequence for a bucket on a closed database return an error.
+func TestBucket_NextSequence_Closed(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		tx, _ := db.Begin(true)
+		tx.CreateBucket([]byte("widgets"))
+		b := tx.Bucket([]byte("widgets"))
+		tx.Rollback()
+		_, err := b.NextSequence()
+		assert.Equal(t, ErrTxClosed, err)
+	})
+}
+
+// Ensure a user can loop over all key/value pairs in a bucket.
+func TestBucket_ForEach(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			tx.Bucket("widgets").Put([]byte("foo"), []byte("0000"))
-			tx.Bucket("widgets").Put([]byte("baz"), []byte("0001"))
-			tx.Bucket("widgets").Put([]byte("bar"), []byte("0002"))
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("0000"))
+			tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("0001"))
+			tx.Bucket([]byte("widgets")).Put([]byte("bar"), []byte("0002"))
 
 			var index int
-			err := tx.Bucket("widgets").ForEach(func(k, v []byte) error {
+			err := tx.Bucket([]byte("widgets")).ForEach(func(k, v []byte) error {
 				switch index {
 				case 0:
 					assert.Equal(t, k, []byte("bar"))
@@ -192,16 +398,16 @@ func TestBucketForEach(t *testing.T) {
 }
 
 // Ensure a database can stop iteration early.
-func TestBucketForEachShortCircuit(t *testing.T) {
+func TestBucket_ForEach_ShortCircuit(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			tx.Bucket("widgets").Put([]byte("bar"), []byte("0000"))
-			tx.Bucket("widgets").Put([]byte("baz"), []byte("0000"))
-			tx.Bucket("widgets").Put([]byte("foo"), []byte("0000"))
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("bar"), []byte("0000"))
+			tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("0000"))
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("0000"))
 
 			var index int
-			err := tx.Bucket("widgets").ForEach(func(k, v []byte) error {
+			err := tx.Bucket([]byte("widgets")).ForEach(func(k, v []byte) error {
 				index++
 				if bytes.Equal(k, []byte("baz")) {
 					return errors.New("marker")
@@ -215,14 +421,26 @@ func TestBucketForEachShortCircuit(t *testing.T) {
 	})
 }
 
+// Ensure that looping over a bucket on a closed database returns an error.
+func TestBucket_ForEach_Closed(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		tx, _ := db.Begin(true)
+		tx.CreateBucket([]byte("widgets"))
+		b := tx.Bucket([]byte("widgets"))
+		tx.Rollback()
+		err := b.ForEach(func(k, v []byte) error { return nil })
+		assert.Equal(t, ErrTxClosed, err)
+	})
+}
+
 // Ensure that an error is returned when inserting with an empty key.
-func TestBucketPutEmptyKey(t *testing.T) {
+func TestBucket_Put_EmptyKey(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			err := tx.Bucket("widgets").Put([]byte(""), []byte("bar"))
+			tx.CreateBucket([]byte("widgets"))
+			err := tx.Bucket([]byte("widgets")).Put([]byte(""), []byte("bar"))
 			assert.Equal(t, err, ErrKeyRequired)
-			err = tx.Bucket("widgets").Put(nil, []byte("bar"))
+			err = tx.Bucket([]byte("widgets")).Put(nil, []byte("bar"))
 			assert.Equal(t, err, ErrKeyRequired)
 			return nil
 		})
@@ -230,11 +448,11 @@ func TestBucketPutEmptyKey(t *testing.T) {
 }
 
 // Ensure that an error is returned when inserting with a key that's too large.
-func TestBucketPutKeyTooLarge(t *testing.T) {
+func TestBucket_Put_KeyTooLarge(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			tx.CreateBucket("widgets")
-			err := tx.Bucket("widgets").Put(make([]byte, 32769), []byte("bar"))
+			tx.CreateBucket([]byte("widgets"))
+			err := tx.Bucket([]byte("widgets")).Put(make([]byte, 32769), []byte("bar"))
 			assert.Equal(t, err, ErrKeyTooLarge)
 			return nil
 		})
@@ -242,54 +460,35 @@ func TestBucketPutKeyTooLarge(t *testing.T) {
 }
 
 // Ensure a bucket can calculate stats.
-func TestBucketStat(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode.")
-	}
-
+func TestBucket_Stat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			// Add bucket with lots of keys.
-			tx.CreateBucket("widgets")
-			b := tx.Bucket("widgets")
-			for i := 0; i < 100000; i++ {
-				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
-			}
-
 			// Add bucket with fewer keys but one big value.
-			tx.CreateBucket("woojits")
-			b = tx.Bucket("woojits")
+			assert.NoError(t, tx.CreateBucket([]byte("woojits")))
+			b := tx.Bucket([]byte("woojits"))
 			for i := 0; i < 500; i++ {
 				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 			}
 			b.Put([]byte("really-big-value"), []byte(strings.Repeat("*", 10000)))
 
 			// Add a bucket that fits on a single root leaf.
-			tx.CreateBucket("whozawhats")
-			b = tx.Bucket("whozawhats")
+			assert.NoError(t, tx.CreateBucket([]byte("whozawhats")))
+			b = tx.Bucket([]byte("whozawhats"))
 			b.Put([]byte("foo"), []byte("bar"))
 
 			return nil
 		})
 		mustCheck(db)
 		db.View(func(tx *Tx) error {
-			b := tx.Bucket("widgets")
+			b := tx.Bucket([]byte("woojits"))
 			stat := b.Stat()
-			assert.Equal(t, stat.BranchPageCount, 15)
-			assert.Equal(t, stat.LeafPageCount, 1281)
-			assert.Equal(t, stat.OverflowPageCount, 0)
-			assert.Equal(t, stat.KeyCount, 100000)
-			assert.Equal(t, stat.MaxDepth, 3)
-
-			b = tx.Bucket("woojits")
-			stat = b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 1)
 			assert.Equal(t, stat.LeafPageCount, 6)
 			assert.Equal(t, stat.OverflowPageCount, 2)
 			assert.Equal(t, stat.KeyCount, 501)
 			assert.Equal(t, stat.MaxDepth, 2)
 
-			b = tx.Bucket("whozawhats")
+			b = tx.Bucket([]byte("whozawhats"))
 			stat = b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 0)
 			assert.Equal(t, stat.LeafPageCount, 1)
@@ -302,8 +501,38 @@ func TestBucketStat(t *testing.T) {
 	})
 }
 
+// Ensure a large bucket can calculate stats.
+func TestBucket_Stat_Large(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			// Add bucket with lots of keys.
+			tx.CreateBucket([]byte("widgets"))
+			b := tx.Bucket([]byte("widgets"))
+			for i := 0; i < 100000; i++ {
+				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+			}
+			return nil
+		})
+		mustCheck(db)
+		db.View(func(tx *Tx) error {
+			b := tx.Bucket([]byte("widgets"))
+			stat := b.Stat()
+			assert.Equal(t, stat.BranchPageCount, 15)
+			assert.Equal(t, stat.LeafPageCount, 1281)
+			assert.Equal(t, stat.OverflowPageCount, 0)
+			assert.Equal(t, stat.KeyCount, 100000)
+			assert.Equal(t, stat.MaxDepth, 3)
+			return nil
+		})
+	})
+}
+
 // Ensure that a bucket can write random keys and values across multiple transactions.
-func TestBucketPutSingle(t *testing.T) {
+func TestBucket_Put_Single(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -314,11 +543,11 @@ func TestBucketPutSingle(t *testing.T) {
 			m := make(map[string][]byte)
 
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket("widgets")
+				return tx.CreateBucket([]byte("widgets"))
 			})
 			for _, item := range items {
 				db.Update(func(tx *Tx) error {
-					if err := tx.Bucket("widgets").Put(item.Key, item.Value); err != nil {
+					if err := tx.Bucket([]byte("widgets")).Put(item.Key, item.Value); err != nil {
 						panic("put error: " + err.Error())
 					}
 					m[string(item.Key)] = item.Value
@@ -329,10 +558,10 @@ func TestBucketPutSingle(t *testing.T) {
 				db.View(func(tx *Tx) error {
 					i := 0
 					for k, v := range m {
-						value := tx.Bucket("widgets").Get([]byte(k))
+						value := tx.Bucket([]byte("widgets")).Get([]byte(k))
 						if !bytes.Equal(value, v) {
-							db.CopyFile("/tmp/bolt.put.single.db", 0666)
-							t.Fatalf("value mismatch [run %d] (%d of %d):\nkey: %x\ngot: %x\nexp: %x", index, i, len(m), []byte(k), value, v)
+							t.Logf("value mismatch [run %d] (%d of %d):\nkey: %x\ngot: %x\nexp: %x", index, i, len(m), []byte(k), value, v)
+							copyAndFailNow(t, db)
 						}
 						i++
 					}
@@ -347,11 +576,10 @@ func TestBucketPutSingle(t *testing.T) {
 	if err := quick.Check(f, qconfig()); err != nil {
 		t.Error(err)
 	}
-	fmt.Fprint(os.Stderr, "\n")
 }
 
 // Ensure that a transaction can insert multiple key/value pairs at once.
-func TestBucketPutMultiple(t *testing.T) {
+func TestBucket_Put_Multiple(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -360,10 +588,10 @@ func TestBucketPutMultiple(t *testing.T) {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket("widgets")
+				return tx.CreateBucket([]byte("widgets"))
 			})
 			err := db.Update(func(tx *Tx) error {
-				b := tx.Bucket("widgets")
+				b := tx.Bucket([]byte("widgets"))
 				for _, item := range items {
 					assert.NoError(t, b.Put(item.Key, item.Value))
 				}
@@ -373,12 +601,11 @@ func TestBucketPutMultiple(t *testing.T) {
 
 			// Verify all items exist.
 			db.View(func(tx *Tx) error {
-				b := tx.Bucket("widgets")
+				b := tx.Bucket([]byte("widgets"))
 				for _, item := range items {
 					value := b.Get(item.Key)
 					if !assert.Equal(t, item.Value, value) {
-						db.CopyFile("/tmp/bolt.put.multiple.db", 0666)
-						t.FailNow()
+						copyAndFailNow(t, db)
 					}
 				}
 				return nil
@@ -389,11 +616,10 @@ func TestBucketPutMultiple(t *testing.T) {
 	if err := quick.Check(f, qconfig()); err != nil {
 		t.Error(err)
 	}
-	fmt.Fprint(os.Stderr, "\n")
 }
 
 // Ensure that a transaction can delete all key/value pairs and return to a single leaf page.
-func TestBucketDeleteQuick(t *testing.T) {
+func TestBucket_Delete_Quick(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -402,10 +628,10 @@ func TestBucketDeleteQuick(t *testing.T) {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket("widgets")
+				return tx.CreateBucket([]byte("widgets"))
 			})
 			err := db.Update(func(tx *Tx) error {
-				b := tx.Bucket("widgets")
+				b := tx.Bucket([]byte("widgets"))
 				for _, item := range items {
 					assert.NoError(t, b.Put(item.Key, item.Value))
 				}
@@ -416,13 +642,13 @@ func TestBucketDeleteQuick(t *testing.T) {
 			// Remove items one at a time and check consistency.
 			for i, item := range items {
 				err := db.Update(func(tx *Tx) error {
-					return tx.Bucket("widgets").Delete(item.Key)
+					return tx.Bucket([]byte("widgets")).Delete(item.Key)
 				})
 				assert.NoError(t, err)
 
 				// Anything before our deletion index should be nil.
 				db.View(func(tx *Tx) error {
-					b := tx.Bucket("widgets")
+					b := tx.Bucket([]byte("widgets"))
 					for j, exp := range items {
 						if j > i {
 							value := b.Get(exp.Key)
@@ -445,5 +671,99 @@ func TestBucketDeleteQuick(t *testing.T) {
 	if err := quick.Check(f, qconfig()); err != nil {
 		t.Error(err)
 	}
-	fmt.Fprint(os.Stderr, "\n")
+}
+
+func ExampleBucket_Put() {
+	// Open the database.
+	db, _ := Open(tempfile(), 0666)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Start a write transaction.
+	db.Update(func(tx *Tx) error {
+		// Create a bucket.
+		tx.CreateBucket([]byte("widgets"))
+
+		// Set the value "bar" for the key "foo".
+		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
+		return nil
+	})
+
+	// Read value back in a different read-only transaction.
+	db.Update(func(tx *Tx) error {
+		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
+		fmt.Printf("The value of 'foo' is: %s\n", string(value))
+		return nil
+	})
+
+	// Output:
+	// The value of 'foo' is: bar
+}
+
+func ExampleBucket_Delete() {
+	// Open the database.
+	db, _ := Open(tempfile(), 0666)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Start a write transaction.
+	db.Update(func(tx *Tx) error {
+		// Create a bucket.
+		tx.CreateBucket([]byte("widgets"))
+		b := tx.Bucket([]byte("widgets"))
+
+		// Set the value "bar" for the key "foo".
+		b.Put([]byte("foo"), []byte("bar"))
+
+		// Retrieve the key back from the database and verify it.
+		value := b.Get([]byte("foo"))
+		fmt.Printf("The value of 'foo' was: %s\n", string(value))
+		return nil
+	})
+
+	// Delete the key in a different write transaction.
+	db.Update(func(tx *Tx) error {
+		return tx.Bucket([]byte("widgets")).Delete([]byte("foo"))
+	})
+
+	// Retrieve the key again.
+	db.View(func(tx *Tx) error {
+		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
+		if value == nil {
+			fmt.Printf("The value of 'foo' is now: nil\n")
+		}
+		return nil
+	})
+
+	// Output:
+	// The value of 'foo' was: bar
+	// The value of 'foo' is now: nil
+}
+
+func ExampleBucket_ForEach() {
+	// Open the database.
+	db, _ := Open(tempfile(), 0666)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Insert data into a bucket.
+	db.Update(func(tx *Tx) error {
+		tx.CreateBucket([]byte("animals"))
+		b := tx.Bucket([]byte("animals"))
+		b.Put([]byte("dog"), []byte("fun"))
+		b.Put([]byte("cat"), []byte("lame"))
+		b.Put([]byte("liger"), []byte("awesome"))
+
+		// Iterate over items in sorted key order.
+		b.ForEach(func(k, v []byte) error {
+			fmt.Printf("A %s is %s.\n", string(k), string(v))
+			return nil
+		})
+		return nil
+	})
+
+	// Output:
+	// A cat is lame.
+	// A dog is fun.
+	// A liger is awesome.
 }

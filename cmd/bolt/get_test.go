@@ -13,8 +13,8 @@ func TestGet(t *testing.T) {
 	SetTestMode(true)
 	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
-			tx.CreateBucket("widgets")
-			tx.Bucket("widgets").Put([]byte("foo"), []byte("bar"))
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
 			return nil
 		})
 		db.Close()
@@ -45,7 +45,7 @@ func TestGetKeyNotFound(t *testing.T) {
 	SetTestMode(true)
 	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
-			return tx.CreateBucket("widgets")
+			return tx.CreateBucket([]byte("widgets"))
 		})
 		db.Close()
 		output := run("get", path, "widgets", "foo")

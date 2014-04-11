@@ -19,8 +19,11 @@ const (
 	branchPageFlag   = 0x01
 	leafPageFlag     = 0x02
 	metaPageFlag     = 0x04
-	bucketsPageFlag  = 0x08
 	freelistPageFlag = 0x10
+)
+
+const (
+	bucketLeafFlag = 0x01
 )
 
 type pgid uint64
@@ -41,8 +44,6 @@ func (p *page) typ() string {
 		return "leaf"
 	} else if (p.flags & metaPageFlag) != 0 {
 		return "meta"
-	} else if (p.flags & bucketsPageFlag) != 0 {
-		return "buckets"
 	} else if (p.flags & freelistPageFlag) != 0 {
 		return "freelist"
 	}

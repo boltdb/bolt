@@ -13,9 +13,9 @@ func TestBuckets(t *testing.T) {
 	SetTestMode(true)
 	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
-			tx.CreateBucket("woojits")
-			tx.CreateBucket("widgets")
-			tx.CreateBucket("whatchits")
+			tx.CreateBucket([]byte("woojits"))
+			tx.CreateBucket([]byte("widgets"))
+			tx.CreateBucket([]byte("whatchits"))
 			return nil
 		})
 		db.Close()
