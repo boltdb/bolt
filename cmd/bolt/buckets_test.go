@@ -11,14 +11,15 @@ import (
 // Ensure that a list of buckets can be retrieved.
 func TestBuckets(t *testing.T) {
 	SetTestMode(true)
-	open(func(db *bolt.DB) {
+	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
 			tx.CreateBucket("woojits")
 			tx.CreateBucket("widgets")
 			tx.CreateBucket("whatchits")
 			return nil
 		})
-		output := run("buckets", db.Path())
+		db.Close()
+		output := run("buckets", path)
 		assert.Equal(t, "whatchits\nwidgets\nwoojits", output)
 	})
 }

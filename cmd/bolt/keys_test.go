@@ -11,7 +11,7 @@ import (
 // Ensure that a list of keys can be retrieved for a given bucket.
 func TestKeys(t *testing.T) {
 	SetTestMode(true)
-	open(func(db *bolt.DB) {
+	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
 			tx.CreateBucket("widgets")
 			tx.Bucket("widgets").Put([]byte("0002"), []byte(""))
@@ -19,7 +19,8 @@ func TestKeys(t *testing.T) {
 			tx.Bucket("widgets").Put([]byte("0003"), []byte(""))
 			return nil
 		})
-		output := run("keys", db.Path(), "widgets")
+		db.Close()
+		output := run("keys", path, "widgets")
 		assert.Equal(t, "0001\n0002\n0003", output)
 	})
 }
@@ -34,8 +35,9 @@ func TestKeysDBNotFound(t *testing.T) {
 // Ensure that an error is reported if the bucket is not found.
 func TestKeysBucketNotFound(t *testing.T) {
 	SetTestMode(true)
-	open(func(db *bolt.DB) {
-		output := run("keys", db.Path(), "widgets")
+	open(func(db *bolt.DB, path string) {
+		db.Close()
+		output := run("keys", path, "widgets")
 		assert.Equal(t, "bucket not found: widgets", output)
 	})
 }

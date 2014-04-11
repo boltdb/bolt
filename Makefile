@@ -42,6 +42,10 @@ test: fmt errcheck
 	@go test -v -cover -test.run=$(TEST)
 	@echo ""
 	@echo ""
+	@echo "=== CLI ==="
+	@go test -v -test.run=$(TEST) ./cmd/bolt
+	@echo ""
+	@echo ""
 	@echo "=== RACE DETECTOR ==="
 	@go test -v -race -test.run=Parallel
 
