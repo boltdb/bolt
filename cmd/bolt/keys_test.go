@@ -13,10 +13,10 @@ func TestKeys(t *testing.T) {
 	SetTestMode(true)
 	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
-			tx.CreateBucket("widgets")
-			tx.Bucket("widgets").Put([]byte("0002"), []byte(""))
-			tx.Bucket("widgets").Put([]byte("0001"), []byte(""))
-			tx.Bucket("widgets").Put([]byte("0003"), []byte(""))
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("0002"), []byte(""))
+			tx.Bucket([]byte("widgets")).Put([]byte("0001"), []byte(""))
+			tx.Bucket([]byte("widgets")).Put([]byte("0003"), []byte(""))
 			return nil
 		})
 		db.Close()

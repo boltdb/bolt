@@ -13,19 +13,26 @@ func TestExport(t *testing.T) {
 	SetTestMode(true)
 	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
-			tx.CreateBucket("widgets")
-			b := tx.Bucket("widgets")
+			tx.CreateBucket([]byte("widgets"))
+			b := tx.Bucket([]byte("widgets"))
 			b.Put([]byte("foo"), []byte("0000"))
 			b.Put([]byte("bar"), []byte(""))
 
-			tx.CreateBucket("woojits")
-			b = tx.Bucket("woojits")
+			tx.CreateBucket([]byte("woojits"))
+			b = tx.Bucket([]byte("woojits"))
 			b.Put([]byte("baz"), []byte("XXXX"))
+
+			b.CreateBucket([]byte("woojits/subbucket"))
+			b = b.Bucket([]byte("woojits/subbucket"))
+			b.Put([]byte("bat"), []byte("A"))
+
+			tx.CreateBucket([]byte("empty"))
+
 			return nil
 		})
 		db.Close()
 		output := run("export", path)
-		assert.Equal(t, `[{"type":"bucket","key":"d2lkZ2V0cw==","value":[{"key":"YmFy","value":""},{"key":"Zm9v","value":"MDAwMA=="}]},{"type":"bucket","key":"d29vaml0cw==","value":[{"key":"YmF6","value":"WFhYWA=="}]}]`, output)
+		assert.Equal(t, `[{"type":"bucket","key":"ZW1wdHk=","value":[]},{"type":"bucket","key":"d2lkZ2V0cw==","value":[{"key":"YmFy","value":""},{"key":"Zm9v","value":"MDAwMA=="}]},{"type":"bucket","key":"d29vaml0cw==","value":[{"key":"YmF6","value":"WFhYWA=="},{"type":"bucket","key":"d29vaml0cy9zdWJidWNrZXQ=","value":[{"key":"YmF0","value":"QQ=="}]}]}]`, output)
 	})
 }
 
