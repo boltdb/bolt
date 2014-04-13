@@ -1,6 +1,9 @@
 package bolt
 
 import (
+	"errors"
+	"fmt"
+	"os"
 	"sync"
 	"testing"
 )
@@ -28,10 +31,15 @@ func (bm *Benchmark) Run(b *testing.B) {
 	// Open the database.
 	db, err := Open(bm.InputPath, 0600)
 	if err != nil {
-		panic(err)
+		b.Fatalf("error: %+v", err)
 		return
 	}
 	defer db.Close()
+
+	buckets, err := buckets(db, bm.InputPath)
+	if err != nil {
+		b.Fatalf("error: %+v", err)
+	}
 
 	b.ResetTimer()
 
@@ -41,15 +49,48 @@ func (bm *Benchmark) Run(b *testing.B) {
 		for j := 0; j < bm.Parallelism; j++ {
 			wg.Add(1)
 			go func() {
-				if bm.TraversalPattern == BenchRandomTraversal {
-					// Perform all reads in random order.
-					// indexes := rand.Perm(total)
-				} else {
-					// Perform all reads in sequential order.
+				defer wg.Done()
+				if err := bm.runBuckets(b, db, buckets); err != nil {
+					b.Fatalf("error: %+v", err)
 				}
-				wg.Done()
 			}()
 		}
 		wg.Wait()
 	}
+}
+
+// Run benchmark(s) for each of the given buckets.
+func (bm *Benchmark) runBuckets(b *testing.B, db *DB, buckets []string) error {
+	return db.View(func(tx *Tx) error {
+		bucketsCount := len(buckets)
+		for _, bucket := range buckets {
+			c := tx.Bucket([]byte(bucket)).Cursor()
+			count := 0
+			for k, _ := c.First(); k != nil; k, _ = c.Next() {
+				count++
+			}
+			if count != bucketsCount {
+				return errors.New(fmt.Sprintf("wrong count: %d; expected: %d", count, bucketsCount))
+			}
+		}
+		return nil
+	})
+}
+
+func buckets(db *DB, path string) ([]string, error) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil, err
+	}
+
+	buckets := []string{}
+
+	err := db.View(func(tx *Tx) error {
+		// Iterate over each bucket.
+		return tx.ForEach(func(name []byte, _ *Bucket) error {
+			buckets = append(buckets, string(name))
+			return nil
+		})
+	})
+
+	return buckets, err
 }
