@@ -95,12 +95,16 @@ func NewApp() *cli.App {
 			Name:  "generate",
 			Usage: "Generate data for benchmarks",
 			Action: func(c *cli.Context) {
-				numEvents, err := strconv.Atoi(c.Args().Get(0))
+				destPath := c.Args().Get(0)
+				numBuckets, err := strconv.Atoi(c.Args().Get(1))
 				if err != nil {
 					fatal(err)
 				}
-				destPath := c.Args().Get(1)
-				Generate(numEvents, destPath)
+				numItems, err := strconv.Atoi(c.Args().Get(2))
+				if err != nil {
+					fatal(err)
+				}
+				Generate(destPath, numBuckets, numItems)
 			},
 		},
 		{

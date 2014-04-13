@@ -21,11 +21,6 @@ func Set(path, name, key, value string) {
 	defer db.Close()
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		// Create the bucket if it doesn't exist.
-		if err := tx.CreateBucketIfNotExists([]byte(name)); err != nil {
-			fatalf("create bucket: %s", err)
-			return nil
-		}
 
 		// Find bucket.
 		b := tx.Bucket([]byte(name))

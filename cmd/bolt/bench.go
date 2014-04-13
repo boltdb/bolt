@@ -35,7 +35,15 @@ func Bench(inputPath string, readWriteMode string, traversalPattern string, para
 
 	// benchmarks for getting all keys
 
-	b := bolt.NewBenchmark(inputPath, readWriteMode, traversalPattern, parallelism)
+	// Open the database.
+	db, err := bolt.Open(inputPath, 0600)
+	if err != nil {
+		fatalf("error: %+v", err)
+		return
+	}
+	defer db.Close()
+
+	b := bolt.NewBenchmark(db, readWriteMode, traversalPattern, parallelism)
 
 	result := testing.Benchmark(b.Run)
 

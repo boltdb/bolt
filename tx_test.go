@@ -266,6 +266,123 @@ func TestTx_OnCommit_Rollback(t *testing.T) {
 	assert.Equal(t, 0, x)
 }
 
+func BenchmarkReadSequential_1Buckets_1Items_1Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1, 1)
+}
+func BenchmarkReadSequential_1Buckets_10Items_1Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10, 1)
+}
+func BenchmarkReadSequential_1Buckets_100Items_1Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 100, 1)
+}
+func BenchmarkReadSequential_1Buckets_1000Items_1Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1000, 1)
+}
+func BenchmarkReadSequential_1Buckets_10000Items_1Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10000, 1)
+}
+
+func BenchmarkReadSequential_1Buckets_1Items_10Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1, 10)
+}
+func BenchmarkReadSequential_1Buckets_10Items_10Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10, 10)
+}
+func BenchmarkReadSequential_1Buckets_100Items_10Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 100, 10)
+}
+func BenchmarkReadSequential_1Buckets_1000Items_10Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1000, 10)
+}
+func BenchmarkReadSequential_1Buckets_10000Items_10Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10000, 10)
+}
+
+func BenchmarkReadSequential_1Buckets_1Items_100Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1, 100)
+}
+func BenchmarkReadSequential_1Buckets_10Items_100Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10, 100)
+}
+func BenchmarkReadSequential_1Buckets_100Items_100Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 100, 100)
+}
+func BenchmarkReadSequential_1Buckets_1000Items_100Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1000, 100)
+}
+func BenchmarkReadSequential_1Buckets_10000Items_100Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10000, 100)
+}
+
+func BenchmarkReadSequential_1Buckets_1Items_1000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1, 1000)
+}
+func BenchmarkReadSequential_1Buckets_10Items_1000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10, 1000)
+}
+func BenchmarkReadSequential_1Buckets_100Items_1000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 100, 1000)
+}
+func BenchmarkReadSequential_1Buckets_1000Items_1000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1000, 1000)
+}
+func BenchmarkReadSequential_1Buckets_10000Items_1000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10000, 1000)
+}
+
+func BenchmarkReadSequential_1Buckets_1Items_10000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1, 10000)
+}
+func BenchmarkReadSequential_1Buckets_10Items_10000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10, 10000)
+}
+func BenchmarkReadSequential_1Buckets_100Items_10000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 100, 10000)
+}
+func BenchmarkReadSequential_1Buckets_1000Items_10000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 1000, 10000)
+}
+func BenchmarkReadSequential_1Buckets_10000Items_10000Concurrency(b *testing.B) {
+	benchmarkReadSequential(b, 1, 10000, 10000)
+}
+
+func benchmark(b *testing.B, readWriteMode, traversalPattern string, numBuckets, numItemsPerBucket, parallelism int) {
+	withOpenDB(func(db *DB, path string) {
+		if err := generateDB(db, numBuckets, numItemsPerBucket); err != nil {
+			b.Fatal(err)
+		}
+		NewBenchmark(db, readWriteMode, traversalPattern, parallelism).Run(b)
+	})
+}
+
+func benchmarkRead(b *testing.B, traversalPattern string, numBuckets, numItemsPerBucket, parallelism int) {
+	benchmark(b, BenchReadMode, traversalPattern, numBuckets, numItemsPerBucket, parallelism)
+}
+
+func benchmarkReadSequential(b *testing.B, numBuckets, numItemsPerBucket, parallelism int) {
+	benchmark(b, BenchReadMode, BenchSequentialTraversal, numBuckets, numItemsPerBucket, parallelism)
+}
+
+func benchmarkReadRandom(b *testing.B, numBuckets, numItemsPerBucket, parallelism int) {
+	benchmark(b, BenchReadMode, BenchRandomTraversal, numBuckets, numItemsPerBucket, parallelism)
+}
+
+// Generate and write data to specified number of buckets/items.
+func generateDB(db *DB, numBuckets, numItemsPerBucket int) error {
+	return db.Update(func(tx *Tx) error {
+		for bucketIndex := 0; bucketIndex < numBuckets; bucketIndex++ {
+			bucketName := fmt.Sprintf("bucket%08d")
+			tx.CreateBucket([]byte(bucketName))
+			bucket := tx.Bucket([]byte(bucketName))
+			for i := 0; i < numItemsPerBucket; i++ {
+				value := []byte(strings.Repeat("0", 100))
+				bucket.Put([]byte(fmt.Sprintf("key%08d", i)), value)
+			}
+		}
+		return nil
+	})
+}
+
 // Benchmark the performance iterating over a cursor.
 func BenchmarkTxCursor1(b *testing.B)     { benchmarkTxCursor(b, 1) }
 func BenchmarkTxCursor10(b *testing.B)    { benchmarkTxCursor(b, 10) }
@@ -364,47 +481,6 @@ func benchmarkTxPutSequential(b *testing.B, total int) {
 		})
 	})
 }
-
-// func BenchmarkParallel_1items_1threads(b *testing.B)    { benchmarkParallel(1, 1) }
-// func BenchmarkParallel_1items_10threads(b *testing.B)   { benchmarkParallel(1, 10) }
-// func BenchmarkParallel_1items_100threads(b *testing.B)  { benchmarkParallel(1, 100) }
-// func BenchmarkParallel_1items_1000threads(b *testing.B) { benchmarkParallel(1, 1000) }
-
-// func BenchmarkParallel_10items_1threads(b *testing.B)    { benchmarkParallel(10, 1) }
-// func BenchmarkParallel_10items_10threads(b *testing.B)   { benchmarkParallel(10, 10) }
-// func BenchmarkParallel_10items_100threads(b *testing.B)  { benchmarkParallel(10, 100) }
-// func BenchmarkParallel_10items_1000threads(b *testing.B) { benchmarkParallel(10, 1000) }
-
-// func BenchmarkParallel_100items_1threads(b *testing.B)    { benchmarkParallel(100, 1) }
-// func BenchmarkParallel_100items_10threads(b *testing.B)   { benchmarkParallel(100, 10) }
-// func BenchmarkParallel_100items_100threads(b *testing.B)  { benchmarkParallel(100, 100) }
-// func BenchmarkParallel_100items_1000threads(b *testing.B) { benchmarkParallel(100, 1000) }
-
-// func BenchmarkParallel_1000items_1threads(b *testing.B)    { benchmarkParallel(1000, 1) }
-// func BenchmarkParallel_1000items_10threads(b *testing.B)   { benchmarkParallel(1000, 10) }
-// func BenchmarkParallel_1000items_100threads(b *testing.B)  { benchmarkParallel(1000, 100) }
-// func BenchmarkParallel_1000items_1000threads(b *testing.B) { benchmarkParallel(1000, 1000) }
-
-// func benchmarkParallel(b *testing.B, itemCount, parallelism int) {
-// 	// Setup database.
-// 	for i := 0; i < itemCount; i++ {
-// 		// ... insert key/values here ...
-// 	}
-// 	b.ResetTimer()
-
-// 	// Keep running a fixed number of parallel reads until we run out of time.
-// 	for i := 0; i < b.N; i++ {
-// 		var wg sync.WaitGroup
-// 		for j := 0; j < parallelism; j++ {
-// 			wg.Add(1)
-// 			go func() {
-// 				// ... execute read here ...
-// 				wg.Done()
-// 			}()
-// 		}
-// 		wg.Wait()
-// 	}
-// }
 
 func ExampleTx_Rollback() {
 	// Open the database.
