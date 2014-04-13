@@ -70,14 +70,14 @@ int bolt_cursor_first(bolt_cursor* c, bolt_val *key, bolt_val *value) {
 	ref = &c->stack[c->stackp]
 	ref->page = page(c, c->pgid);
 	ref->index = 0;
-	
+
 	// get current leaf element
 	return leaf_element(c, key, value);
 }
 
 int bolt_cursor_next(bolt_cursor* c, bolt_val *key, bolt_val *value) {
 	elem_ref* ref= &c->stack[c->stackp];
-	
+
 	// increment element index
 	ref->index++;
 	// if we're past last element pop the stack and repeat
@@ -91,9 +91,9 @@ int bolt_cursor_next(bolt_cursor* c, bolt_val *key, bolt_val *value) {
 		ref->element += sizeof(branch_elem);
 	else
 		ref->element += sizeof(leaf_elem);
-		
+
 	// get current leaf element
-	return leaf_element(c, key, value);		
+	return leaf_element(c, key, value);
 }
 
 // int bolt_cursor_seek(bolt_cursor* c, bolt_val key, bolt_val *actual_key, bolt_val *value)
@@ -134,15 +134,15 @@ set_key_value(leaf_elem* leaf, bolt_val* key, bolt_val *value) {
 	key.size = leaf->ksize;
 	key.data = leaf + leaf->pos;
 	value.size = leaf->vsize;
-	value.data = key.data + key.size;	
+	value.data = key.data + key.size;
 }
 
 */
 import "C"
 import "github.com/boltdb/bolt"
 
-func  NewCursor(b *bolt.Bucket) *C.bolt_cursor {
-	data := (*C.void)(&b.tx.db.data[0])]
+func NewCursor(b *bolt.Bucket) *C.bolt_cursor {
+	data := (*C.void)(&b.tx.db.data[0])
 	pgsz := (C.size_t)(b.tx.db.pageSize)
 	cursor := new(C.bolt_cursor)
 	C.bolt_cursor_init(cursor, data, pgsz, (C.pgid)(b.root))

@@ -1,6 +1,5 @@
 package c
 
-import "C"
 import (
 	"github.com/boltdb/bolt"
 	"github.com/stretchr/testify/assert"
