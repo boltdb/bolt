@@ -30,16 +30,11 @@ func TestIterate(t *testing.T) {
 			// Iterate over all items and check consistency.
 			var index = 0
 			tx, _ = db.Begin(false)
-			var k, v C.bolt_val
 			c := NewCursor(tx.Bucket("widgets"))
-			C.bolt_cursor_first(c, &k, &v)
-			key := C.GoBytes(k.data, k.size)
-			for key != nil && index < len(items) {
+			for key, value := c.first(); key != nil && index < len(items); key, value = c.next() {
 				assert.Equal(t, key, items[index].Key)
-				assert.Equal(t, C.GoBytes(v.data, v.size), items[index].Value)
+				assert.Equal(t, value, items[index].Value)
 				index++
-				C.bolt_cursor_next(c, &k, &v)
-				key := C.GoBytes(k.data, k.size)
 			}
 			assert.Equal(t, len(items), index)
 			assert.Equal(t, len(items), index)
