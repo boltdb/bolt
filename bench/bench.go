@@ -1,10 +1,12 @@
-package bolt
+package bench
 
 import (
 	"errors"
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/boltdb/bolt"
 )
 
 const (
@@ -15,14 +17,15 @@ const (
 )
 
 type Benchmark struct {
-	db               *DB
-	ReadWriteMode    string
-	TraversalPattern string
-	Parallelism      int
+	db     *bolt.DB
+	config *Config
 }
 
-func NewBenchmark(db *DB, readWriteMode, traversalPattern string, parallelism int) *Benchmark {
-	return &Benchmark{db, readWriteMode, traversalPattern, parallelism}
+func New(db *bolt.DB, config *Config) *Benchmark {
+	b := new(Benchmark)
+	b.db = db
+	b.config = config
+	return b
 }
 
 func (bm *Benchmark) Run(b *testing.B) {
@@ -47,11 +50,11 @@ func (bm *Benchmark) Run(b *testing.B) {
 	// Keep running a fixed number of parallel reads until we run out of time.
 	for i := 0; i < b.N; i++ {
 		var wg sync.WaitGroup
-		for j := 0; j < bm.Parallelism; j++ {
+		for j := 0; j < bm.config.Parallelism; j++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if err := bm.runBuckets(b, bm.db, bucketsWithKeys); err != nil {
+				if err := bm.readBuckets(b, bm.db, bucketsWithKeys); err != nil {
 					b.Fatalf("error: %+v", err)
 				}
 			}()
@@ -61,13 +64,13 @@ func (bm *Benchmark) Run(b *testing.B) {
 }
 
 // Run benchmark(s) for each of the given buckets.
-func (bm *Benchmark) runBuckets(b *testing.B, db *DB, bucketsWithKeys map[string][]string) error {
-	return db.View(func(tx *Tx) error {
+func (bm *Benchmark) readBuckets(b *testing.B, db *bolt.DB, bucketsWithKeys map[string][]string) error {
+	return db.View(func(tx *bolt.Tx) error {
 		bucketsCount := len(bucketsWithKeys)
 		count := 0
 		for bucket, keys := range bucketsWithKeys {
 			bucket := tx.Bucket([]byte(bucket))
-			if err := bm.runKeys(b, bucket, keys); err != nil {
+			if err := bm.readKeys(b, bucket, keys); err != nil {
 				return err
 			}
 			count++
@@ -79,7 +82,7 @@ func (bm *Benchmark) runBuckets(b *testing.B, db *DB, bucketsWithKeys map[string
 	})
 }
 
-func (bm *Benchmark) runKeys(b *testing.B, bucket *Bucket, keys []string) error {
+func (bm *Benchmark) readKeys(b *testing.B, bucket *bolt.Bucket, keys []string) error {
 	c := bucket.Cursor()
 	keysCount := len(keys)
 	count := 0
@@ -92,11 +95,11 @@ func (bm *Benchmark) runKeys(b *testing.B, bucket *Bucket, keys []string) error 
 	return nil
 }
 
-func buckets(db *DB) ([]string, error) {
+func buckets(db *bolt.DB) ([]string, error) {
 	buckets := []string{}
-	err := db.View(func(tx *Tx) error {
+	err := db.View(func(tx *bolt.Tx) error {
 		// Iterate over each bucket.
-		return tx.ForEach(func(name []byte, _ *Bucket) error {
+		return tx.ForEach(func(name []byte, _ *bolt.Bucket) error {
 			buckets = append(buckets, string(name))
 			return nil
 		})
@@ -104,9 +107,9 @@ func buckets(db *DB) ([]string, error) {
 	return buckets, err
 }
 
-func keys(db *DB, bucket string) ([]string, error) {
+func keys(db *bolt.DB, bucket string) ([]string, error) {
 	keys := []string{}
-	err := db.View(func(tx *Tx) error {
+	err := db.View(func(tx *bolt.Tx) error {
 		// Find bucket.
 		b := tx.Bucket([]byte(bucket))
 		if b == nil {

@@ -6,7 +6,7 @@ COMMIT=`git rev-parse --short HEAD`
 GOLDFLAGS="-X main.branch $(BRANCH) -X main.commit $(COMMIT)"
 
 bench:
-	go test -v -test.bench=$(BENCH)
+	go test -v -test.run=NOTHINCONTAINSTHIS -test.bench=$(BENCH)
 
 # http://cloc.sourceforge.net/
 cloc:
@@ -24,7 +24,7 @@ cpuprofile: fmt
 # go get github.com/kisielk/errcheck
 errcheck:
 	@echo "=== errcheck ==="
-	@errcheck github.com/boltdb/bolt
+	@.go/bin/errcheck github.com/boltdb/bolt
 
 fmt:
 	@go fmt ./...

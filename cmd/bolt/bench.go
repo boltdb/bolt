@@ -4,36 +4,14 @@ import (
 	"testing"
 
 	"github.com/boltdb/bolt"
+	"github.com/boltdb/bolt/bench"
 )
 
 // Import converts an exported database dump into a new database.
-// parallelism: integer representing number of concurrent reads/writes
 // readWriteMode: 'read' or 'write'
 // traversalPattern: 'sequentrial' or 'random'
+// parallelism: integer representing number of concurrent reads/writes
 func Bench(inputPath string, readWriteMode string, traversalPattern string, parallelism int) {
-
-	// cursor/sequential reads
-	// random reads
-
-	// sequential writes
-	// random writes
-
-	// reading from many buckets
-	// writing to many buckets
-
-	// read from many paths
-	// writing to many paths
-
-	// bucket size/messages
-	// bucket depth
-
-	// concurrency
-
-	// chart/graph
-
-	// profile
-
-	// benchmarks for getting all keys
 
 	// Open the database.
 	db, err := bolt.Open(inputPath, 0600)
@@ -43,9 +21,11 @@ func Bench(inputPath string, readWriteMode string, traversalPattern string, para
 	}
 	defer db.Close()
 
-	b := bolt.NewBenchmark(db, readWriteMode, traversalPattern, parallelism)
+	b := bench.New(db, &bench.Config{
+		ReadWriteMode:    readWriteMode,
+		TraversalPattern: traversalPattern,
+		Parallelism:      parallelism,
+	})
 
-	result := testing.Benchmark(b.Run)
-
-	println(result)
+	println(testing.Benchmark(b.Run))
 }
