@@ -1,11 +1,19 @@
 package c
 
 import (
-	"github.com/boltdb/bolt"
-	"github.com/stretchr/testify/assert"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"sort"
 	"testing"
 	"testing/quick"
+
+	"github.com/boltdb/bolt"
+	"github.com/stretchr/testify/assert"
 )
+
+// Test when cursor hits the end
+// Implement seek; binary search within the page (branch page and element page)
 
 // Ensure that a cursor can iterate over all elements in a bucket.
 func TestIterate(t *testing.T) {
@@ -14,7 +22,7 @@ func TestIterate(t *testing.T) {
 	}
 
 	f := func(items testdata) bool {
-		withOpenDB(func(db *DB, path string) {
+		withOpenDB(func(db *bolt.DB, path string) {
 			// Bulk insert all values.
 			tx, _ := db.Begin(true)
 			tx.CreateBucket("widgets")
@@ -31,7 +39,7 @@ func TestIterate(t *testing.T) {
 			var index = 0
 			tx, _ = db.Begin(false)
 			c := NewCursor(tx.Bucket("widgets"))
-			for key, value := c.first(); key != nil && index < len(items); key, value = c.next() {
+			for key, value := first(c); key != nil && index < len(items); key, value = next(c) {
 				assert.Equal(t, key, items[index].Key)
 				assert.Equal(t, value, items[index].Value)
 				index++
@@ -46,4 +54,59 @@ func TestIterate(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Fprint(os.Stderr, "\n")
+}
+
+// withTempPath executes a function with a database reference.
+func withTempPath(fn func(string)) {
+	f, _ := ioutil.TempFile("", "bolt-")
+	path := f.Name()
+	f.Close()
+	os.Remove(path)
+	defer os.RemoveAll(path)
+
+	fn(path)
+}
+
+// withOpenDB executes a function with an already opened database.
+func withOpenDB(fn func(*bolt.DB, string)) {
+	withTempPath(func(path string) {
+		db, err := bolt.Open(path, 0666)
+		if err != nil {
+			panic("cannot open db: " + err.Error())
+		}
+		defer db.Close()
+		fn(db, path)
+
+		// Log statistics.
+		// if *statsFlag {
+		// 	logStats(db)
+		// }
+
+		// Check database consistency after every test.
+		mustCheck(db)
+	})
+}
+
+// mustCheck runs a consistency check on the database and panics if any errors are found.
+func mustCheck(db *bolt.DB) {
+	if err := db.Check(); err != nil {
+		// Copy db off first.
+		db.CopyFile("/tmp/check.db", 0600)
+
+		if errors, ok := err.(bolt.ErrorList); ok {
+			for _, err := range errors {
+				warn(err)
+			}
+		}
+		warn(err)
+		panic("check failure: see /tmp/check.db")
+	}
+}
+
+func warn(v ...interface{}) {
+	fmt.Fprintln(os.Stderr, v...)
+}
+
+func warnf(msg string, v ...interface{}) {
+	fmt.Fprintf(os.Stderr, msg+"\n", v...)
 }

@@ -135,26 +135,29 @@ int bolt_cursor_next(bolt_cursor *c, bolt_val *key, bolt_val *value) {
 */
 import "C"
 
-import "github.com/boltdb/bolt"
+import (
+	"unsafe"
+
+	"github.com/boltdb/bolt"
+)
 
 type bolt_cursor *C.bolt_cursor
 
 func NewCursor(b *bolt.Bucket) bolt_cursor {
-	data := (*C.void)(&b.tx.db.data[0])
-	pgsz := (C.size_t)(b.tx.db.pageSize)
+	data, pgsz := b.Tx().DB().RawData()
 	cursor := new(C.bolt_cursor)
-	C.bolt_cursor_init(cursor, data, pgsz, (C.pgid)(b.root))
+	C.bolt_cursor_init(cursor, unsafe.Pointer(&data[0]), (C.size_t)(pgsz), (C.pgid)(b.Root()))
 	return cursor
 }
 
-func (c bolt_cursor) first() (key, value []byte) {
+func first(c bolt_cursor) (key, value []byte) {
 	var k, v C.bolt_val
 	C.bolt_cursor_first(c, &k, &v)
-	return C.GoBytes(k.data, k.size), C.GoBytes(v.data, v.size)
+	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
 }
 
-func (c bolt_cursor) next() (key, value []byte) {
+func next(c bolt_cursor) (key, value []byte) {
 	var k, v C.bolt_val
 	C.bolt_cursor_next(c, &k, &v)
-	return C.GoBytes(k.data, k.size), C.GoBytes(v.data, v.size)
+	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
 }

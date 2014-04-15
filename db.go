@@ -578,6 +578,12 @@ func (db *DB) checkBucket(b *Bucket, reachable map[pgid]*page, errors *ErrorList
 	})
 }
 
+// This is for internal access to the raw data bytes from the C cursor, use
+// carefully, or not at all.
+func (db *DB) RawData() ([]byte, int) {
+	return db.data, db.pageSize
+}
+
 // page retrieves a page reference from the mmap based on the current page size.
 func (db *DB) page(id pgid) *page {
 	pos := id * pgid(db.pageSize)
