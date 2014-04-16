@@ -107,15 +107,15 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 	return &child
 }
 
-// CreateBucket creates a new bucket at the given key.
+// CreateBucket creates a new bucket at the given key and returns the new bucket.
 // Returns an error if the key already exists, if the bucket name is blank, or if the bucket name is too long.
-func (b *Bucket) CreateBucket(key []byte) error {
+func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	if b.tx.db == nil {
-		return ErrTxClosed
+		return nil, ErrTxClosed
 	} else if !b.tx.writable {
-		return ErrTxNotWritable
+		return nil, ErrTxNotWritable
 	} else if len(key) == 0 {
-		return ErrBucketNameRequired
+		return nil, ErrBucketNameRequired
 	}
 
 	// Move cursor to correct position.
@@ -125,16 +125,16 @@ func (b *Bucket) CreateBucket(key []byte) error {
 	// Return an error if there is an existing key.
 	if bytes.Equal(key, k) {
 		if (flags & bucketLeafFlag) != 0 {
-			return ErrBucketExists
+			return nil, ErrBucketExists
 		} else {
-			return ErrIncompatibleValue
+			return nil, ErrIncompatibleValue
 		}
 	}
 
 	// Create a blank root leaf page.
 	p, err := b.tx.allocate(1)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	p.flags = leafPageFlag
 
@@ -146,17 +146,19 @@ func (b *Bucket) CreateBucket(key []byte) error {
 	// Insert into node.
 	c.node().put(key, key, value, 0, bucketLeafFlag)
 
-	return nil
+	return b.Bucket(key), nil
 }
 
-// CreateBucketIfNotExists creates a new bucket if it doesn't already exist.
+// CreateBucketIfNotExists creates a new bucket if it doesn't already exist and returns a reference to it.
 // Returns an error if the bucket name is blank, or if the bucket name is too long.
-func (b *Bucket) CreateBucketIfNotExists(key []byte) error {
-	err := b.CreateBucket(key)
-	if err != nil && err != ErrBucketExists {
-		return err
+func (b *Bucket) CreateBucketIfNotExists(key []byte) (*Bucket, error) {
+	child, err := b.CreateBucket(key)
+	if err == ErrBucketExists {
+		return b.Bucket(key), nil
+	} else if err != nil {
+		return nil, err
 	}
-	return nil
+	return child, nil
 }
 
 // DeleteBucket deletes a bucket at the given key.

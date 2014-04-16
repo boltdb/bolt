@@ -128,10 +128,12 @@ func TestDB_Open_MetaChecksumError(t *testing.T) {
 			db, err := Open(path, 0600)
 			pageSize := db.pageSize
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket([]byte("widgets"))
+				_, err := tx.CreateBucket([]byte("widgets"))
+				return err
 			})
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket([]byte("woojits"))
+				_, err := tx.CreateBucket([]byte("woojits"))
+				return err
 			})
 			db.Close()
 
@@ -272,7 +274,8 @@ func TestDB_Commit_WriteFail(t *testing.T) {
 func TestDB_Stats(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket([]byte("widgets"))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			return err
 		})
 		stats := db.Stats()
 		assert.Equal(t, 3, stats.TxStats.PageCount)
@@ -295,7 +298,8 @@ func TestDB_mmapSize(t *testing.T) {
 func TestDB_Consistency(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket([]byte("widgets"))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			return err
 		})
 
 		for i := 0; i < 10; i++ {
@@ -357,7 +361,8 @@ func BenchmarkDB_Put_Sequential(b *testing.B) {
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket([]byte("widgets"))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			return err
 		})
 		for i := 0; i < b.N; i++ {
 			db.Update(func(tx *Tx) error {
@@ -373,7 +378,8 @@ func BenchmarkDB_Put_Random(b *testing.B) {
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket([]byte("widgets"))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			return err
 		})
 		for i := 0; i < b.N; i++ {
 			db.Update(func(tx *Tx) error {
@@ -391,10 +397,10 @@ func ExampleDB_Update() {
 
 	// Execute several commands within a write transaction.
 	err := db.Update(func(tx *Tx) error {
-		if err := tx.CreateBucket([]byte("widgets")); err != nil {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
 			return err
 		}
-		b := tx.Bucket([]byte("widgets"))
 		if err := b.Put([]byte("foo"), []byte("bar")); err != nil {
 			return err
 		}
@@ -448,7 +454,8 @@ func ExampleDB_Begin_ReadOnly() {
 
 	// Create a bucket.
 	db.Update(func(tx *Tx) error {
-		return tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"))
+		return err
 	})
 
 	// Create several keys in a transaction.

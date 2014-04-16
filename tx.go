@@ -88,13 +88,13 @@ func (tx *Tx) Bucket(name []byte) *Bucket {
 
 // CreateBucket creates a new bucket.
 // Returns an error if the bucket already exists, if the bucket name is blank, or if the bucket name is too long.
-func (tx *Tx) CreateBucket(name []byte) error {
+func (tx *Tx) CreateBucket(name []byte) (*Bucket, error) {
 	return tx.root.CreateBucket(name)
 }
 
 // CreateBucketIfNotExists creates a new bucket if it doesn't already exist.
 // Returns an error if the bucket name is blank, or if the bucket name is too long.
-func (tx *Tx) CreateBucketIfNotExists(name []byte) error {
+func (tx *Tx) CreateBucketIfNotExists(name []byte) (*Bucket, error) {
 	return tx.root.CreateBucketIfNotExists(name)
 }
 

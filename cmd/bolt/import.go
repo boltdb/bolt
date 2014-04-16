@@ -41,7 +41,8 @@ func Import(path string, input string) {
 			}
 
 			// Create the bucket if it doesn't exist.
-			if err := tx.CreateBucketIfNotExists(message.Key); err != nil {
+			b, err := tx.CreateBucketIfNotExists(message.Key)
+			if err != nil {
 				return fmt.Errorf("create bucket: %s", err)
 			}
 
@@ -52,7 +53,6 @@ func Import(path string, input string) {
 			}
 
 			// Import all the values into the bucket.
-			b := tx.Bucket(message.Key)
 			if err := importBucket(b, children); err != nil {
 				return fmt.Errorf("import bucket: %s", err)
 			}
@@ -70,7 +70,8 @@ func importBucket(b *bolt.Bucket, children []*rawMessage) error {
 		// Bucket messages are handled recursively.
 		if child.Type == "bucket" {
 			// Create the bucket if it doesn't exist.
-			if err := b.CreateBucketIfNotExists(child.Key); err != nil {
+			subbucket, err := b.CreateBucketIfNotExists(child.Key)
+			if err != nil {
 				return fmt.Errorf("create bucket: %s", err)
 			}
 
@@ -81,7 +82,6 @@ func importBucket(b *bolt.Bucket, children []*rawMessage) error {
 			}
 
 			// Import subbucket.
-			subbucket := b.Bucket(child.Key)
 			if err := importBucket(subbucket, subchildren); err != nil {
 				return fmt.Errorf("import bucket: %s", err)
 			}

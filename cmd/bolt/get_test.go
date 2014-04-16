@@ -45,7 +45,8 @@ func TestGetKeyNotFound(t *testing.T) {
 	SetTestMode(true)
 	open(func(db *bolt.DB, path string) {
 		db.Update(func(tx *bolt.Tx) error {
-			return tx.CreateBucket([]byte("widgets"))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			return err
 		})
 		db.Close()
 		output := run("get", path, "widgets", "foo")
