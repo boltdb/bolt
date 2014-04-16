@@ -12,6 +12,11 @@ type Cursor struct {
 	stack  []elemRef
 }
 
+// Bucket returns the bucket that this cursor was created from.
+func (c *Cursor) Bucket() *Bucket {
+	return c.bucket
+}
+
 // First moves the cursor to the first item in the bucket and returns its key and value.
 // If the bucket is empty then a nil key and value are returned.
 func (c *Cursor) First() (key []byte, value []byte) {
