@@ -1,11 +1,12 @@
 package c
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
-	// "sort"
+	"sort"
 	"testing"
-	// "testing/quick"
+	"testing/quick"
 
 	"github.com/boltdb/bolt"
 	"github.com/stretchr/testify/assert"
@@ -14,65 +15,70 @@ import (
 // Test when cursor hits the end
 // Implement seek; binary search within the page (branch page and element page)
 
-// Ensure that a cursor can iterate over all elements in a bucket.
-// func TestIterate(t *testing.T) {
-// 	if testing.Short() {
-// 		t.Skip("skipping test in short mode.")
-// 	}
-
-// 	f := func(items testdata) bool {
-// 		withOpenDB(func(db *bolt.DB, path string) {
-// 			// Bulk insert all values.
-// 			tx, _ := db.Begin(true)
-// 			tx.CreateBucket("widgets")
-// 			b := tx.Bucket("widgets")
-// 			for _, item := range items {
-// 				assert.NoError(t, b.Put(item.Key, item.Value))
-// 			}
-// 			assert.NoError(t, tx.Commit())
-
-// 			// Sort test data.
-// 			sort.Sort(items)
-
-// 			// Iterate over all items and check consistency.
-// 			var index = 0
-// 			tx, _ = db.Begin(false)
-// 			c := NewCursor(tx.Bucket("widgets"))
-// 			for key, value := first(c); key != nil && index < len(items); key, value = next(c) {
-// 				assert.Equal(t, key, items[index].Key)
-// 				assert.Equal(t, value, items[index].Value)
-// 				index++
-// 			}
-// 			assert.Equal(t, len(items), index)
-// 			assert.Equal(t, len(items), index)
-// 			tx.Rollback()
-// 		})
-// 		return true
-// 	}
-// 	if err := quick.Check(f, qconfig()); err != nil {
-// 		t.Error(err)
-// 	}
-// 	fmt.Fprint(os.Stderr, "\n")
-// }
-
+// Ensure that a cursor can get the first element of a bucket.
 func TestCursorFirst(t *testing.T) {
 	withOpenDB(func(db *bolt.DB, path string) {
 
 		// Bulk insert all values.
 		tx, _ := db.Begin(true)
-		b, _ := tx.CreateBucket([]byte("widgets"))
-		assert.NoError(t, b.Put([]byte("foo"), []byte("barz")))
+		b, _ := tx.CreateBucket(toBytes("widgets"))
+		assert.NoError(t, b.Put(toBytes("foo"), toBytes("barz")))
 		assert.NoError(t, tx.Commit())
 
 		// Get first and check consistency
 		tx, _ = db.Begin(false)
-		c := NewCursor(tx.Bucket([]byte("widgets")))
+		c := NewCursor(tx.Bucket(toBytes("widgets")))
 		key, value := first(c)
-		assert.Equal(t, key, []byte("foo"))
-		assert.Equal(t, value, []byte("barz"))
+		assert.Equal(t, key, toBytes("foo"))
+		assert.Equal(t, value, toBytes("barz"))
 
 		tx.Rollback()
 	})
+}
+
+// Ensure that a cursor can iterate over all elements in a bucket.
+func TestIterate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	f := func(items testdata) bool {
+		withOpenDB(func(db *bolt.DB, path string) {
+			// Bulk insert all values.
+			tx, _ := db.Begin(true)
+			b, _ := tx.CreateBucket(toBytes("widgets"))
+			for _, item := range items {
+				assert.NoError(t, b.Put(item.Key, item.Value))
+			}
+			assert.NoError(t, tx.Commit())
+
+			// Sort test data.
+			sort.Sort(items)
+
+			// Iterate over all items and check consistency.
+			var index = 0
+			tx, _ = db.Begin(false)
+			c := NewCursor(tx.Bucket(toBytes("widgets")))
+			for key, value := first(c); key != nil && index < len(items); key, value = next(c) {
+				assert.Equal(t, key, items[index].Key)
+				assert.Equal(t, value, items[index].Value)
+				index++
+			}
+			assert.Equal(t, len(items), index)
+			assert.Equal(t, len(items), index)
+			tx.Rollback()
+		})
+		return true
+	}
+	if err := quick.Check(f, qconfig()); err != nil {
+		t.Error(err)
+	}
+	fmt.Fprint(os.Stderr, "\n")
+}
+
+// toBytes converts a string to an array of bytes.
+func toBytes(s string) []byte {
+	return []byte(s)
 }
 
 // withTempPath executes a function with a database reference.
