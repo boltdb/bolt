@@ -60,54 +60,44 @@ typedef struct bolt_cursor {
 
 // private functions
 
+// Returns a page pointer from a page identifier.
 page *get_page(bolt_cursor *c, pgid id) {
-	printf("get_page: c->data=%d, c->pgsz=%d, pgid=%d\n\n", c->data, c->pgsz, id);
 	return (page *)(c->data + (c->pgsz * id));
 }
 
+// Returns the leaf element at a given index on a given page.
 branch_elem *branch_page_element(page *p, uint16_t index) {
-	return (branch_elem*)(p + sizeof(page) + index * sizeof(branch_elem));
+	branch_elem *elements = (branch_elem*)((void*)(p) + sizeof(page));
+	return &elements[index];
 }
 
+// Returns the leaf element at a given index on a given page.
 leaf_elem *leaf_page_element(page *p, uint16_t index) {
-	printf("leaf_page_element: page=%d, index=%d, sizeof(page)=%d, sizeof(leaf_elem)=%d\n\n", p, index, sizeof(page), sizeof(leaf_elem));
-	printf("leaf_page_element: elem=%x\n", (leaf_elem*)(p + sizeof(page) + index * sizeof(leaf_elem))[0]);
-	return (leaf_elem*)(p + sizeof(page) + index * sizeof(leaf_elem));
+	leaf_elem *elements = (leaf_elem*)((void*)(p) + sizeof(page));
+	return &elements[index];
 }
 
-// return current leaf element
-// if stack points at a branch page descend down to the first elemenet
-// of the first leaf page
-int leaf_element(bolt_cursor *c, bolt_val *key, bolt_val *value) {
-	printf("leaf_element:1:\n\n");
-	elem_ref *ref = &(c->stack[c->stackp]);
-	printf("leaf_element:2:, ref->page->flags=%d\n\n", ref->page->flags);
-	branch_elem *branch;
-	while (ref->page->flags & BRANCH_PAGE) {
-		printf("leaf_element:2.1, ref->page->flags=%d\n\n", ref->page->flags);
-		branch = branch_page_element(ref->page,ref->index);
-		printf("leaf_element:2.2\n\n");
-		c->stackp++;
-		//printf("leaf_element:2.3, c->stack=%d, c->stackp=%d\n\n", c->stack, c->stackp);
-		ref = &c->stack[c->stackp];
-		//printf("leaf_element:2.4, ref=%d\n\n", ref);
-		ref->index = 0;
-		printf("leaf_element:2.5\n\n");
-		ref->page = get_page(c, branch->page);
-		printf("leaf_element:2.6\n\n");
-	};
-	printf("leaf_element:3, key=%s, value=%s\n\n", key, value);
-	set_key_value(leaf_page_element(ref->page,ref->index), key, value);
-	printf("leaf_element:3, key=%s, value=%s\n\n", key, value);
-	return 0;
-}
-
-set_key_value(leaf_elem *leaf, bolt_val *key, bolt_val *value) {
+// Sets the key and value for a leaf element to a bolt value.
+void key_value(leaf_elem *leaf, bolt_val *key, bolt_val *value) {
 	key->size = leaf->ksize;
-	key->data = leaf + leaf->pos;
+	key->data = ((void*)leaf) + leaf->pos;
 	value->size = leaf->vsize;
 	value->data = key->data + key->size;
-	printf("set_key_value: key=%s (%d), value=%s (%d)\n\n", key->data, key->size, value->data, value->size);
+}
+
+// Traverses from the current stack position down to the first leaf element.
+int bolt_cursor_first_leaf(bolt_cursor *c, bolt_val *key, bolt_val *value) {
+	elem_ref *ref = &(c->stack[c->stackp]);
+	branch_elem *branch;
+	while (ref->page->flags & BRANCH_PAGE) {
+		branch = branch_page_element(ref->page,ref->index);
+		c->stackp++;
+		ref = &c->stack[c->stackp];
+		ref->index = 0;
+		ref->page = get_page(c, branch->page);
+	};
+	key_value(leaf_page_element(ref->page,ref->index), key, value);
+	return 0;
 }
 
 // public functions
@@ -129,7 +119,7 @@ int bolt_cursor_first(bolt_cursor *c, bolt_val *key, bolt_val *value) {
 	ref->index = 0;
 
 	// get current leaf element
-	return leaf_element(c, key, value);
+	return bolt_cursor_first_leaf(c, key, value);
 }
 
 int bolt_cursor_next(bolt_cursor *c, bolt_val *key, bolt_val *value) {
@@ -145,39 +135,53 @@ int bolt_cursor_next(bolt_cursor *c, bolt_val *key, bolt_val *value) {
 	};
 
 	// get current leaf element
-	return leaf_element(c, key, value);
+	return bolt_cursor_first_leaf(c, key, value);
 }
 */
 import "C"
 
 import (
-	// "fmt"
+	"fmt"
+	"os"
 	"unsafe"
 
 	"github.com/boltdb/bolt"
 )
 
-type bolt_cursor *C.bolt_cursor
+// Cursor represents a wrapper around a Bolt C cursor.
+type Cursor struct {
+	C *C.bolt_cursor
+}
 
-func NewCursor(b *bolt.Bucket) bolt_cursor {
+// NewCursor creates a C cursor from a Bucket.
+func NewCursor(b *bolt.Bucket) *Cursor {
 	info := b.Tx().DB().Info()
 	root := b.Root()
-	cursor := new(C.bolt_cursor)
-	C.bolt_cursor_init(cursor, unsafe.Pointer(&info.Data[0]), (C.size_t)(info.PageSize), (C.pgid)(root))
-	return cursor
+	c := &Cursor{C: new(C.bolt_cursor)}
+	C.bolt_cursor_init(c.C, unsafe.Pointer(&info.Data[0]), C.size_t(info.PageSize), C.pgid(root))
+	return c
 }
 
-func first(c bolt_cursor) (key, value []byte) {
+// first moves the cursor to the first element and returns the key and value.
+// Returns a nil key if there are no elements.
+func first(c *Cursor) (key, value []byte) {
 	var k, v C.bolt_val
-	// fmt.Println("cursor =", c)
-	// fmt.Println("key =", k)
-	// fmt.Println("value =", v)
-	C.bolt_cursor_first(c, &k, &v)
+	C.bolt_cursor_first(c.C, &k, &v)
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
 }
 
-func next(c bolt_cursor) (key, value []byte) {
+// next moves the cursor to the next element and returns the key and value.
+// Returns a nil key if at the end of the bucket.
+func next(c *Cursor) (key, value []byte) {
 	var k, v C.bolt_val
-	C.bolt_cursor_next(c, &k, &v)
+	C.bolt_cursor_next(c.C, &k, &v)
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
+}
+
+func warn(v ...interface{}) {
+	fmt.Fprintln(os.Stderr, v...)
+}
+
+func warnf(msg string, v ...interface{}) {
+	fmt.Fprintf(os.Stderr, msg+"\n", v...)
 }

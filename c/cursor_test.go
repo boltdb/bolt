@@ -1,7 +1,6 @@
 package c
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	// "sort"
@@ -62,7 +61,7 @@ func TestCursorFirst(t *testing.T) {
 		// Bulk insert all values.
 		tx, _ := db.Begin(true)
 		b, _ := tx.CreateBucket([]byte("widgets"))
-		assert.NoError(t, b.Put([]byte("foo"), []byte("bar")))
+		assert.NoError(t, b.Put([]byte("foo"), []byte("barz")))
 		assert.NoError(t, tx.Commit())
 
 		// Get first and check consistency
@@ -70,7 +69,7 @@ func TestCursorFirst(t *testing.T) {
 		c := NewCursor(tx.Bucket([]byte("widgets")))
 		key, value := first(c)
 		assert.Equal(t, key, []byte("foo"))
-		assert.Equal(t, value, []byte("bar"))
+		assert.Equal(t, value, []byte("barz"))
 
 		tx.Rollback()
 	})
@@ -121,12 +120,4 @@ func mustCheck(db *bolt.DB) {
 		warn(err)
 		panic("check failure: see /tmp/check.db")
 	}
-}
-
-func warn(v ...interface{}) {
-	fmt.Fprintln(os.Stderr, v...)
-}
-
-func warnf(msg string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, msg+"\n", v...)
 }
