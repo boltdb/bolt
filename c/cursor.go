@@ -3,40 +3,41 @@ package c
 /*
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <inttypes.h>
 
 #define MAX_DEPTH	100
 #define BRANCH_PAGE	1
 
 // These types MUST have the same layout as their corresponding Go types
 
-typedef unsigned long long	pgid;
-typedef unsigned short		elemid;
+typedef int64_t	pgid;
 
 typedef struct page {
-	pgid			id;
-	unsigned short	flags;
-	elemid			count;
-	unsigned long	overflow;
+	pgid		id;
+	uint16_t	flags;
+	uint16_t	count;
+	uint32_t	overflow;
 } page;
 
 typedef struct branch_elem {
-	unsigned long	pos;
-	unsigned long	ksize;
-	pgid			page;
+	uint32_t	pos;
+	uint32_t	ksize;
+	pgid		page;
 } branch_elem;
 
 typedef struct leaf_elem {
-	unsigned long	flags;
-	unsigned long	pos;
-	unsigned long	ksize;
-	unsigned long	vsize;
+	uint32_t	flags;
+	uint32_t	pos;
+	uint32_t	ksize;
+	uint32_t	vsize;
 } leaf_elem;
 
 // private types
 
 typedef struct elem_ref {
 	page	*page;
-	elemid	index;
+	uint16_t	index;
 } elem_ref;
 
 // public types
@@ -60,14 +61,17 @@ typedef struct bolt_cursor {
 // private functions
 
 page *get_page(bolt_cursor *c, pgid id) {
+	printf("get_page: c->data=%d, c->pgsz=%d, pgid=%d\n\n", c->data, c->pgsz, id);
 	return (page *)(c->data + (c->pgsz * id));
 }
 
-branch_elem *branch_page_element(page *p, elemid index) {
+branch_elem *branch_page_element(page *p, uint16_t index) {
 	return (branch_elem*)(p + sizeof(page) + index * sizeof(branch_elem));
 }
 
-leaf_elem *leaf_page_element(page *p, elemid index) {
+leaf_elem *leaf_page_element(page *p, uint16_t index) {
+	printf("leaf_page_element: page=%d, index=%d, sizeof(page)=%d, sizeof(leaf_elem)=%d\n\n", p, index, sizeof(page), sizeof(leaf_elem));
+	printf("leaf_page_element: elem=%x\n", (leaf_elem*)(p + sizeof(page) + index * sizeof(leaf_elem))[0]);
 	return (leaf_elem*)(p + sizeof(page) + index * sizeof(leaf_elem));
 }
 
@@ -75,16 +79,26 @@ leaf_elem *leaf_page_element(page *p, elemid index) {
 // if stack points at a branch page descend down to the first elemenet
 // of the first leaf page
 int leaf_element(bolt_cursor *c, bolt_val *key, bolt_val *value) {
+	printf("leaf_element:1:\n\n");
 	elem_ref *ref = &(c->stack[c->stackp]);
+	printf("leaf_element:2:, ref->page->flags=%d\n\n", ref->page->flags);
 	branch_elem *branch;
-	while (ref->page->flags | BRANCH_PAGE) {
+	while (ref->page->flags & BRANCH_PAGE) {
+		printf("leaf_element:2.1, ref->page->flags=%d\n\n", ref->page->flags);
 		branch = branch_page_element(ref->page,ref->index);
+		printf("leaf_element:2.2\n\n");
 		c->stackp++;
+		//printf("leaf_element:2.3, c->stack=%d, c->stackp=%d\n\n", c->stack, c->stackp);
 		ref = &c->stack[c->stackp];
+		//printf("leaf_element:2.4, ref=%d\n\n", ref);
 		ref->index = 0;
+		printf("leaf_element:2.5\n\n");
 		ref->page = get_page(c, branch->page);
+		printf("leaf_element:2.6\n\n");
 	};
+	printf("leaf_element:3, key=%s, value=%s\n\n", key, value);
 	set_key_value(leaf_page_element(ref->page,ref->index), key, value);
+	printf("leaf_element:3, key=%s, value=%s\n\n", key, value);
 	return 0;
 }
 
@@ -93,6 +107,7 @@ set_key_value(leaf_elem *leaf, bolt_val *key, bolt_val *value) {
 	key->data = leaf + leaf->pos;
 	value->size = leaf->vsize;
 	value->data = key->data + key->size;
+	printf("set_key_value: key=%s (%d), value=%s (%d)\n\n", key->data, key->size, value->data, value->size);
 }
 
 // public functions
@@ -136,6 +151,7 @@ int bolt_cursor_next(bolt_cursor *c, bolt_val *key, bolt_val *value) {
 import "C"
 
 import (
+	// "fmt"
 	"unsafe"
 
 	"github.com/boltdb/bolt"
@@ -144,14 +160,18 @@ import (
 type bolt_cursor *C.bolt_cursor
 
 func NewCursor(b *bolt.Bucket) bolt_cursor {
-	data, pgsz := b.Tx().DB().RawData()
+	info := b.Tx().DB().Info()
+	root := b.Root()
 	cursor := new(C.bolt_cursor)
-	C.bolt_cursor_init(cursor, unsafe.Pointer(&data[0]), (C.size_t)(pgsz), (C.pgid)(b.Root()))
+	C.bolt_cursor_init(cursor, unsafe.Pointer(&info.Data[0]), (C.size_t)(info.PageSize), (C.pgid)(root))
 	return cursor
 }
 
 func first(c bolt_cursor) (key, value []byte) {
 	var k, v C.bolt_val
+	// fmt.Println("cursor =", c)
+	// fmt.Println("key =", k)
+	// fmt.Println("value =", v)
 	C.bolt_cursor_first(c, &k, &v)
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
 }
