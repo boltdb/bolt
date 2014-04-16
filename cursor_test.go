@@ -8,6 +8,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Ensure that a cursor can return a reference to the bucket that created it.
+func TestCursor_Bucket(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			b, _ := tx.CreateBucket([]byte("widgets"))
+			c := b.Cursor()
+			assert.Equal(t, b, c.Bucket())
+			return nil
+		})
+	})
+}
+
 // Ensure that a Tx cursor can seek to the appropriate keys.
 func TestCursor_Seek(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
