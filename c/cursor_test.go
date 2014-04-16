@@ -1,123 +1,107 @@
-package c
+package c_test
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
-	// "sort"
 	"testing"
-	// "testing/quick"
 
 	"github.com/boltdb/bolt"
+	. "github.com/boltdb/bolt/c"
 	"github.com/stretchr/testify/assert"
 )
 
-// Test when cursor hits the end
-// Implement seek; binary search within the page (branch page and element page)
-
-// Ensure that a cursor can iterate over all elements in a bucket.
-// func TestIterate(t *testing.T) {
-// 	if testing.Short() {
-// 		t.Skip("skipping test in short mode.")
-// 	}
-
-// 	f := func(items testdata) bool {
-// 		withOpenDB(func(db *bolt.DB, path string) {
-// 			// Bulk insert all values.
-// 			tx, _ := db.Begin(true)
-// 			tx.CreateBucket("widgets")
-// 			b := tx.Bucket("widgets")
-// 			for _, item := range items {
-// 				assert.NoError(t, b.Put(item.Key, item.Value))
-// 			}
-// 			assert.NoError(t, tx.Commit())
-
-// 			// Sort test data.
-// 			sort.Sort(items)
-
-// 			// Iterate over all items and check consistency.
-// 			var index = 0
-// 			tx, _ = db.Begin(false)
-// 			c := NewCursor(tx.Bucket("widgets"))
-// 			for key, value := first(c); key != nil && index < len(items); key, value = next(c) {
-// 				assert.Equal(t, key, items[index].Key)
-// 				assert.Equal(t, value, items[index].Value)
-// 				index++
-// 			}
-// 			assert.Equal(t, len(items), index)
-// 			assert.Equal(t, len(items), index)
-// 			tx.Rollback()
-// 		})
-// 		return true
-// 	}
-// 	if err := quick.Check(f, qconfig()); err != nil {
-// 		t.Error(err)
-// 	}
-// 	fmt.Fprint(os.Stderr, "\n")
-// }
-
-func TestCursorFirst(t *testing.T) {
-	withOpenDB(func(db *bolt.DB, path string) {
-
-		// Bulk insert all values.
-		tx, _ := db.Begin(true)
-		b, _ := tx.CreateBucket([]byte("widgets"))
-		assert.NoError(t, b.Put([]byte("foo"), []byte("barz")))
-		assert.NoError(t, tx.Commit())
-
-		// Get first and check consistency
-		tx, _ = db.Begin(false)
-		c := NewCursor(tx.Bucket([]byte("widgets")))
-		key, value := first(c)
-		assert.Equal(t, key, []byte("foo"))
-		assert.Equal(t, value, []byte("barz"))
-
-		tx.Rollback()
+// Ensure that the C cursor can
+func TestCursor_First(t *testing.T) {
+	withDB(func(db *bolt.DB) {
+		db.Update(func(tx *bolt.Tx) error {
+			b, _ := tx.CreateBucket([]byte("widgets"))
+			return b.Put([]byte("foo"), []byte("barz"))
+		})
+		db.View(func(tx *bolt.Tx) error {
+			c := NewCursor(tx.Bucket([]byte("widgets")))
+			key, value := c.First()
+			assert.Equal(t, []byte("foo"), key)
+			assert.Equal(t, []byte("barz"), value)
+			return nil
+		})
 	})
 }
 
-// withTempPath executes a function with a database reference.
-func withTempPath(fn func(string)) {
-	f, _ := ioutil.TempFile("", "bolt-")
-	path := f.Name()
+// Ensure that a C cursor can iterate over a single root with a couple elements.
+func TestCursor_Iterate_Leaf(t *testing.T) {
+	withDB(func(db *bolt.DB) {
+		db.Update(func(tx *bolt.Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte{})
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte{0})
+			tx.Bucket([]byte("widgets")).Put([]byte("bar"), []byte{1})
+			return nil
+		})
+		db.View(func(tx *bolt.Tx) error {
+			c := NewCursor(tx.Bucket([]byte("widgets")))
+
+			k, v := c.First()
+			assert.Equal(t, string(k), "bar")
+			assert.Equal(t, []byte{1}, v)
+
+			k, v = c.Next()
+			assert.Equal(t, string(k), "baz")
+			assert.Equal(t, []byte{}, v)
+
+			k, v = c.Next()
+			assert.Equal(t, string(k), "foo")
+			assert.Equal(t, []byte{0}, v)
+
+			k, v = c.Next()
+			assert.Equal(t, []byte{}, k)
+			assert.Equal(t, []byte{}, v)
+
+			k, v = c.Next()
+			assert.Equal(t, []byte{}, k)
+			assert.Equal(t, []byte{}, v)
+			return nil
+		})
+	})
+}
+
+// tempfile returns a temporary path.
+func tempfile() string {
+	f, _ := ioutil.TempFile("", "bolt-c-")
 	f.Close()
-	os.Remove(path)
-	defer os.RemoveAll(path)
-
-	fn(path)
+	os.Remove(f.Name())
+	return f.Name()
 }
 
-// withOpenDB executes a function with an already opened database.
-func withOpenDB(fn func(*bolt.DB, string)) {
-	withTempPath(func(path string) {
-		db, err := bolt.Open(path, 0666)
-		if err != nil {
-			panic("cannot open db: " + err.Error())
-		}
-		defer db.Close()
-		fn(db, path)
+// withDB executes a function with an already opened database.
+func withDB(fn func(*bolt.DB)) {
+	path := tempfile()
+	db, err := bolt.Open(path, 0666)
+	if err != nil {
+		panic("cannot open db: " + err.Error())
+	}
+	defer os.Remove(path)
+	defer db.Close()
 
-		// Log statistics.
-		// if *statsFlag {
-		// 	logStats(db)
-		// }
+	fn(db)
 
-		// Check database consistency after every test.
-		mustCheck(db)
-	})
+	// Check database consistency after every test.
+	mustCheck(db)
 }
 
 // mustCheck runs a consistency check on the database and panics if any errors are found.
 func mustCheck(db *bolt.DB) {
 	if err := db.Check(); err != nil {
 		// Copy db off first.
-		db.CopyFile("/tmp/check.db", 0600)
+		var path = tempfile()
+		db.CopyFile(path, 0600)
 
 		if errors, ok := err.(bolt.ErrorList); ok {
 			for _, err := range errors {
-				warn(err)
+				fmt.Println(err)
 			}
 		}
-		warn(err)
-		panic("check failure: see /tmp/check.db")
+		fmt.Println(err)
+		panic("check failure: " + path)
 	}
 }
