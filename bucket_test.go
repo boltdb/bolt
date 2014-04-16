@@ -44,7 +44,8 @@ func TestBucket_Get_IncompatibleValue(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
 			tx.CreateBucket([]byte("widgets"))
-			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			_, err := tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
+			assert.NoError(t, err)
 			assert.Nil(t, tx.Bucket([]byte("widgets")).Get([]byte("foo")))
 			return nil
 		})
@@ -109,7 +110,8 @@ func TestBucket_Put_IncompatibleValue(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
 			tx.CreateBucket([]byte("widgets"))
-			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			_, err := tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
+			assert.NoError(t, err)
 			assert.Equal(t, ErrIncompatibleValue, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
 			return nil
 		})
@@ -131,7 +133,8 @@ func TestBucket_Put_Closed(t *testing.T) {
 func TestBucket_Put_ReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, err)
 			return nil
 		})
 		db.View(func(tx *Tx) error {
@@ -164,7 +167,8 @@ func TestBucket_Delete_Bucket(t *testing.T) {
 		db.Update(func(tx *Tx) error {
 			tx.CreateBucket([]byte("widgets"))
 			b := tx.Bucket([]byte("widgets"))
-			assert.NoError(t, b.CreateBucket([]byte("foo")))
+			_, err := b.CreateBucket([]byte("foo"))
+			assert.NoError(t, err)
 			assert.Equal(t, ErrIncompatibleValue, b.Delete([]byte("foo")))
 			return nil
 		})
@@ -203,8 +207,10 @@ func TestBucket_DeleteBucket_Nested(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
 			tx.CreateBucket([]byte("widgets"))
-			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
-			assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).CreateBucket([]byte("bar")))
+			_, err := tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
+			assert.NoError(t, err)
+			_, err = tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).CreateBucket([]byte("bar"))
+			assert.NoError(t, err)
 			assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).Bucket([]byte("bar")).Put([]byte("baz"), []byte("bat")))
 			assert.NoError(t, tx.Bucket([]byte("widgets")).DeleteBucket([]byte("foo")))
 			return nil
@@ -217,8 +223,10 @@ func TestBucket_DeleteBucket_Nested2(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
 			tx.CreateBucket([]byte("widgets"))
-			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
-			assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).CreateBucket([]byte("bar")))
+			_, err := tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
+			assert.NoError(t, err)
+			_, err = tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).CreateBucket([]byte("bar"))
+			assert.NoError(t, err)
 			assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).Bucket([]byte("bar")).Put([]byte("baz"), []byte("bat")))
 			return nil
 		})
@@ -241,8 +249,10 @@ func TestBucket_DeleteBucket_Nested2(t *testing.T) {
 func TestBucket_DeleteBucket_Large(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
-			assert.NoError(t, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, err)
+			_, err = tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
+			assert.NoError(t, err)
 			b := tx.Bucket([]byte("widgets")).Bucket([]byte("foo"))
 			for i := 0; i < 1000; i++ {
 				assert.NoError(t, b.Put([]byte(fmt.Sprintf("%d", i)), []byte(fmt.Sprintf("%0100d", i))))
@@ -274,9 +284,11 @@ func TestBucket_Bucket_IncompatibleValue(t *testing.T) {
 func TestBucket_CreateBucket_IncompatibleValue(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, err)
 			assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
-			assert.Equal(t, ErrIncompatibleValue, tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo")))
+			_, err = tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
+			assert.Equal(t, ErrIncompatibleValue, err)
 			return nil
 		})
 	})
@@ -286,7 +298,8 @@ func TestBucket_CreateBucket_IncompatibleValue(t *testing.T) {
 func TestBucket_DeleteBucket_IncompatibleValue(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, err)
 			assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
 			assert.Equal(t, ErrIncompatibleValue, tx.Bucket([]byte("widgets")).DeleteBucket([]byte("foo")))
 			return nil
@@ -464,7 +477,8 @@ func TestBucket_Stat(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
 			// Add bucket with fewer keys but one big value.
-			assert.NoError(t, tx.CreateBucket([]byte("woojits")))
+			_, err := tx.CreateBucket([]byte("woojits"))
+			assert.NoError(t, err)
 			b := tx.Bucket([]byte("woojits"))
 			for i := 0; i < 500; i++ {
 				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
@@ -472,8 +486,8 @@ func TestBucket_Stat(t *testing.T) {
 			b.Put([]byte("really-big-value"), []byte(strings.Repeat("*", 10000)))
 
 			// Add a bucket that fits on a single root leaf.
-			assert.NoError(t, tx.CreateBucket([]byte("whozawhats")))
-			b = tx.Bucket([]byte("whozawhats"))
+			b, err = tx.CreateBucket([]byte("whozawhats"))
+			assert.NoError(t, err)
 			b.Put([]byte("foo"), []byte("bar"))
 
 			return nil
@@ -543,7 +557,8 @@ func TestBucket_Put_Single(t *testing.T) {
 			m := make(map[string][]byte)
 
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket([]byte("widgets"))
+				_, err := tx.CreateBucket([]byte("widgets"))
+				return err
 			})
 			for _, item := range items {
 				db.Update(func(tx *Tx) error {
@@ -588,7 +603,8 @@ func TestBucket_Put_Multiple(t *testing.T) {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket([]byte("widgets"))
+				_, err := tx.CreateBucket([]byte("widgets"))
+				return err
 			})
 			err := db.Update(func(tx *Tx) error {
 				b := tx.Bucket([]byte("widgets"))
@@ -628,7 +644,8 @@ func TestBucket_Delete_Quick(t *testing.T) {
 		withOpenDB(func(db *DB, path string) {
 			// Bulk insert all values.
 			db.Update(func(tx *Tx) error {
-				return tx.CreateBucket([]byte("widgets"))
+				_, err := tx.CreateBucket([]byte("widgets"))
+				return err
 			})
 			err := db.Update(func(tx *Tx) error {
 				b := tx.Bucket([]byte("widgets"))

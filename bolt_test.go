@@ -154,17 +154,15 @@ func simulateGetHandler(tx *Tx, qdb *QuickDB) {
 
 // Inserts a key into the database.
 func simulatePutHandler(tx *Tx, qdb *QuickDB) {
+	var err error
 	keys, value := randKeys(), randValue()
 
 	// Retrieve root bucket.
 	b := tx.Bucket(keys[0])
 	if b == nil {
-		if err := tx.CreateBucket(keys[0]); err != nil {
+		b, err = tx.CreateBucket(keys[0])
+		if err != nil {
 			panic("create bucket: " + err.Error())
-		}
-		b = tx.Bucket(keys[0])
-		if b == nil {
-			panic(fmt.Sprintf("bucket[0] nil: %v", keys[0]))
 		}
 	}
 
@@ -174,10 +172,10 @@ func simulatePutHandler(tx *Tx, qdb *QuickDB) {
 		if child != nil {
 			b = child
 		} else {
-			if err := b.CreateBucket(key); err != nil {
+			b, err = b.CreateBucket(key)
+			if err != nil {
 				panic("create bucket: " + err.Error())
 			}
-			b = b.Bucket(key)
 		}
 	}
 

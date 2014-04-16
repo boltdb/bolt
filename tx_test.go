@@ -43,7 +43,9 @@ func TestTx_Commit_ReadOnly(t *testing.T) {
 func TestTx_CreateBucket_ReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.View(func(tx *Tx) error {
-			assert.Equal(t, tx.CreateBucket([]byte("foo")), ErrTxNotWritable)
+			b, err := tx.CreateBucket([]byte("foo"))
+			assert.Nil(t, b)
+			assert.Equal(t, ErrTxNotWritable, err)
 			return nil
 		})
 	})
@@ -54,7 +56,9 @@ func TestTx_CreateBucket_Closed(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		tx, _ := db.Begin(true)
 		tx.Commit()
-		assert.Equal(t, tx.CreateBucket([]byte("foo")), ErrTxClosed)
+		b, err := tx.CreateBucket([]byte("foo"))
+		assert.Nil(t, b)
+		assert.Equal(t, ErrTxClosed, err)
 	})
 }
 
@@ -88,7 +92,9 @@ func TestTx_CreateBucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		// Create a bucket.
 		db.Update(func(tx *Tx) error {
-			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			b, err := tx.CreateBucket([]byte("widgets"))
+			assert.NotNil(t, b)
+			assert.NoError(t, err)
 			return nil
 		})
 
@@ -105,10 +111,21 @@ func TestTx_CreateBucket(t *testing.T) {
 func TestTx_CreateBucketIfNotExists(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			assert.NoError(t, tx.CreateBucketIfNotExists([]byte("widgets")))
-			assert.NoError(t, tx.CreateBucketIfNotExists([]byte("widgets")))
-			assert.Equal(t, ErrBucketNameRequired, tx.CreateBucketIfNotExists([]byte{}))
-			assert.Equal(t, ErrBucketNameRequired, tx.CreateBucketIfNotExists(nil))
+			b, err := tx.CreateBucketIfNotExists([]byte("widgets"))
+			assert.NotNil(t, b)
+			assert.NoError(t, err)
+
+			b, err = tx.CreateBucketIfNotExists([]byte("widgets"))
+			assert.NotNil(t, b)
+			assert.NoError(t, err)
+
+			b, err = tx.CreateBucketIfNotExists([]byte{})
+			assert.Nil(t, b)
+			assert.Equal(t, ErrBucketNameRequired, err)
+
+			b, err = tx.CreateBucketIfNotExists(nil)
+			assert.Nil(t, b)
+			assert.Equal(t, ErrBucketNameRequired, err)
 			return nil
 		})
 
@@ -126,13 +143,17 @@ func TestTx_CreateBucket_Exists(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		// Create a bucket.
 		db.Update(func(tx *Tx) error {
-			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			b, err := tx.CreateBucket([]byte("widgets"))
+			assert.NotNil(t, b)
+			assert.NoError(t, err)
 			return nil
 		})
 
 		// Create the same bucket again.
 		db.Update(func(tx *Tx) error {
-			assert.Equal(t, ErrBucketExists, tx.CreateBucket([]byte("widgets")))
+			b, err := tx.CreateBucket([]byte("widgets"))
+			assert.Nil(t, b)
+			assert.Equal(t, ErrBucketExists, err)
 			return nil
 		})
 	})
@@ -142,7 +163,9 @@ func TestTx_CreateBucket_Exists(t *testing.T) {
 func TestTx_CreateBucket_NameRequired(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			assert.Equal(t, ErrBucketNameRequired, tx.CreateBucket(nil))
+			b, err := tx.CreateBucket(nil)
+			assert.Nil(t, b)
+			assert.Equal(t, ErrBucketNameRequired, err)
 			return nil
 		})
 	})
@@ -177,7 +200,9 @@ func TestTx_DeleteBucket(t *testing.T) {
 			assert.Equal(t, []pgid{7, 6, root, 2}, db.freelist.all())
 
 			// Create the bucket again and make sure there's not a phantom value.
-			assert.NoError(t, tx.CreateBucket([]byte("widgets")))
+			b, err := tx.CreateBucket([]byte("widgets"))
+			assert.NotNil(t, b)
+			assert.NoError(t, err)
 			assert.Nil(t, tx.Bucket([]byte("widgets")).Get([]byte("foo")))
 			return nil
 		})
@@ -220,7 +245,8 @@ func TestTx_OnCommit(t *testing.T) {
 		db.Update(func(tx *Tx) error {
 			tx.OnCommit(func() { x += 1 })
 			tx.OnCommit(func() { x += 2 })
-			return tx.CreateBucket([]byte("widgets"))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			return err
 		})
 	})
 	assert.Equal(t, 3, x)
@@ -292,7 +318,8 @@ func benchmarkTxPutRandom(b *testing.B, total int) {
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket([]byte("widgets"))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			return err
 		})
 		var tx *Tx
 		var bucket *Bucket
@@ -323,7 +350,8 @@ func benchmarkTxPutSequential(b *testing.B, total int) {
 	value := []byte(strings.Repeat("0", 64))
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
-			return tx.CreateBucket([]byte("widgets"))
+			_, err := tx.CreateBucket([]byte("widgets"))
+			return err
 		})
 		db.Update(func(tx *Tx) error {
 			bucket := tx.Bucket([]byte("widgets"))
@@ -345,7 +373,8 @@ func ExampleTx_Rollback() {
 
 	// Create a bucket.
 	db.Update(func(tx *Tx) error {
-		return tx.CreateBucket([]byte("widgets"))
+		_, err := tx.CreateBucket([]byte("widgets"))
+		return err
 	})
 
 	// Set a value for a key.
