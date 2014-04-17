@@ -120,9 +120,11 @@ void bolt_cursor_first(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t 
 
 // Positions the cursor to the next leaf element and returns the key/value pair.
 void bolt_cursor_next(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *flags) {
+	int i;
+
 	// Attempt to move over one element until we're successful.
 	// Move up the stack as we hit the end of each page in our stack.
-	for (int i = c->top; i >= 0; i--) {
+	for (i = c->top; i >= 0; i--) {
 		elem_ref *elem = &c->stack[i];
 		if (elem->index < elem->page->count - 1) {
 			elem->index++;
@@ -175,7 +177,7 @@ page *cursor_page(bolt_cursor *c, pgid id) {
 	return (page *)(c->data + (c->pgsz * id));
 }
 
-// Returns the leaf element at a given index on a given page.
+// Returns the branch element at a given index on a given page.
 branch_element *branch_page_element(page *p, uint16_t index) {
 	branch_element *elements = (branch_element*)((void*)(p) + sizeof(page));
 	return &elements[index];
@@ -237,10 +239,11 @@ void cursor_search(bolt_cursor *c, bolt_val key, pgid id) {
 // Recursively search over a leaf page for a key.
 void cursor_search_leaf(bolt_cursor *c, bolt_val key) {
 	elem_ref *ref = &c->stack[c->top];
+	int i;
 
 	// HACK: Simply loop over elements to find the right one. Replace with a binary search.
 	leaf_element *elems = (leaf_element*)((void*)(ref->page) + sizeof(page));
-	for (int i=0; i<ref->page->count; i++) {
+	for (i=0; i<ref->page->count; i++) {
 		leaf_element *elem = &elems[i];
 		int rc = memcmp(key.data, ((void*)elem) + elem->pos, (elem->ksize < key.size ? elem->ksize : key.size));
 
@@ -259,10 +262,11 @@ void cursor_search_leaf(bolt_cursor *c, bolt_val key) {
 // Recursively search over a branch page for a key.
 void cursor_search_branch(bolt_cursor *c, bolt_val key) {
 	elem_ref *ref = &c->stack[c->top];
+	int i;
 
 	// HACK: Simply loop over elements to find the right one. Replace with a binary search.
 	branch_element *elems = (branch_element*)((void*)(ref->page) + sizeof(page));
-	for (int i=0; i<ref->page->count; i++) {
+	for (i=0; i<ref->page->count; i++) {
 		branch_element *elem = &elems[i];
 		int rc = memcmp(key.data, ((void*)elem) + elem->pos, (elem->ksize < key.size ? elem->ksize : key.size));
 

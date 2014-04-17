@@ -122,7 +122,7 @@ func TestCursor_Iterate_Large(t *testing.T) {
 		db.Update(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucket([]byte("widgets"))
 			for i := 0; i < 1000; i++ {
-				b.Put([]byte(fmt.Sprintf("%d", i)), []byte(fmt.Sprintf("%020d", i)))
+				b.Put([]byte(fmt.Sprintf("%05d", i)), []byte(fmt.Sprintf("%020d", i)))
 			}
 			return nil
 		})
@@ -130,7 +130,7 @@ func TestCursor_Iterate_Large(t *testing.T) {
 			var index int
 			c := NewCursor(tx.Bucket([]byte("widgets")))
 			for k, v := c.First(); len(k) > 0; k, v = c.Next() {
-				assert.Equal(t, fmt.Sprintf("%d", index), string(k))
+				assert.Equal(t, fmt.Sprintf("%05d", index), string(k))
 				assert.Equal(t, fmt.Sprintf("%020d", index), string(v))
 				index++
 			}
