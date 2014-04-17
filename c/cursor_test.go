@@ -146,30 +146,30 @@ func TestCursor_Seek_Large(t *testing.T) {
 		db.Update(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucket([]byte("widgets"))
 			for i := 1; i < 1000; i++ {
-				b.Put([]byte(fmt.Sprintf("%05d", i*10)), []byte(fmt.Sprintf("%020d", i*10)))
+				b.Put([]byte(fmt.Sprintf("%05d\000", i*10)), []byte(fmt.Sprintf("%020d", i*10)))
 			}
 			return nil
 		})
 		db.View(func(tx *bolt.Tx) error {
 			c := NewCursor(tx.Bucket([]byte("widgets")))
 
-			// Exact match should go to the key.
-			k, v, _ := c.Seek([]byte("05000"))
-			assert.Equal(t, "05000", string(k))
+			fmt.Println("// Exact match should go to the key.")
+			k, v, _ := c.Seek([]byte("05000\000"))
+			assert.Equal(t, "05000\000", string(k))
 			assert.Equal(t, fmt.Sprintf("%020d", 5000), string(v))
 
-			// Inexact match should go to the next key.
-			k, v, _ = c.Seek([]byte("07495"))
-			assert.Equal(t, "07500", string(k))
+			fmt.Println("// Inexact match should go to the next key.")
+			k, v, _ = c.Seek([]byte("07495\000"))
+			assert.Equal(t, "07500\000", string(k))
 			assert.Equal(t, fmt.Sprintf("%020d", 7500), string(v))
 
-			// Low key should go to the first key.
-			k, v, _ = c.Seek([]byte("00000"))
-			assert.Equal(t, "00010", string(k))
+			fmt.Println("// Low key should go to the first key.")
+			k, v, _ = c.Seek([]byte("00000\000"))
+			assert.Equal(t, "00010\000", string(k))
 			assert.Equal(t, fmt.Sprintf("%020d", 10), string(v))
 
-			// High key should return no key.
-			k, v, _ = c.Seek([]byte("40000"))
+			fmt.Println("// High key should return no key.")
+			k, v, _ = c.Seek([]byte("40000\000"))
 			assert.Equal(t, "", string(k))
 			assert.Equal(t, "", string(v))
 

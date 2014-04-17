@@ -163,7 +163,8 @@ void bolt_cursor_seek(bolt_cursor *c, bolt_val seek, bolt_val *key, bolt_val *va
 		return;
 	};
 
-	// Set the key/value for the current position.
+	// Find first leaf and return key/value.
+	cursor_first_leaf(c);
 	cursor_key_value(c, key, value, flags);
 }
 
@@ -243,6 +244,7 @@ void cursor_search(bolt_cursor *c, bolt_val key, pgid id) {
 	// Push page onto the cursor stack.
 	elem_ref *ref = cursor_push(c, id);
 
+	printf("search page id=%d depth=%d\n", (int)id, c->top);
 	// If we're on a leaf page/node then find the specific node.
 	if (ref->page->flags & PAGE_LEAF) {
 		cursor_search_leaf(c, key);
@@ -290,7 +292,9 @@ void cursor_search_branch(bolt_cursor *c, bolt_val key) {
 		if (key.size == 0 || (rc == 0 && key.size >= elem->ksize) || rc < 0) {
 			ref->index = i;
 			cursor_search(c, key, elem->pgid);
-			return;
+			if (cursor_current(c) == ref) ref->index++;
+			if (ref->index < ref->page->count) return;
+			break;
 		}
 	}
 
