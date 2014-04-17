@@ -28,6 +28,57 @@ func TestCursor_First(t *testing.T) {
 	})
 }
 
+// Ensure that a C cursor can seek to the appropriate keys.
+func TestCursor_Seek(t *testing.T) {
+	withDB(func(db *bolt.DB) {
+		db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, err)
+			assert.NoError(t, b.Put([]byte("foo"), []byte("0001")))
+			assert.NoError(t, b.Put([]byte("bar"), []byte("0002")))
+			assert.NoError(t, b.Put([]byte("baz"), []byte("0003")))
+			_, err = b.CreateBucket([]byte("bkt"))
+			assert.NoError(t, err)
+			return nil
+		})
+		db.View(func(tx *bolt.Tx) error {
+			c := NewCursor(tx.Bucket([]byte("widgets")))
+
+			// Exact match should go to the key.
+			k, v, flags := c.Seek([]byte("bar"))
+			assert.Equal(t, "bar", string(k))
+			assert.Equal(t, "0002", string(v))
+			assert.Equal(t, 0, flags)
+
+			// Inexact match should go to the next key.
+			k, v, flags = c.Seek([]byte("bas"))
+			assert.Equal(t, "baz", string(k))
+			assert.Equal(t, "0003", string(v))
+			assert.Equal(t, 0, flags)
+
+			// Low key should go to the first key.
+			k, v, flags = c.Seek([]byte(""))
+			assert.Equal(t, "bar", string(k))
+			assert.Equal(t, "0002", string(v))
+			assert.Equal(t, 0, flags)
+
+			// High key should return no key.
+			k, v, flags = c.Seek([]byte("zzz"))
+			assert.Equal(t, "", string(k))
+			assert.Equal(t, "", string(v))
+			assert.Equal(t, 0, flags)
+
+			// Buckets should return their key but no value.
+			k, v, flags = c.Seek([]byte("bkt"))
+			assert.Equal(t, []byte("bkt"), k)
+			assert.True(t, len(v) > 0)
+			assert.Equal(t, 1, flags) // bucketLeafFlag
+
+			return nil
+		})
+	})
+}
+
 // Ensure that a C cursor can iterate over a single root with a couple elements.
 func TestCursor_Iterate_Leaf(t *testing.T) {
 	withDB(func(db *bolt.DB) {
@@ -60,6 +111,30 @@ func TestCursor_Iterate_Leaf(t *testing.T) {
 			k, v = c.Next()
 			assert.Equal(t, []byte{}, k)
 			assert.Equal(t, []byte{}, v)
+			return nil
+		})
+	})
+}
+
+// Ensure that a C cursor can iterate over a branches and leafs.
+func TestCursor_Iterate_Large(t *testing.T) {
+	withDB(func(db *bolt.DB) {
+		db.Update(func(tx *bolt.Tx) error {
+			b, _ := tx.CreateBucket([]byte("widgets"))
+			for i := 0; i < 1000; i++ {
+				b.Put([]byte(fmt.Sprintf("%d", i)), []byte(fmt.Sprintf("%020d", i)))
+			}
+			return nil
+		})
+		db.View(func(tx *bolt.Tx) error {
+			var index int
+			c := NewCursor(tx.Bucket([]byte("widgets")))
+			for k, v := c.First(); len(k) > 0; k, v = c.Next() {
+				assert.Equal(t, fmt.Sprintf("%d", index), string(k))
+				assert.Equal(t, fmt.Sprintf("%020d", index), string(v))
+				index++
+			}
+			assert.Equal(t, 1000, index)
 			return nil
 		})
 	})

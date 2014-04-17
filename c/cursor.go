@@ -4,6 +4,7 @@ package c
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <inttypes.h>
 
 //------------------------------------------------------------------------------
@@ -41,7 +42,7 @@ typedef struct page {
 typedef struct branch_element {
 	uint32_t pos;
 	uint32_t ksize;
-	pgid     page;
+	pgid     pgid;
 } branch_element;
 
 // The leaf element represents an a item in a leaf page
@@ -87,6 +88,11 @@ void cursor_first_leaf(bolt_cursor *c);
 
 void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *flags);
 
+void cursor_search(bolt_cursor *c, bolt_val key, pgid id);
+
+void cursor_search_branch(bolt_cursor *c, bolt_val key);
+
+void cursor_search_leaf(bolt_cursor *c, bolt_val key);
 
 //------------------------------------------------------------------------------
 // Public Functions
@@ -138,6 +144,27 @@ void bolt_cursor_next(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *
 	cursor_key_value(c, key, value, flags);
 }
 
+// Positions the cursor first leaf element starting from a given key.
+// If there is a matching key then the cursor will be place on that key.
+// If there not a match then the cursor will be placed on the next key, if available.
+void bolt_cursor_seek(bolt_cursor *c, bolt_val seek, bolt_val *key, bolt_val *value, uint32_t *flags) {
+	// Start from root page/node and traverse to correct page.
+	c->top = -1;
+	cursor_search(c, seek, c->root);
+	elem_ref *ref = &c->stack[c->top];
+
+	// If the cursor is pointing to the end of page then return nil.
+	if (ref->index >= ref->page->count) {
+		key->size = value->size = 0;
+		key->data = value->data = NULL;
+		*flags = 0;
+		return;
+	}
+
+	// Set the key/value for the current position.
+	cursor_key_value(c, key, value, flags);
+}
+
 
 //------------------------------------------------------------------------------
 // Private Functions
@@ -180,14 +207,74 @@ void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *
 // Traverses from the current stack position down to the first leaf element.
 void cursor_first_leaf(bolt_cursor *c) {
 	elem_ref *ref = &(c->stack[c->top]);
-	branch_element *branch;
 	while (ref->page->flags & PAGE_BRANCH) {
-		branch = branch_page_element(ref->page,ref->index);
+		branch_element *elem = branch_page_element(ref->page,ref->index);
 		c->top++;
 		ref = &c->stack[c->top];
 		ref->index = 0;
-		ref->page = cursor_page(c, branch->page);
+		ref->page = cursor_page(c, elem->pgid);
 	};
+}
+
+// Recursively performs a binary search against a given page/node until it finds a given key.
+void cursor_search(bolt_cursor *c, bolt_val key, pgid id) {
+	// Push page onto the cursor stack.
+	c->top++;
+	elem_ref *ref = &c->stack[c->top];
+	ref->page = cursor_page(c, id);
+	ref->index = 0;
+
+	// If we're on a leaf page/node then find the specific node.
+	if (ref->page->flags & PAGE_LEAF) {
+		cursor_search_leaf(c, key);
+		return;
+	}
+
+	// Otherwise search the branch page.
+	cursor_search_branch(c, key);
+}
+
+// Recursively search over a leaf page for a key.
+void cursor_search_leaf(bolt_cursor *c, bolt_val key) {
+	elem_ref *ref = &c->stack[c->top];
+
+	// HACK: Simply loop over elements to find the right one. Replace with a binary search.
+	leaf_element *elems = (leaf_element*)((void*)(ref->page) + sizeof(page));
+	for (int i=0; i<ref->page->count; i++) {
+		leaf_element *elem = &elems[i];
+		int rc = memcmp(key.data, ((void*)elem) + elem->pos, (elem->ksize < key.size ? elem->ksize : key.size));
+
+		// printf("? %.*s | %.*s\n", key.size, key.data, elem->ksize, ((void*)elem) + elem->pos);
+		// printf("rc=%d; key.size(%d) >= elem->ksize(%d)\n", rc, key.size, elem->ksize);
+		if (key.size == 0 || (rc == 0 && key.size >= elem->ksize) || rc < 0) {
+			ref->index = i;
+			return;
+		}
+	}
+
+	// If nothing was matched then move the cursor to the end.
+	ref->index = ref->page->count;
+}
+
+// Recursively search over a branch page for a key.
+void cursor_search_branch(bolt_cursor *c, bolt_val key) {
+	elem_ref *ref = &c->stack[c->top];
+
+	// HACK: Simply loop over elements to find the right one. Replace with a binary search.
+	branch_element *elems = (branch_element*)((void*)(ref->page) + sizeof(page));
+	for (int i=0; i<ref->page->count; i++) {
+		branch_element *elem = &elems[i];
+		int rc = memcmp(key.data, ((void*)elem) + elem->pos, (elem->ksize < key.size ? elem->ksize : key.size));
+
+		if (key.size == 0 || (rc == 0 && key.size >= elem->ksize) || rc < 0) {
+			ref->index = i;
+			cursor_search(c, key, elem->pgid);
+			return;
+		}
+	}
+
+	// If nothing was matched then move the cursor to the end.
+	ref->index = ref->page->count;
 }
 
 */
@@ -231,6 +318,20 @@ func (c *Cursor) Next() (key, value []byte) {
 	var flags C.uint32_t
 	C.bolt_cursor_next(c.C, &k, &v, &flags)
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
+}
+
+// Seek moves the cursor to a given key and returns it.
+// If the key does not exist then the next key is used. If no keys
+// follow, an empty value is returned.
+func (c *Cursor) Seek(seek []byte) (key, value []byte, flags int) {
+	var _flags C.uint32_t
+	var _seek, k, v C.bolt_val
+	if len(seek) > 0 {
+		_seek.size = C.uint32_t(len(seek))
+		_seek.data = unsafe.Pointer(&seek[0])
+	}
+	C.bolt_cursor_seek(c.C, _seek, &k, &v, &_flags)
+	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size)), int(_flags)
 }
 
 func warn(v ...interface{}) {
