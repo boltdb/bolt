@@ -153,22 +153,22 @@ func TestCursor_Seek_Large(t *testing.T) {
 		db.View(func(tx *bolt.Tx) error {
 			c := NewCursor(tx.Bucket([]byte("widgets")))
 
-			fmt.Println("// Exact match should go to the key.")
+			// Exact match should go to the key.
 			k, v, _ := c.Seek([]byte("05000\000"))
 			assert.Equal(t, "05000\000", string(k))
 			assert.Equal(t, fmt.Sprintf("%020d", 5000), string(v))
 
-			fmt.Println("// Inexact match should go to the next key.")
+			// Inexact match should go to the next key.
 			k, v, _ = c.Seek([]byte("07495\000"))
 			assert.Equal(t, "07500\000", string(k))
 			assert.Equal(t, fmt.Sprintf("%020d", 7500), string(v))
 
-			fmt.Println("// Low key should go to the first key.")
+			// Low key should go to the first key.
 			k, v, _ = c.Seek([]byte("00000\000"))
 			assert.Equal(t, "00010\000", string(k))
 			assert.Equal(t, fmt.Sprintf("%020d", 10), string(v))
 
-			fmt.Println("// High key should return no key.")
+			// High key should return no key.
 			k, v, _ = c.Seek([]byte("40000\000"))
 			assert.Equal(t, "", string(k))
 			assert.Equal(t, "", string(v))
