@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 
 	"github.com/codegangsta/cli"
 )
@@ -92,30 +91,33 @@ func NewApp() *cli.App {
 			},
 		},
 		{
-			Name:  "generate",
-			Usage: "Generate data for benchmarks",
-			Action: func(c *cli.Context) {
-				destPath := c.Args().Get(0)
-				numBuckets, err := strconv.Atoi(c.Args().Get(1))
-				if err != nil {
-					fatal(err)
-				}
-				numItems, err := strconv.Atoi(c.Args().Get(2))
-				if err != nil {
-					fatal(err)
-				}
-				Generate(destPath, numBuckets, numItems)
-			},
-		},
-		{
 			Name:  "bench",
-			Usage: "Run benchmarks on a given dataset",
-			Action: func(c *cli.Context) {
-				srcPath := c.Args().Get(0)
-				Bench(srcPath, "read", "sequential", 1)
+			Usage: "Performs a synthetic benchmark",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "profile-mode", Value: "rw", Usage: "Profile mode"},
+				&cli.StringFlag{Name: "write-mode", Value: "seq", Usage: "Write mode"},
+				&cli.StringFlag{Name: "read-mode", Value: "seq", Usage: "Read mode"},
+				&cli.IntFlag{Name: "count", Value: 1000, Usage: "Item count"},
+				&cli.IntFlag{Name: "key-size", Value: 8, Usage: "Key size"},
+				&cli.IntFlag{Name: "value-size", Value: 32, Usage: "Value size"},
+				&cli.StringFlag{Name: "cpuprofile", Usage: "CPU profile output path"},
+				&cli.StringFlag{Name: "memprofile", Usage: "Memory profile output path"},
+				&cli.StringFlag{Name: "blockprofile", Usage: "Block profile output path"},
 			},
-		},
-	}
+			Action: func(c *cli.Context) {
+				Bench(&BenchOptions{
+					ProfileMode:  c.String("profile-mode"),
+					WriteMode:    c.String("write-mode"),
+					ReadMode:     c.String("read-mode"),
+					Iterations:   c.Int("count"),
+					KeySize:      c.Int("key-size"),
+					ValueSize:    c.Int("value-size"),
+					CPUProfile:   c.String("cpuprofile"),
+					MemProfile:   c.String("memprofile"),
+					BlockProfile: c.String("blockprofile"),
+				})
+			},
+		}}
 	return app
 }
 

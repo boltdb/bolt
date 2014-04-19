@@ -24,7 +24,7 @@ cpuprofile: fmt
 # go get github.com/kisielk/errcheck
 errcheck:
 	@echo "=== errcheck ==="
-	@.go/bin/errcheck github.com/boltdb/bolt
+	@errcheck github.com/boltdb/bolt
 
 fmt:
 	@go fmt ./...
@@ -34,8 +34,7 @@ get:
 
 build: get
 	@mkdir -p bin
-	@go build -ldflags=$(GOLDFLAGS) -a -o bin/bolt-`git rev-parse --short HEAD` ./cmd/bolt
-	@echo "writing bin/bolt-`git rev-parse --short HEAD`"
+	@go build -ldflags=$(GOLDFLAGS) -a -o bin/bolt ./cmd/bolt
 
 test: fmt errcheck
 	@go get github.com/stretchr/testify/assert
