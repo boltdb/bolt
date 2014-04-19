@@ -5,11 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"regexp"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -354,39 +351,6 @@ func TestDBStats_Sub(t *testing.T) {
 	b.TxStats.PageCount = 10
 	diff := b.Sub(&a)
 	assert.Equal(t, 7, diff.TxStats.PageCount)
-}
-
-// Benchmark the performance of single put transactions in random order.
-func BenchmarkDB_Put_Sequential(b *testing.B) {
-	value := []byte(strings.Repeat("0", 64))
-	withOpenDB(func(db *DB, path string) {
-		db.Update(func(tx *Tx) error {
-			_, err := tx.CreateBucket([]byte("widgets"))
-			return err
-		})
-		for i := 0; i < b.N; i++ {
-			db.Update(func(tx *Tx) error {
-				return tx.Bucket([]byte("widgets")).Put([]byte(strconv.Itoa(i)), value)
-			})
-		}
-	})
-}
-
-// Benchmark the performance of single put transactions in random order.
-func BenchmarkDB_Put_Random(b *testing.B) {
-	indexes := rand.Perm(b.N)
-	value := []byte(strings.Repeat("0", 64))
-	withOpenDB(func(db *DB, path string) {
-		db.Update(func(tx *Tx) error {
-			_, err := tx.CreateBucket([]byte("widgets"))
-			return err
-		})
-		for i := 0; i < b.N; i++ {
-			db.Update(func(tx *Tx) error {
-				return tx.Bucket([]byte("widgets")).Put([]byte(strconv.Itoa(indexes[i])), value)
-			})
-		}
-	})
 }
 
 func ExampleDB_Update() {

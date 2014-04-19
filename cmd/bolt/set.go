@@ -21,6 +21,7 @@ func Set(path, name, key, value string) {
 	defer db.Close()
 
 	err = db.Update(func(tx *bolt.Tx) error {
+
 		// Find bucket.
 		b := tx.Bucket([]byte(name))
 		if b == nil {
