@@ -63,6 +63,16 @@ func newBucket(tx *Tx) Bucket {
 	return b
 }
 
+// Tx returns the tx of the bucket.
+func (b *Bucket) Tx() *Tx {
+	return b.tx
+}
+
+// Root returns the root of the bucket.
+func (b *Bucket) Root() pgid {
+	return b.root
+}
+
 // Writable returns whether the bucket is writable.
 func (b *Bucket) Writable() bool {
 	return b.tx.writable
