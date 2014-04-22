@@ -485,8 +485,37 @@ func TestBucket_Stat(t *testing.T) {
 			}
 			b.Put([]byte("really-big-value"), []byte(strings.Repeat("*", 10000)))
 
+			return nil
+		})
+		mustCheck(db)
+		db.View(func(tx *Tx) error {
+			b := tx.Bucket([]byte("woojits"))
+			stat := b.Stat()
+			assert.Equal(t, stat.BranchPageN, 1)
+			assert.Equal(t, stat.BranchOverflowN, 0)
+			assert.Equal(t, stat.LeafPageN, 6)
+			assert.Equal(t, stat.LeafOverflowN, 2)
+			assert.Equal(t, stat.KeyN, 501)
+			assert.Equal(t, stat.Depth, 2)
+			if os.Getpagesize() != 4096 {
+				// Incompatible page size
+				assert.Equal(t, stat.BranchInuse, 125)
+				assert.Equal(t, stat.BranchAlloc, 4096)
+				assert.Equal(t, stat.LeafInuse, 20908)
+				assert.Equal(t, stat.LeafAlloc, 32768)
+			}
+			return nil
+		})
+	})
+}
+
+// Ensure a bucket can calculate stats.
+func TestBucket_Stat_Small(t *testing.T) {
+
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
 			// Add a bucket that fits on a single root leaf.
-			b, err = tx.CreateBucket([]byte("whozawhats"))
+			b, err := tx.CreateBucket([]byte("whozawhats"))
 			assert.NoError(t, err)
 			b.Put([]byte("foo"), []byte("bar"))
 
@@ -494,22 +523,21 @@ func TestBucket_Stat(t *testing.T) {
 		})
 		mustCheck(db)
 		db.View(func(tx *Tx) error {
-			b := tx.Bucket([]byte("woojits"))
+			b := tx.Bucket([]byte("whozawhats"))
 			stat := b.Stat()
-			assert.Equal(t, stat.BranchPageCount, 1)
-			assert.Equal(t, stat.LeafPageCount, 6)
-			assert.Equal(t, stat.OverflowPageCount, 2)
-			assert.Equal(t, stat.KeyCount, 501)
-			assert.Equal(t, stat.MaxDepth, 2)
-
-			b = tx.Bucket([]byte("whozawhats"))
-			stat = b.Stat()
-			assert.Equal(t, stat.BranchPageCount, 0)
-			assert.Equal(t, stat.LeafPageCount, 1)
-			assert.Equal(t, stat.OverflowPageCount, 0)
-			assert.Equal(t, stat.KeyCount, 1)
-			assert.Equal(t, stat.MaxDepth, 1)
-
+			assert.Equal(t, stat.BranchPageN, 0)
+			assert.Equal(t, stat.BranchOverflowN, 0)
+			assert.Equal(t, stat.LeafPageN, 1)
+			assert.Equal(t, stat.LeafOverflowN, 0)
+			assert.Equal(t, stat.KeyN, 1)
+			assert.Equal(t, stat.Depth, 1)
+			if os.Getpagesize() != 4096 {
+				// Incompatible page size
+				assert.Equal(t, stat.BranchInuse, 0)
+				assert.Equal(t, stat.BranchAlloc, 0)
+				assert.Equal(t, stat.LeafInuse, 38)
+				assert.Equal(t, stat.LeafAlloc, 4096)
+			}
 			return nil
 		})
 	})
@@ -535,11 +563,19 @@ func TestBucket_Stat_Large(t *testing.T) {
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket([]byte("widgets"))
 			stat := b.Stat()
-			assert.Equal(t, stat.BranchPageCount, 15)
-			assert.Equal(t, stat.LeafPageCount, 1281)
-			assert.Equal(t, stat.OverflowPageCount, 0)
-			assert.Equal(t, stat.KeyCount, 100000)
-			assert.Equal(t, stat.MaxDepth, 3)
+			assert.Equal(t, stat.BranchPageN, 15)
+			assert.Equal(t, stat.BranchOverflowN, 0)
+			assert.Equal(t, stat.LeafPageN, 1281)
+			assert.Equal(t, stat.LeafOverflowN, 0)
+			assert.Equal(t, stat.KeyN, 100000)
+			assert.Equal(t, stat.Depth, 3)
+			if os.Getpagesize() != 4096 {
+				// Incompatible page size
+				assert.Equal(t, stat.BranchInuse, 27289)
+				assert.Equal(t, stat.BranchAlloc, 61440)
+				assert.Equal(t, stat.LeafInuse, 2598276)
+				assert.Equal(t, stat.LeafAlloc, 5246976)
+			}
 			return nil
 		})
 	})
