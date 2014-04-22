@@ -334,28 +334,28 @@ func (b *Bucket) Stat() *BucketStat {
 	pageSize := b.tx.db.pageSize
 	b.tx.forEachPage(b.root, 0, func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
-			s.LeafPageCount++
-			s.KeyCount += int(p.count)
+			s.LeafPageN++
+			s.KeyN += int(p.count)
 			lastElement := p.leafPageElement(p.count - 1)
 			used := pageHeaderSize + (leafPageElementSize * int(p.count-1))
 			used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
 			s.LeafInuse += used
-			s.LeafOverflowPageCount += int(p.overflow)
+			s.LeafOverflowN += int(p.overflow)
 		} else if (p.flags & branchPageFlag) != 0 {
-			s.BranchPageCount++
+			s.BranchPageN++
 			lastElement := p.branchPageElement(p.count - 1)
 			used := pageHeaderSize + (branchPageElementSize * int(p.count-1))
 			used += int(lastElement.pos + lastElement.ksize)
 			s.BranchInuse += used
-			s.BranchOverflowPageCount += int(p.overflow)
+			s.BranchOverflowN += int(p.overflow)
 		}
 
 		if depth+1 > s.MaxDepth {
 			s.MaxDepth = (depth + 1)
 		}
 	})
-	s.BranchAlloc = (s.BranchPageCount + s.BranchOverflowPageCount) * pageSize
-	s.LeafAlloc = (s.LeafPageCount + s.LeafOverflowPageCount) * pageSize
+	s.BranchAlloc = (s.BranchPageN + s.BranchOverflowN) * pageSize
+	s.LeafAlloc = (s.LeafPageN + s.LeafOverflowN) * pageSize
 	return s
 }
 
@@ -517,14 +517,14 @@ func (b *Bucket) pageNode(id pgid) (*page, *node) {
 
 // BucketStat represents stats on a bucket such as branch pages and leaf pages.
 type BucketStat struct {
-	BranchPageCount         int
-	BranchOverflowPageCount int
-	LeafPageCount           int
-	LeafOverflowPageCount   int
-	KeyCount                int
-	MaxDepth                int
-	BranchAlloc             int
-	BranchInuse             int
-	LeafAlloc               int
-	LeafInuse               int
+	BranchPageN     int
+	BranchOverflowN int
+	LeafPageN       int
+	LeafOverflowN   int
+	KeyN            int
+	MaxDepth        int
+	BranchAlloc     int
+	BranchInuse     int
+	LeafAlloc       int
+	LeafInuse       int
 }
