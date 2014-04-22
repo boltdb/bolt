@@ -331,12 +331,23 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 // Stat returns stats on a bucket.
 func (b *Bucket) Stat() *BucketStat {
 	s := &BucketStat{}
+	pageSize := b.Tx().DB().Info().PageSize
 	b.tx.forEachPage(b.root, 0, func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
 			s.LeafPageCount++
 			s.KeyCount += int(p.count)
+			lastElement := p.leafPageElement(p.count - 1)
+			used := pageHeaderSize + (leafPageElementSize * int(p.count-1))
+			used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
+			s.UsedLeafSpace += used
+			s.FreeLeafSpace += int(p.overflow+1)*pageSize - used
 		} else if (p.flags & branchPageFlag) != 0 {
 			s.BranchPageCount++
+			lastElement := p.branchPageElement(p.count - 1)
+			used := pageHeaderSize + (branchPageElementSize * int(p.count-1))
+			used += int(lastElement.pos + lastElement.ksize)
+			s.UsedBranchSpace += used
+			s.FreeBranchSpace += int(p.overflow+1)*pageSize - used
 		}
 
 		s.OverflowPageCount += int(p.overflow)
@@ -511,4 +522,8 @@ type BucketStat struct {
 	OverflowPageCount int
 	KeyCount          int
 	MaxDepth          int
+	UsedBranchSpace   int
+	FreeBranchSpace   int
+	UsedLeafSpace     int
+	FreeLeafSpace     int
 }
