@@ -331,7 +331,7 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 // Stat returns stats on a bucket.
 func (b *Bucket) Stat() *BucketStat {
 	s := &BucketStat{}
-	pageSize := b.Tx().DB().Info().PageSize
+	pageSize := b.tx.db.pageSize
 	b.tx.forEachPage(b.root, 0, func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
 			s.LeafPageCount++
@@ -339,23 +339,23 @@ func (b *Bucket) Stat() *BucketStat {
 			lastElement := p.leafPageElement(p.count - 1)
 			used := pageHeaderSize + (leafPageElementSize * int(p.count-1))
 			used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
-			s.UsedLeafSpace += used
-			s.FreeLeafSpace += int(p.overflow+1)*pageSize - used
+			s.LeafInuse += used
+			s.LeafOverflowPageCount += int(p.overflow)
 		} else if (p.flags & branchPageFlag) != 0 {
 			s.BranchPageCount++
 			lastElement := p.branchPageElement(p.count - 1)
 			used := pageHeaderSize + (branchPageElementSize * int(p.count-1))
 			used += int(lastElement.pos + lastElement.ksize)
-			s.UsedBranchSpace += used
-			s.FreeBranchSpace += int(p.overflow+1)*pageSize - used
+			s.BranchInuse += used
+			s.BranchOverflowPageCount += int(p.overflow)
 		}
-
-		s.OverflowPageCount += int(p.overflow)
 
 		if depth+1 > s.MaxDepth {
 			s.MaxDepth = (depth + 1)
 		}
 	})
+	s.BranchAlloc = (s.BranchPageCount + s.BranchOverflowPageCount) * pageSize
+	s.LeafAlloc = (s.LeafPageCount + s.LeafOverflowPageCount) * pageSize
 	return s
 }
 
@@ -517,13 +517,14 @@ func (b *Bucket) pageNode(id pgid) (*page, *node) {
 
 // BucketStat represents stats on a bucket such as branch pages and leaf pages.
 type BucketStat struct {
-	BranchPageCount   int
-	LeafPageCount     int
-	OverflowPageCount int
-	KeyCount          int
-	MaxDepth          int
-	UsedBranchSpace   int
-	FreeBranchSpace   int
-	UsedLeafSpace     int
-	FreeLeafSpace     int
+	BranchPageCount         int
+	BranchOverflowPageCount int
+	LeafPageCount           int
+	LeafOverflowPageCount   int
+	KeyCount                int
+	MaxDepth                int
+	BranchAlloc             int
+	BranchInuse             int
+	LeafAlloc               int
+	LeafInuse               int
 }

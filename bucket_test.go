@@ -485,11 +485,6 @@ func TestBucket_Stat(t *testing.T) {
 			}
 			b.Put([]byte("really-big-value"), []byte(strings.Repeat("*", 10000)))
 
-			// Add a bucket that fits on a single root leaf.
-			b, err = tx.CreateBucket([]byte("whozawhats"))
-			assert.NoError(t, err)
-			b.Put([]byte("foo"), []byte("bar"))
-
 			return nil
 		})
 		mustCheck(db)
@@ -497,26 +492,46 @@ func TestBucket_Stat(t *testing.T) {
 			b := tx.Bucket([]byte("woojits"))
 			stat := b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 1)
+			assert.Equal(t, stat.BranchOverflowPageCount, 0)
 			assert.Equal(t, stat.LeafPageCount, 6)
-			assert.Equal(t, stat.OverflowPageCount, 2)
+			assert.Equal(t, stat.LeafOverflowPageCount, 2)
 			assert.Equal(t, stat.KeyCount, 501)
 			assert.Equal(t, stat.MaxDepth, 2)
-			assert.Equal(t, stat.UsedBranchSpace, 125)
-			assert.Equal(t, stat.FreeBranchSpace, 3971)
-			assert.Equal(t, stat.UsedLeafSpace, 20908)
-			assert.Equal(t, stat.FreeLeafSpace, 11860)
+			assert.Equal(t, stat.BranchInuse, 125)
+			assert.Equal(t, stat.BranchAlloc, 4096)
+			assert.Equal(t, stat.LeafInuse, 20908)
+			assert.Equal(t, stat.LeafAlloc, 32768)
 
-			b = tx.Bucket([]byte("whozawhats"))
-			stat = b.Stat()
+			return nil
+		})
+	})
+}
+
+// Ensure a bucket can calculate stats.
+func TestBucket_Stat_Small(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			// Add a bucket that fits on a single root leaf.
+			b, err := tx.CreateBucket([]byte("whozawhats"))
+			assert.NoError(t, err)
+			b.Put([]byte("foo"), []byte("bar"))
+
+			return nil
+		})
+		mustCheck(db)
+		db.View(func(tx *Tx) error {
+			b := tx.Bucket([]byte("whozawhats"))
+			stat := b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 0)
+			assert.Equal(t, stat.BranchOverflowPageCount, 0)
 			assert.Equal(t, stat.LeafPageCount, 1)
-			assert.Equal(t, stat.OverflowPageCount, 0)
+			assert.Equal(t, stat.LeafOverflowPageCount, 0)
 			assert.Equal(t, stat.KeyCount, 1)
 			assert.Equal(t, stat.MaxDepth, 1)
-			assert.Equal(t, stat.UsedBranchSpace, 0)
-			assert.Equal(t, stat.FreeBranchSpace, 0)
-			assert.Equal(t, stat.UsedLeafSpace, 38)
-			assert.Equal(t, stat.FreeLeafSpace, 4058)
+			assert.Equal(t, stat.BranchInuse, 0)
+			assert.Equal(t, stat.BranchAlloc, 0)
+			assert.Equal(t, stat.LeafInuse, 38)
+			assert.Equal(t, stat.LeafAlloc, 4096)
 
 			return nil
 		})
@@ -544,10 +559,15 @@ func TestBucket_Stat_Large(t *testing.T) {
 			b := tx.Bucket([]byte("widgets"))
 			stat := b.Stat()
 			assert.Equal(t, stat.BranchPageCount, 15)
+			assert.Equal(t, stat.BranchOverflowPageCount, 0)
 			assert.Equal(t, stat.LeafPageCount, 1281)
-			assert.Equal(t, stat.OverflowPageCount, 0)
+			assert.Equal(t, stat.LeafOverflowPageCount, 0)
 			assert.Equal(t, stat.KeyCount, 100000)
 			assert.Equal(t, stat.MaxDepth, 3)
+			assert.Equal(t, stat.BranchInuse, 27289)
+			assert.Equal(t, stat.BranchAlloc, 61440)
+			assert.Equal(t, stat.LeafInuse, 2598276)
+			assert.Equal(t, stat.LeafAlloc, 5246976)
 			return nil
 		})
 	})
