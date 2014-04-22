@@ -501,6 +501,10 @@ func TestBucket_Stat(t *testing.T) {
 			assert.Equal(t, stat.OverflowPageCount, 2)
 			assert.Equal(t, stat.KeyCount, 501)
 			assert.Equal(t, stat.MaxDepth, 2)
+			assert.Equal(t, stat.UsedBranchSpace, 125)
+			assert.Equal(t, stat.FreeBranchSpace, 3971)
+			assert.Equal(t, stat.UsedLeafSpace, 20908)
+			assert.Equal(t, stat.FreeLeafSpace, 11860)
 
 			b = tx.Bucket([]byte("whozawhats"))
 			stat = b.Stat()
@@ -509,6 +513,10 @@ func TestBucket_Stat(t *testing.T) {
 			assert.Equal(t, stat.OverflowPageCount, 0)
 			assert.Equal(t, stat.KeyCount, 1)
 			assert.Equal(t, stat.MaxDepth, 1)
+			assert.Equal(t, stat.UsedBranchSpace, 0)
+			assert.Equal(t, stat.FreeBranchSpace, 0)
+			assert.Equal(t, stat.UsedLeafSpace, 38)
+			assert.Equal(t, stat.FreeLeafSpace, 4058)
 
 			return nil
 		})
