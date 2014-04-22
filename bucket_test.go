@@ -497,11 +497,13 @@ func TestBucket_Stat(t *testing.T) {
 			assert.Equal(t, stat.LeafOverflowN, 2)
 			assert.Equal(t, stat.KeyN, 501)
 			assert.Equal(t, stat.MaxDepth, 2)
-			assert.Equal(t, stat.BranchInuse, 125)
-			assert.Equal(t, stat.BranchAlloc, 4096)
-			assert.Equal(t, stat.LeafInuse, 20908)
-			assert.Equal(t, stat.LeafAlloc, 32768)
-
+			if os.Getpagesize() != 4096 {
+				// Incompatible page size
+				assert.Equal(t, stat.BranchInuse, 125)
+				assert.Equal(t, stat.BranchAlloc, 4096)
+				assert.Equal(t, stat.LeafInuse, 20908)
+				assert.Equal(t, stat.LeafAlloc, 32768)
+			}
 			return nil
 		})
 	})
@@ -509,6 +511,7 @@ func TestBucket_Stat(t *testing.T) {
 
 // Ensure a bucket can calculate stats.
 func TestBucket_Stat_Small(t *testing.T) {
+
 	withOpenDB(func(db *DB, path string) {
 		db.Update(func(tx *Tx) error {
 			// Add a bucket that fits on a single root leaf.
@@ -528,11 +531,13 @@ func TestBucket_Stat_Small(t *testing.T) {
 			assert.Equal(t, stat.LeafOverflowN, 0)
 			assert.Equal(t, stat.KeyN, 1)
 			assert.Equal(t, stat.MaxDepth, 1)
-			assert.Equal(t, stat.BranchInuse, 0)
-			assert.Equal(t, stat.BranchAlloc, 0)
-			assert.Equal(t, stat.LeafInuse, 38)
-			assert.Equal(t, stat.LeafAlloc, 4096)
-
+			if os.Getpagesize() != 4096 {
+				// Incompatible page size
+				assert.Equal(t, stat.BranchInuse, 0)
+				assert.Equal(t, stat.BranchAlloc, 0)
+				assert.Equal(t, stat.LeafInuse, 38)
+				assert.Equal(t, stat.LeafAlloc, 4096)
+			}
 			return nil
 		})
 	})
@@ -564,10 +569,13 @@ func TestBucket_Stat_Large(t *testing.T) {
 			assert.Equal(t, stat.LeafOverflowN, 0)
 			assert.Equal(t, stat.KeyN, 100000)
 			assert.Equal(t, stat.MaxDepth, 3)
-			assert.Equal(t, stat.BranchInuse, 27289)
-			assert.Equal(t, stat.BranchAlloc, 61440)
-			assert.Equal(t, stat.LeafInuse, 2598276)
-			assert.Equal(t, stat.LeafAlloc, 5246976)
+			if os.Getpagesize() != 4096 {
+				// Incompatible page size
+				assert.Equal(t, stat.BranchInuse, 27289)
+				assert.Equal(t, stat.BranchAlloc, 61440)
+				assert.Equal(t, stat.LeafInuse, 2598276)
+				assert.Equal(t, stat.LeafAlloc, 5246976)
+			}
 			return nil
 		})
 	})
