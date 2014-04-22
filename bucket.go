@@ -329,8 +329,8 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 }
 
 // Stat returns stats on a bucket.
-func (b *Bucket) Stat() *BucketStat {
-	s := &BucketStat{}
+func (b *Bucket) Stats() BucketStats {
+	var s BucketStats
 	pageSize := b.tx.db.pageSize
 	b.tx.forEachPage(b.root, 0, func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
@@ -515,16 +515,21 @@ func (b *Bucket) pageNode(id pgid) (*page, *node) {
 	return b.tx.page(id), nil
 }
 
-// BucketStat represents stats on a bucket such as branch pages and leaf pages.
-type BucketStat struct {
-	BranchPageN     int
-	BranchOverflowN int
-	LeafPageN       int
-	LeafOverflowN   int
-	KeyN            int
-	Depth           int
-	BranchAlloc     int
-	BranchInuse     int
-	LeafAlloc       int
-	LeafInuse       int
+// BucketStats records statistics about resources used by a bucket.
+type BucketStats struct {
+	// Page count statistics.
+	BranchPageN     int // number of logical branch pages
+	BranchOverflowN int // number of physical branch overflow pages
+	LeafPageN       int // number of logical leaf pages
+	LeafOverflowN   int // number of physical leaf overflow pages
+
+	// Tree statistics.
+	KeyN  int // number of keys/value pairs
+	Depth int // number of levels in B+tree
+
+	// Page size utilization.
+	BranchAlloc int // bytes allocated for physical branch pages
+	BranchInuse int // bytes actually used for branch data
+	LeafAlloc   int // bytes allocated for physical leaf pages
+	LeafInuse   int // bytes actually used for leaf data
 }
