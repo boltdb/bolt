@@ -350,8 +350,8 @@ func (b *Bucket) Stat() *BucketStat {
 			s.BranchOverflowN += int(p.overflow)
 		}
 
-		if depth+1 > s.MaxDepth {
-			s.MaxDepth = (depth + 1)
+		if depth+1 > s.Depth {
+			s.Depth = (depth + 1)
 		}
 	})
 	s.BranchAlloc = (s.BranchPageN + s.BranchOverflowN) * pageSize
@@ -522,7 +522,7 @@ type BucketStat struct {
 	LeafPageN       int
 	LeafOverflowN   int
 	KeyN            int
-	MaxDepth        int
+	Depth           int
 	BranchAlloc     int
 	BranchInuse     int
 	LeafAlloc       int

@@ -496,7 +496,7 @@ func TestBucket_Stat(t *testing.T) {
 			assert.Equal(t, stat.LeafPageN, 6)
 			assert.Equal(t, stat.LeafOverflowN, 2)
 			assert.Equal(t, stat.KeyN, 501)
-			assert.Equal(t, stat.MaxDepth, 2)
+			assert.Equal(t, stat.Depth, 2)
 			if os.Getpagesize() != 4096 {
 				// Incompatible page size
 				assert.Equal(t, stat.BranchInuse, 125)
@@ -530,7 +530,7 @@ func TestBucket_Stat_Small(t *testing.T) {
 			assert.Equal(t, stat.LeafPageN, 1)
 			assert.Equal(t, stat.LeafOverflowN, 0)
 			assert.Equal(t, stat.KeyN, 1)
-			assert.Equal(t, stat.MaxDepth, 1)
+			assert.Equal(t, stat.Depth, 1)
 			if os.Getpagesize() != 4096 {
 				// Incompatible page size
 				assert.Equal(t, stat.BranchInuse, 0)
@@ -568,7 +568,7 @@ func TestBucket_Stat_Large(t *testing.T) {
 			assert.Equal(t, stat.LeafPageN, 1281)
 			assert.Equal(t, stat.LeafOverflowN, 0)
 			assert.Equal(t, stat.KeyN, 100000)
-			assert.Equal(t, stat.MaxDepth, 3)
+			assert.Equal(t, stat.Depth, 3)
 			if os.Getpagesize() != 4096 {
 				// Incompatible page size
 				assert.Equal(t, stat.BranchInuse, 27289)
