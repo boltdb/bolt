@@ -88,8 +88,6 @@ elem_ref *cursor_current(bolt_cursor *c);
 
 elem_ref *cursor_pop(bolt_cursor *c);
 
-void cursor_first_leaf(bolt_cursor *c);
-
 void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *flags);
 
 void cursor_search(bolt_cursor *c, bolt_val key, pgid id);
@@ -116,7 +114,6 @@ void bolt_cursor_first(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t 
 	elem_ref *ref = cursor_push(c, c->root);
 
 	// Find first leaf and return key/value.
-	cursor_first_leaf(c);
 	cursor_key_value(c, key, value, flags);
 }
 
@@ -133,16 +130,7 @@ void bolt_cursor_next(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *
 		cursor_pop(c);
 	};
 
-	// If we are at the top of the stack then return a blank key/value pair.
-	if (ref == NULL) {
-		key->size = value->size = 0;
-		key->data = value->data = NULL;
-		*flags = 0;
-		return;
-	};
-
 	// Find first leaf and return key/value.
-	cursor_first_leaf(c);
 	cursor_key_value(c, key, value, flags);
 }
 
@@ -153,18 +141,8 @@ void bolt_cursor_seek(bolt_cursor *c, bolt_val seek, bolt_val *key, bolt_val *va
 	// Start from root page/node and traverse to correct page.
 	cursor_push(c, c->root);
 	if (seek.size > 0) cursor_search(c, seek, c->root);
-	elem_ref *ref = cursor_current(c);
-
-	// If the cursor is pointing to the end of page then return nil.
-	if (ref == NULL) {
-		key->size = value->size = 0;
-		key->data = value->data = NULL;
-		*flags = 0;
-		return;
-	};
 
 	// Find first leaf and return key/value.
-	cursor_first_leaf(c);
 	cursor_key_value(c, key, value, flags);
 }
 
@@ -216,6 +194,19 @@ leaf_element *page_leaf_element(page *p, uint16_t index) {
 // Returns the key/value pair for the current position of the cursor.
 void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *flags) {
 	elem_ref *ref = cursor_current(c);
+	if (ref == NULL) {
+		key->size = value->size = 0;
+		key->data = value->data = NULL;
+		*flags = 0;
+		return;
+	};
+
+	// Descend to the current leaf page if we're on branch page
+	while (ref->page->flags & PAGE_BRANCH) {
+		branch_element *elem = page_branch_element(ref->page,ref->index);
+		ref = cursor_push(c, elem->pgid);
+	};
+
 	leaf_element *elem = page_leaf_element(ref->page,ref->index);
 
 	// Assign key pointer.
@@ -228,15 +219,6 @@ void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *
 
 	// Return the element flags.
 	*flags = elem->flags;
-}
-
-// Traverses from the current stack position down to the first leaf element.
-void cursor_first_leaf(bolt_cursor *c) {
-	elem_ref *ref = cursor_current(c);
-	while (ref->page->flags & PAGE_BRANCH) {
-		branch_element *elem = page_branch_element(ref->page,ref->index);
-		ref = cursor_push(c, elem->pgid);
-	};
 }
 
 // Recursively performs a binary search against a given page/node until it finds a given key.
@@ -267,7 +249,7 @@ void cursor_search_leaf(bolt_cursor *c, bolt_val key) {
 
 		// printf("? %.*s | %.*s\n", key.size, key.data, elem->ksize, ((void*)elem) + elem->pos);
 		// printf("rc=%d; key.size(%d) >= elem->ksize(%d)\n", rc, key.size, elem->ksize);
-		if ((rc == 0 && key.size >= elem->ksize) || rc < 0) {
+		if ((rc == 0 && key.size <= elem->ksize) || rc < 0) {
 			ref->index = i;
 			return;
 		}
@@ -341,6 +323,9 @@ func (c *Cursor) First() (key, value []byte) {
 	var k, v C.bolt_val
 	var flags C.uint32_t
 	C.bolt_cursor_first(c.C, &k, &v, &flags)
+	if k.data == nil {
+		return nil, nil
+	}
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
 }
 
@@ -350,6 +335,9 @@ func (c *Cursor) Next() (key, value []byte) {
 	var k, v C.bolt_val
 	var flags C.uint32_t
 	C.bolt_cursor_next(c.C, &k, &v, &flags)
+	if k.data == nil {
+		return nil, nil
+	}
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
 }
 
@@ -369,6 +357,7 @@ func (c *Cursor) Seek(seek []byte) (key, value []byte, flags int) {
 	if k.data == nil {
 		return nil, nil, 0
 	}
+
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size)), int(_flags)
 }
 

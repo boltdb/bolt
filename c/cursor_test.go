@@ -140,6 +140,40 @@ func TestCursor_Iterate_Large(t *testing.T) {
 	})
 }
 
+// Ensure that a C cursor can iterate over branches and leafs.
+func TestCursor_Iterate_Deep(t *testing.T) {
+	withDB(func(db *bolt.DB) {
+		pgsz := db.Info().PageSize / 10
+		assert.True(t, pgsz > 100)
+		db.Update(func(tx *bolt.Tx) error {
+			b, _ := tx.CreateBucket([]byte("widgets"))
+			for i := 0; i < 1000; i++ {
+				kv := []byte(fmt.Sprintf("%0*d", pgsz, i))
+				b.Put(kv, kv)
+			}
+			return nil
+		})
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("widgets"))
+			s := b.Stats()
+			assert.True(t, s.Depth > 3)
+
+			var index int
+			c := NewCursor(b)
+			for k, v := c.First(); len(k) > 0; k, v = c.Next() {
+				kv := fmt.Sprintf("%0*d", pgsz, index)
+				assert.Equal(t, kv, string(k))
+				assert.Equal(t, kv, string(v))
+				index++
+			}
+			assert.Equal(t, 1000, index)
+			k, _ := c.Next()
+			assert.Equal(t, nil, k)
+			return nil
+		})
+	})
+}
+
 // Ensure that a C cursor can seek over branches and leafs.
 func TestCursor_Seek_Large(t *testing.T) {
 	withDB(func(db *bolt.DB) {
@@ -170,6 +204,57 @@ func TestCursor_Seek_Large(t *testing.T) {
 
 			// High key should return no key.
 			k, v, _ = c.Seek([]byte("40000\000"))
+			assert.Equal(t, "", string(k))
+			assert.Equal(t, "", string(v))
+
+			return nil
+		})
+	})
+}
+
+// Ensure that a C cursor can seek over branches and leafs.
+func TestCursor_Seek_Deep(t *testing.T) {
+	withDB(func(db *bolt.DB) {
+		pgsz := db.Info().PageSize / 10
+		assert.True(t, pgsz > 100)
+		db.Update(func(tx *bolt.Tx) error {
+			b, _ := tx.CreateBucket([]byte("widgets"))
+			for i := 1; i < 1000; i++ {
+				kv := []byte(fmt.Sprintf("%0*d", pgsz, i*10))
+				b.Put(kv, kv)
+			}
+			return nil
+		})
+		db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("widgets"))
+			s := b.Stats()
+			assert.True(t, s.Depth > 3)
+
+			c := NewCursor(b)
+
+			// Exact match should go to the key.
+			seek := fmt.Sprintf("%0*d", pgsz, 5000)
+			k, v, _ := c.Seek([]byte(seek))
+			assert.Equal(t, seek, string(k))
+			assert.Equal(t, seek, string(v))
+
+			// Inexact match should go to the next key.
+			seek = fmt.Sprintf("%0*d", pgsz, 7495)
+			found := fmt.Sprintf("%0*d", pgsz, 7500)
+			k, v, _ = c.Seek([]byte(seek))
+			assert.Equal(t, found, string(k))
+			assert.Equal(t, found, string(v))
+
+			// Low key should go to the first key.
+			seek = fmt.Sprintf("%0*d", pgsz, 0)
+			found = fmt.Sprintf("%0*d", pgsz, 10)
+			k, v, _ = c.Seek([]byte(seek))
+			assert.Equal(t, found, string(k))
+			assert.Equal(t, found, string(v))
+
+			// High key should return no key.
+			seek = fmt.Sprintf("%0*d", pgsz, 40000)
+			k, v, _ = c.Seek([]byte(seek))
 			assert.Equal(t, "", string(k))
 			assert.Equal(t, "", string(v))
 
