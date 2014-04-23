@@ -270,6 +270,12 @@ func TestCursor_Seek_Deep(t *testing.T) {
 			assert.Equal(t, "", string(k))
 			assert.Equal(t, "", string(v))
 
+			// Exact match in the middle of a branch page.
+			seek = fmt.Sprintf("%0*d", pgsz, 4170)
+			k, v, _ = c.Seek([]byte(seek))
+			assert.Equal(t, seek, string(k))
+			assert.Equal(t, seek, string(v))
+
 			return nil
 		})
 	})

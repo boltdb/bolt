@@ -196,7 +196,7 @@ leaf_element *page_leaf_element(page *p, uint16_t index) {
 void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *flags) {
 	elem_ref *ref = cursor_current(c);
 
-	// if stack is empty return null
+	// If stack is empty return null.
 	if (ref == NULL) {
 		key->size = value->size = 0;
 		key->data = value->data = NULL;
@@ -204,7 +204,7 @@ void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *
 		return;
 	};
 
-	// Descend to the current leaf page if we're on branch page
+	// Descend to the current leaf page if we're on branch page.
 	while (ref->page->flags & PAGE_BRANCH) {
 		branch_element *elem = page_branch_element(ref->page,ref->index);
 		ref = cursor_push(c, elem->pgid);
@@ -254,7 +254,7 @@ void cursor_search_leaf(bolt_cursor *c, bolt_val key) {
 		int rc = memcmp(key.data, ((void*)elem) + elem->pos, (elem->ksize < key.size ? elem->ksize : key.size));
 
 		// int len = key.size > 10 ? 10 : key.size;
-		// printf("\n?L rc=%d; elem=%.*s[%d]", rc, len, ((char*)elem) + elem->pos + elem->ksize - len, elem->ksize);
+		// printf("\n?L rc=%d; elem=...%.*s[%d]", rc, len, ((char*)elem) + elem->pos + elem->ksize - len, elem->ksize);
 		if ((rc == 0 && key.size <= elem->ksize) || rc < 0) {
 			ref->index = i;
 			return;
@@ -277,17 +277,18 @@ void cursor_search_branch(bolt_cursor *c, bolt_val key) {
 		int rc = memcmp(key.data, ((void*)elem) + elem->pos, (elem->ksize < key.size ? elem->ksize : key.size));
 
 		// int len = key.size > 10 ? 10 : key.size;
-		// printf("\n?B rc=%d; elem=%.*s[%d]", rc, len, ((char*)elem) + elem->pos + elem->ksize - len, elem->ksize);
+		// printf("\n?B rc=%d; elem=...%.*s[%d]", rc, len, ((char*)elem) + elem->pos + elem->ksize - len, elem->ksize);
 		if (rc == 0 && key.size == elem->ksize) {
-			// exact match, done
+			// Exact match, done.
 			ref->index = i;
 			return;
 		} else if ((rc == 0 && key.size < elem->ksize) || rc < 0) {
-			// if key is less than anything in this subtree we are done
+			// If key is less than anything in this subtree we are done.
+			// This should really only happen for key that's less than anything in the tree.
 			if (i == 0) return;
-			// otherwise search the previous subtree
+			// Otherwise search the previous subtree.
 			cursor_search(c, key, elems[i-1].pgid);
-			// didn't find anything greater than key?
+			// Didn't find anything greater than key?
 			if (cursor_current(c) == ref)
 				ref->index = i;
 			else
@@ -296,9 +297,9 @@ void cursor_search_branch(bolt_cursor *c, bolt_val key) {
 		}
 	}
 
-	// If nothing was greater than the key then search the last child
+	// If nothing was greater than the key then search the last child.
 	cursor_search(c, key, elems[ref->page->count-1].pgid);
-	// Still didn't find anything greater than key?
+	// If still didn't find anything greater than key, then pop the page off the stack.
 	if (cursor_current(c) == ref)
 		cursor_pop(c);
 	else
