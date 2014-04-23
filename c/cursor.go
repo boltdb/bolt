@@ -196,8 +196,8 @@ leaf_element *page_leaf_element(page *p, uint16_t index) {
 void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *flags) {
 	elem_ref *ref = cursor_current(c);
 
-	// If stack is empty return null.
-	if (ref == NULL) {
+	// If stack or current page is empty return null.
+	if (ref == NULL || ref->page->count == 0) {
 		key->size = value->size = 0;
 		key->data = value->data = NULL;
 		*flags = 0;
@@ -337,7 +337,9 @@ func (c *Cursor) First() (key, value []byte) {
 	var k, v C.bolt_val
 	var flags C.uint32_t
 	C.bolt_cursor_first(c.C, &k, &v, &flags)
-	if k.data == nil {
+	fmt.Printf("key: %#v, value: %#v\n", k, v)
+	fmt.Printf("k.data: %#v, k.size: %#v\n", uintptr(k.data), int(k.size))
+	if uintptr(k.data) == uintptr(0) {
 		return nil, nil
 	}
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
@@ -349,7 +351,8 @@ func (c *Cursor) Next() (key, value []byte) {
 	var k, v C.bolt_val
 	var flags C.uint32_t
 	C.bolt_cursor_next(c.C, &k, &v, &flags)
-	if k.data == nil {
+	fmt.Printf("key: %#v, value: %#v\n", k, v)
+	if k.size == 0 {
 		return nil, nil
 	}
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
@@ -366,9 +369,10 @@ func (c *Cursor) Seek(seek []byte) (key, value []byte, flags int) {
 		_seek.data = unsafe.Pointer(&seek[0])
 	}
 	C.bolt_cursor_seek(c.C, _seek, &k, &v, &_flags)
-	//fmt.Printf("Key %v [%v]\n", k.data, k.size)
-	//fmt.Printf("Value %v [%v]\n", k.data, k.size)
-	if k.data == nil {
+	fmt.Printf("Key %#v [%#v]\n", k.data, k.size)
+	fmt.Printf("Value %#v [%#v]\n", k.data, k.size)
+	fmt.Printf("key: %#v, value: %#v\n", k, v)
+	if k.size == 0 {
 		return nil, nil, 0
 	}
 

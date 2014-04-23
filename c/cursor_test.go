@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Ensure that the C cursor can
+// Ensure that the C cursor can seek to first element.
 func TestCursor_First(t *testing.T) {
 	withDB(func(db *bolt.DB) {
 		db.Update(func(tx *bolt.Tx) error {
@@ -23,6 +23,30 @@ func TestCursor_First(t *testing.T) {
 			key, value := c.First()
 			assert.Equal(t, []byte("foo"), key)
 			assert.Equal(t, []byte("barz"), value)
+			return nil
+		})
+	})
+}
+
+// Ensure that a C cursor handles empty bucket properly
+func TestCursor_Empty(t *testing.T) {
+	withDB(func(db *bolt.DB) {
+		db.Update(func(tx *bolt.Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			return nil
+		})
+		db.View(func(tx *bolt.Tx) error {
+			c := NewCursor(tx.Bucket([]byte("widgets")))
+			key, value := c.First()
+			assert.Equal(t, nil, key)
+			assert.Equal(t, nil, value)
+			key, value = c.Next()
+			assert.Equal(t, nil, key)
+			assert.Equal(t, nil, value)
+			key, value, flags := c.Seek([]byte("bar"))
+			assert.Equal(t, nil, key)
+			assert.Equal(t, nil, value)
+			assert.Equal(t, 0, flags)
 			return nil
 		})
 	})
