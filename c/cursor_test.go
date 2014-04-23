@@ -38,14 +38,14 @@ func TestCursor_Empty(t *testing.T) {
 		db.View(func(tx *bolt.Tx) error {
 			c := NewCursor(tx.Bucket([]byte("widgets")))
 			key, value := c.First()
-			assert.Equal(t, nil, key)
-			assert.Equal(t, nil, value)
+			assert.Nil(t, key)
+			assert.Nil(t, value)
 			key, value = c.Next()
-			assert.Equal(t, nil, key)
-			assert.Equal(t, nil, value)
+			assert.Nil(t, key)
+			assert.Nil(t, value)
 			key, value, flags := c.Seek([]byte("bar"))
-			assert.Equal(t, nil, key)
-			assert.Equal(t, nil, value)
+			assert.Nil(t, key)
+			assert.Nil(t, value)
 			assert.Equal(t, 0, flags)
 			return nil
 		})
@@ -204,7 +204,7 @@ func TestCursor_Iterate_Deep(t *testing.T) {
 			}
 			assert.Equal(t, 1000, index)
 			k, _ := c.Next()
-			assert.Equal(t, nil, k)
+			assert.Nil(t, k)
 			return nil
 		})
 	})

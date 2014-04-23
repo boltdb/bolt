@@ -337,9 +337,7 @@ func (c *Cursor) First() (key, value []byte) {
 	var k, v C.bolt_val
 	var flags C.uint32_t
 	C.bolt_cursor_first(c.C, &k, &v, &flags)
-	fmt.Printf("key: %#v, value: %#v\n", k, v)
-	fmt.Printf("k.data: %#v, k.size: %#v\n", uintptr(k.data), int(k.size))
-	if uintptr(k.data) == uintptr(0) {
+	if k.data == nil {
 		return nil, nil
 	}
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
@@ -351,8 +349,7 @@ func (c *Cursor) Next() (key, value []byte) {
 	var k, v C.bolt_val
 	var flags C.uint32_t
 	C.bolt_cursor_next(c.C, &k, &v, &flags)
-	fmt.Printf("key: %#v, value: %#v\n", k, v)
-	if k.size == 0 {
+	if k.data == nil {
 		return nil, nil
 	}
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size))
@@ -369,13 +366,9 @@ func (c *Cursor) Seek(seek []byte) (key, value []byte, flags int) {
 		_seek.data = unsafe.Pointer(&seek[0])
 	}
 	C.bolt_cursor_seek(c.C, _seek, &k, &v, &_flags)
-	fmt.Printf("Key %#v [%#v]\n", k.data, k.size)
-	fmt.Printf("Value %#v [%#v]\n", k.data, k.size)
-	fmt.Printf("key: %#v, value: %#v\n", k, v)
-	if k.size == 0 {
+	if k.data == nil {
 		return nil, nil, 0
 	}
-
 	return C.GoBytes(k.data, C.int(k.size)), C.GoBytes(v.data, C.int(v.size)), int(_flags)
 }
 
