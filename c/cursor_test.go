@@ -56,6 +56,18 @@ func TestCursor_Seek(t *testing.T) {
 			assert.Equal(t, "0003", string(v))
 			assert.Equal(t, 0, flags)
 
+			// Inexact match with smaller db key should go to the next key.
+			k, v, flags = c.Seek([]byte("barrrr"))
+			assert.Equal(t, "baz", string(k))
+			assert.Equal(t, "0003", string(v))
+			assert.Equal(t, 0, flags)
+
+			// Inexact match with smaller seek key should go to the next key.
+			k, v, flags = c.Seek([]byte("ba"))
+			assert.Equal(t, "bar", string(k))
+			assert.Equal(t, "0002", string(v))
+			assert.Equal(t, 0, flags)
+
 			// Low key should go to the first key.
 			k, v, flags = c.Seek([]byte(""))
 			assert.Equal(t, "bar", string(k))

@@ -12,7 +12,7 @@ package c
 //------------------------------------------------------------------------------
 
 // This represents the maximum number of levels that a cursor can traverse.
-#define MAX_DEPTH	100
+#define MAX_DEPTH	64
 
 // These flags mark the type of page and are set in the page.flags.
 #define PAGE_BRANCH   0x01
@@ -173,6 +173,7 @@ elem_ref *cursor_current(bolt_cursor *c) {
 }
 
 // Pop current element ref off the cursor stack
+// If stack is empty return null
 elem_ref *cursor_pop(bolt_cursor *c) {
 	elem_ref *ref = cursor_current(c);
 	if (ref != NULL) c->top--;
@@ -194,6 +195,8 @@ leaf_element *page_leaf_element(page *p, uint16_t index) {
 // Returns the key/value pair for the current position of the cursor.
 void cursor_key_value(bolt_cursor *c, bolt_val *key, bolt_val *value, uint32_t *flags) {
 	elem_ref *ref = cursor_current(c);
+
+	// if stack is empty return null
 	if (ref == NULL) {
 		key->size = value->size = 0;
 		key->data = value->data = NULL;
@@ -226,6 +229,9 @@ void cursor_search(bolt_cursor *c, bolt_val key, pgid id) {
 	// Push page onto the cursor stack.
 	elem_ref *ref = cursor_push(c, id);
 
+	// int len = key.size > 10 ? 10 : key.size;
+	// printf("\npage=%d, depth=%d, seek=...%.*s[%d]", (int)id, c->top, len, ((char*)(key.data)) + key.size - len, key.size);
+
 	// If we're on a leaf page/node then find the specific node.
 	if (ref->page->flags & PAGE_LEAF) {
 		cursor_search_leaf(c, key);
@@ -247,8 +253,8 @@ void cursor_search_leaf(bolt_cursor *c, bolt_val key) {
 		leaf_element *elem = &elems[i];
 		int rc = memcmp(key.data, ((void*)elem) + elem->pos, (elem->ksize < key.size ? elem->ksize : key.size));
 
-		// printf("? %.*s | %.*s\n", key.size, key.data, elem->ksize, ((void*)elem) + elem->pos);
-		// printf("rc=%d; key.size(%d) >= elem->ksize(%d)\n", rc, key.size, elem->ksize);
+		// int len = key.size > 10 ? 10 : key.size;
+		// printf("\n?L rc=%d; elem=%.*s[%d]", rc, len, ((char*)elem) + elem->pos + elem->ksize - len, elem->ksize);
 		if ((rc == 0 && key.size <= elem->ksize) || rc < 0) {
 			ref->index = i;
 			return;
@@ -270,6 +276,8 @@ void cursor_search_branch(bolt_cursor *c, bolt_val key) {
 		branch_element *elem = &elems[i];
 		int rc = memcmp(key.data, ((void*)elem) + elem->pos, (elem->ksize < key.size ? elem->ksize : key.size));
 
+		// int len = key.size > 10 ? 10 : key.size;
+		// printf("\n?B rc=%d; elem=%.*s[%d]", rc, len, ((char*)elem) + elem->pos + elem->ksize - len, elem->ksize);
 		if (rc == 0 && key.size == elem->ksize) {
 			// exact match, done
 			ref->index = i;
@@ -288,8 +296,13 @@ void cursor_search_branch(bolt_cursor *c, bolt_val key) {
 		}
 	}
 
-	// If nothing was greater than the key then pop the current page off the stack.
-	cursor_pop(c);
+	// If nothing was greater than the key then search the last child
+	cursor_search(c, key, elems[ref->page->count-1].pgid);
+	// Still didn't find anything greater than key?
+	if (cursor_current(c) == ref)
+		cursor_pop(c);
+	else
+		ref->index = ref->page->count-1;
 }
 
 */
