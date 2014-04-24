@@ -100,11 +100,17 @@ func NewApp() *cli.App {
 				&cli.IntFlag{Name: "count", Value: 1000, Usage: "Item count"},
 				&cli.IntFlag{Name: "key-size", Value: 8, Usage: "Key size"},
 				&cli.IntFlag{Name: "value-size", Value: 32, Usage: "Value size"},
+				&cli.IntFlag{Name: "batch-size", Value: 0, Usage: "Write batch size"},
 				&cli.StringFlag{Name: "cpuprofile", Usage: "CPU profile output path"},
 				&cli.StringFlag{Name: "memprofile", Usage: "Memory profile output path"},
 				&cli.StringFlag{Name: "blockprofile", Usage: "Block profile output path"},
+				&cli.BoolFlag{Name: "stats", Usage: "Output storage and transaction stats"},
 			},
 			Action: func(c *cli.Context) {
+				bs := c.Int("batch-size")
+				if bs == 0 {
+					bs = c.Int("count")
+				}
 				Bench(&BenchOptions{
 					ProfileMode:  c.String("profile-mode"),
 					WriteMode:    c.String("write-mode"),
@@ -112,9 +118,11 @@ func NewApp() *cli.App {
 					Iterations:   c.Int("count"),
 					KeySize:      c.Int("key-size"),
 					ValueSize:    c.Int("value-size"),
+					BatchSize:    bs,
 					CPUProfile:   c.String("cpuprofile"),
 					MemProfile:   c.String("memprofile"),
 					BlockProfile: c.String("blockprofile"),
+					Stats:        c.Bool("stats"),
 				})
 			},
 		}}
