@@ -289,7 +289,7 @@ func ExampleTx_Rollback() {
 	// Ensure that our original value is still set.
 	db.View(func(tx *Tx) error {
 		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
-		fmt.Printf("The value for 'foo' is still: %s\n", string(value))
+		fmt.Printf("The value for 'foo' is still: %s\n", value)
 		return nil
 	})
 

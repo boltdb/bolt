@@ -375,7 +375,7 @@ func ExampleDB_Update() {
 	if err == nil {
 		db.View(func(tx *Tx) error {
 			value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
-			fmt.Printf("The value of 'foo' is: %s\n", string(value))
+			fmt.Printf("The value of 'foo' is: %s\n", value)
 			return nil
 		})
 	}
@@ -402,7 +402,7 @@ func ExampleDB_View() {
 	// Access data from within a read-only transactional block.
 	db.View(func(tx *Tx) error {
 		v := tx.Bucket([]byte("people")).Get([]byte("john"))
-		fmt.Printf("John's last name is %s.\n", string(v))
+		fmt.Printf("John's last name is %s.\n", v)
 		return nil
 	})
 
@@ -434,7 +434,7 @@ func ExampleDB_Begin_ReadOnly() {
 	tx, _ = db.Begin(false)
 	c := tx.Bucket([]byte("widgets")).Cursor()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
-		fmt.Printf("%s likes %s\n", string(k), string(v))
+		fmt.Printf("%s likes %s\n", k, v)
 	}
 	tx.Rollback()
 
@@ -469,7 +469,7 @@ func ExampleDB_CopyFile() {
 	// Ensure that the key exists in the copy.
 	db2.View(func(tx *Tx) error {
 		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
-		fmt.Printf("The value for 'foo' in the clone is: %s\n", string(value))
+		fmt.Printf("The value for 'foo' in the clone is: %s\n", value)
 		return nil
 	})
 

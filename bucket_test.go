@@ -745,7 +745,7 @@ func ExampleBucket_Put() {
 	// Read value back in a different read-only transaction.
 	db.Update(func(tx *Tx) error {
 		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
-		fmt.Printf("The value of 'foo' is: %s\n", string(value))
+		fmt.Printf("The value of 'foo' is: %s\n", value)
 		return nil
 	})
 
@@ -770,7 +770,7 @@ func ExampleBucket_Delete() {
 
 		// Retrieve the key back from the database and verify it.
 		value := b.Get([]byte("foo"))
-		fmt.Printf("The value of 'foo' was: %s\n", string(value))
+		fmt.Printf("The value of 'foo' was: %s\n", value)
 		return nil
 	})
 
@@ -809,7 +809,7 @@ func ExampleBucket_ForEach() {
 
 		// Iterate over items in sorted key order.
 		b.ForEach(func(k, v []byte) error {
-			fmt.Printf("A %s is %s.\n", string(k), string(v))
+			fmt.Printf("A %s is %s.\n", k, v)
 			return nil
 		})
 		return nil
