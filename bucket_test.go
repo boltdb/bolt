@@ -25,6 +25,18 @@ func TestBucket_Get_NonExistent(t *testing.T) {
 	})
 }
 
+// Ensure that you can call Bucket on a nil bucket without panic
+func TestBucket_Get_Nil(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			value := tx.Bucket([]byte("widgets")).Bucket([]byte("sub")).Bucket([]byte("more"))
+			assert.Nil(t, value)
+			return nil
+		})
+	})
+}
+
 // Ensure that a bucket can read a value that is not flushed yet.
 func TestBucket_Get_FromNode(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {

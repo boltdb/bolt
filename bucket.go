@@ -94,7 +94,12 @@ func (b *Bucket) Cursor() *Cursor {
 
 // Bucket retrieves a nested bucket by name.
 // Returns nil if the bucket does not exist.
+// Returns nil if called on a nil bucket.
 func (b *Bucket) Bucket(name []byte) *Bucket {
+	if b == nil {
+		return nil
+	}
+
 	if child := b.buckets[string(name)]; child != nil {
 		return child
 	}
