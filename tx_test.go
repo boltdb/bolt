@@ -36,6 +36,31 @@ func TestTx_Commit_ReadOnly(t *testing.T) {
 	})
 }
 
+// Ensure that a transaction can retrieve a cursor on the root bucket.
+func TestTx_Cursor(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			tx.CreateBucket([]byte("woojits"))
+			c := tx.Cursor()
+
+			k, v := c.First()
+			assert.Equal(t, "widgets", string(k))
+			assert.Nil(t, v)
+
+			k, v = c.Next()
+			assert.Equal(t, "woojits", string(k))
+			assert.Nil(t, v)
+
+			k, v = c.Next()
+			assert.Nil(t, k)
+			assert.Nil(t, v)
+
+			return nil
+		})
+	})
+}
+
 // Ensure that creating a bucket with a read-only transaction returns an error.
 func TestTx_CreateBucket_ReadOnly(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
