@@ -75,6 +75,14 @@ func (tx *Tx) Writable() bool {
 	return tx.writable
 }
 
+// Cursor creates a cursor associated with the root bucket.
+// All items in the cursor will return a nil value because all root bucket keys point to buckets.
+// The cursor is only valid as long as the transaction is open.
+// Do not use a cursor after the transaction is closed.
+func (tx *Tx) Cursor() *Cursor {
+	return tx.root.Cursor()
+}
+
 // Stats retrieves a copy of the current transaction statistics.
 func (tx *Tx) Stats() TxStats {
 	return tx.stats
