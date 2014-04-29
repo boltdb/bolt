@@ -88,22 +88,41 @@ func benchWrite(db *bolt.DB, options *BenchOptions, results *BenchResults) error
 }
 
 func benchWriteSequential(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
-	results.WriteOps = options.Iterations
+	// Default batch size to iteration count, if not specified.
+	var batchSize, iterations = options.BatchSize, options.Iterations
+	if batchSize == 0 {
+		batchSize = iterations
+	}
 
-	return db.Update(func(tx *bolt.Tx) error {
-		b, _ := tx.CreateBucketIfNotExists(benchBucketName)
+	// Insert in batches.
+	var count int
+	for i := 0; i < (iterations/batchSize)+1; i++ {
+		err := db.Update(func(tx *bolt.Tx) error {
+			b, _ := tx.CreateBucketIfNotExists(benchBucketName)
 
-		for i := 0; i < options.Iterations; i++ {
-			var key = make([]byte, options.KeySize)
-			var value = make([]byte, options.ValueSize)
-			binary.BigEndian.PutUint32(key, uint32(i))
-			if err := b.Put(key, value); err != nil {
-				return err
+			for j := 0; j < batchSize && count < iterations; j++ {
+				var key = make([]byte, options.KeySize)
+				var value = make([]byte, options.ValueSize)
+				binary.BigEndian.PutUint32(key, uint32(count))
+
+				if err := b.Put(key, value); err != nil {
+					return err
+				}
+
+				count++
 			}
-		}
 
-		return nil
-	})
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Update the write op count.
+	results.WriteOps = count
+
+	return nil
 }
 
 // Reads from the database.
@@ -213,6 +232,7 @@ type BenchOptions struct {
 	WriteMode    string
 	ReadMode     string
 	Iterations   int
+	BatchSize    int
 	KeySize      int
 	ValueSize    int
 	CPUProfile   string
