@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
-	"reflect"
 	"runtime"
 	"runtime/pprof"
 	"time"
@@ -70,19 +69,6 @@ func Bench(options *BenchOptions) {
 	fmt.Printf("# Write\t%v\t(%v/op)\t(%v op/sec)\n", results.WriteDuration, results.WriteOpDuration(), results.WriteOpsPerSecond())
 	fmt.Printf("# Read\t%v\t(%v/op)\t(%v op/sec)\n", results.ReadDuration, results.ReadOpDuration(), results.ReadOpsPerSecond())
 	fmt.Println("")
-
-	if options.Stats {
-		fmt.Println("Transaction Stats")
-		printStruct(db.Stats().TxStats)
-		fmt.Println("")
-		db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket(benchBucketName)
-			fmt.Println("Storage Stats")
-			printStruct(b.Stats())
-			fmt.Println("")
-			return nil
-		})
-	}
 }
 
 // Writes to the database.
@@ -110,7 +96,7 @@ func benchWriteSequential(db *bolt.DB, options *BenchOptions, results *BenchResu
 }
 
 func benchWriteRandom(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
-	r := rand.New(rand.NewSource(42))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return benchWriteWithSource(db, options, results, func() uint32 { return r.Uint32() })
 }
 
@@ -249,7 +235,6 @@ type BenchOptions struct {
 	KeySize      int
 	ValueSize    int
 	BatchSize    int
-	Stats        bool
 	CPUProfile   string
 	MemProfile   string
 	BlockProfile string
@@ -303,12 +288,4 @@ func tempfile() string {
 	f.Close()
 	os.Remove(f.Name())
 	return f.Name()
-}
-
-func printStruct(s interface{}) {
-	v := reflect.ValueOf(s)
-	t := reflect.TypeOf(s)
-	for i := 0; i < v.NumField(); i++ {
-		fmt.Printf("  %s: %v\n", t.Field(i).Name, v.Field(i).Interface())
-	}
 }

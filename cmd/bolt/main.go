@@ -104,7 +104,6 @@ func NewApp() *cli.App {
 				&cli.StringFlag{Name: "cpuprofile", Usage: "CPU profile output path"},
 				&cli.StringFlag{Name: "memprofile", Usage: "Memory profile output path"},
 				&cli.StringFlag{Name: "blockprofile", Usage: "Block profile output path"},
-				&cli.BoolFlag{Name: "stats", Usage: "Output storage and transaction stats"},
 			},
 			Action: func(c *cli.Context) {
 				bs := c.Int("batch-size")
@@ -122,7 +121,6 @@ func NewApp() *cli.App {
 					CPUProfile:   c.String("cpuprofile"),
 					MemProfile:   c.String("memprofile"),
 					BlockProfile: c.String("blockprofile"),
-					Stats:        c.Bool("stats"),
 				})
 			},
 		}}
