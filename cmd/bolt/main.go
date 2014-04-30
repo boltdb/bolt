@@ -98,26 +98,22 @@ func NewApp() *cli.App {
 				&cli.StringFlag{Name: "write-mode", Value: "seq", Usage: "Write mode"},
 				&cli.StringFlag{Name: "read-mode", Value: "seq", Usage: "Read mode"},
 				&cli.IntFlag{Name: "count", Value: 1000, Usage: "Item count"},
+				&cli.IntFlag{Name: "batch-size", Usage: "Write batch size"},
 				&cli.IntFlag{Name: "key-size", Value: 8, Usage: "Key size"},
 				&cli.IntFlag{Name: "value-size", Value: 32, Usage: "Value size"},
-				&cli.IntFlag{Name: "batch-size", Value: 0, Usage: "Write batch size"},
 				&cli.StringFlag{Name: "cpuprofile", Usage: "CPU profile output path"},
 				&cli.StringFlag{Name: "memprofile", Usage: "Memory profile output path"},
 				&cli.StringFlag{Name: "blockprofile", Usage: "Block profile output path"},
 			},
 			Action: func(c *cli.Context) {
-				bs := c.Int("batch-size")
-				if bs == 0 {
-					bs = c.Int("count")
-				}
 				Bench(&BenchOptions{
 					ProfileMode:  c.String("profile-mode"),
 					WriteMode:    c.String("write-mode"),
 					ReadMode:     c.String("read-mode"),
 					Iterations:   c.Int("count"),
+					BatchSize:    c.Int("batch-size"),
 					KeySize:      c.Int("key-size"),
 					ValueSize:    c.Int("value-size"),
-					BatchSize:    bs,
 					CPUProfile:   c.String("cpuprofile"),
 					MemProfile:   c.String("memprofile"),
 					BlockProfile: c.String("blockprofile"),

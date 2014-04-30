@@ -154,6 +154,7 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	bucket.root = p.id
 
 	// Insert into node.
+	key = cloneBytes(key)
 	c.node().put(key, key, value, 0, bucketLeafFlag)
 
 	return b.Bucket(key), nil
@@ -262,6 +263,7 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 	}
 
 	// Insert into node.
+	key = cloneBytes(key)
 	c.node().put(key, key, value, 0, 0)
 
 	return nil
@@ -532,4 +534,11 @@ type BucketStats struct {
 	BranchInuse int // bytes actually used for branch data
 	LeafAlloc   int // bytes allocated for physical leaf pages
 	LeafInuse   int // bytes actually used for leaf data
+}
+
+// cloneBytes returns a copy of a given slice.
+func cloneBytes(v []byte) []byte {
+	var clone = make([]byte, len(v))
+	copy(clone, v)
+	return clone
 }

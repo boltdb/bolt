@@ -23,6 +23,13 @@ var benchBucketName = []byte("bench")
 func Bench(options *BenchOptions) {
 	var results BenchResults
 
+	// Validate options.
+	if options.BatchSize == 0 {
+		options.BatchSize = options.Iterations
+	} else if options.Iterations%options.BatchSize != 0 {
+		fatal("number of iterations must be divisible by the batch size")
+	}
+
 	// Find temporary location.
 	path := tempfile()
 	defer os.Remove(path)
@@ -232,9 +239,9 @@ type BenchOptions struct {
 	WriteMode    string
 	ReadMode     string
 	Iterations   int
+	BatchSize    int
 	KeySize      int
 	ValueSize    int
-	BatchSize    int
 	CPUProfile   string
 	MemProfile   string
 	BlockProfile string
