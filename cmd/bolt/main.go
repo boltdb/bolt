@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/codegangsta/cli"
 )
@@ -104,19 +105,26 @@ func NewApp() *cli.App {
 				&cli.StringFlag{Name: "cpuprofile", Usage: "CPU profile output path"},
 				&cli.StringFlag{Name: "memprofile", Usage: "Memory profile output path"},
 				&cli.StringFlag{Name: "blockprofile", Usage: "Block profile output path"},
+				&cli.StringFlag{Name: "stats-interval", Value: "0s", Usage: "Continuous stats interval"},
 			},
 			Action: func(c *cli.Context) {
+				statsInterval, err := time.ParseDuration(c.String("stats-interval"))
+				if err != nil {
+					fatal(err)
+				}
+
 				Bench(&BenchOptions{
-					ProfileMode:  c.String("profile-mode"),
-					WriteMode:    c.String("write-mode"),
-					ReadMode:     c.String("read-mode"),
-					Iterations:   c.Int("count"),
-					BatchSize:    c.Int("batch-size"),
-					KeySize:      c.Int("key-size"),
-					ValueSize:    c.Int("value-size"),
-					CPUProfile:   c.String("cpuprofile"),
-					MemProfile:   c.String("memprofile"),
-					BlockProfile: c.String("blockprofile"),
+					ProfileMode:   c.String("profile-mode"),
+					WriteMode:     c.String("write-mode"),
+					ReadMode:      c.String("read-mode"),
+					Iterations:    c.Int("count"),
+					BatchSize:     c.Int("batch-size"),
+					KeySize:       c.Int("key-size"),
+					ValueSize:     c.Int("value-size"),
+					CPUProfile:    c.String("cpuprofile"),
+					MemProfile:    c.String("memprofile"),
+					BlockProfile:  c.String("blockprofile"),
+					StatsInterval: statsInterval,
 				})
 			},
 		}}
