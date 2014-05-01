@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -42,6 +43,11 @@ func Bench(options *BenchOptions) {
 	}
 	defer db.Close()
 
+	// Enable streaming stats.
+	if options.StatsInterval > 0 {
+		go printStats(db, options.StatsInterval)
+	}
+
 	// Start profiling for writes.
 	if options.ProfileMode == "rw" || options.ProfileMode == "w" {
 		benchStartProfiling(options)
@@ -73,9 +79,9 @@ func Bench(options *BenchOptions) {
 	}
 
 	// Print results.
-	fmt.Printf("# Write\t%v\t(%v/op)\t(%v op/sec)\n", results.WriteDuration, results.WriteOpDuration(), results.WriteOpsPerSecond())
-	fmt.Printf("# Read\t%v\t(%v/op)\t(%v op/sec)\n", results.ReadDuration, results.ReadOpDuration(), results.ReadOpsPerSecond())
-	fmt.Println("")
+	fmt.Fprintf(os.Stderr, "# Write\t%v\t(%v/op)\t(%v op/sec)\n", results.WriteDuration, results.WriteOpDuration(), results.WriteOpsPerSecond())
+	fmt.Fprintf(os.Stderr, "# Read\t%v\t(%v/op)\t(%v op/sec)\n", results.ReadDuration, results.ReadOpDuration(), results.ReadOpsPerSecond())
+	fmt.Fprintln(os.Stderr, "")
 }
 
 // Writes to the database.
@@ -233,18 +239,42 @@ func benchStopProfiling() {
 	}
 }
 
+// Continuously prints stats on the database at given intervals.
+func printStats(db *bolt.DB, interval time.Duration) {
+	var prevStats = db.Stats()
+	var encoder = json.NewEncoder(os.Stdout)
+
+	for {
+		// Wait for the stats interval.
+		time.Sleep(interval)
+
+		// Retrieve new stats and find difference from previous iteration.
+		var stats = db.Stats()
+		var diff = stats.Sub(&prevStats)
+
+		// Print as JSON to STDOUT.
+		if err := encoder.Encode(diff); err != nil {
+			fatal(err)
+		}
+
+		// Save stats for next iteration.
+		prevStats = stats
+	}
+}
+
 // BenchOptions represents the set of options that can be passed to Bench().
 type BenchOptions struct {
-	ProfileMode  string
-	WriteMode    string
-	ReadMode     string
-	Iterations   int
-	BatchSize    int
-	KeySize      int
-	ValueSize    int
-	CPUProfile   string
-	MemProfile   string
-	BlockProfile string
+	ProfileMode   string
+	WriteMode     string
+	ReadMode      string
+	Iterations    int
+	BatchSize     int
+	KeySize       int
+	ValueSize     int
+	CPUProfile    string
+	MemProfile    string
+	BlockProfile  string
+	StatsInterval time.Duration
 }
 
 // BenchResults represents the performance results of the benchmark.
