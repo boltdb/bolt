@@ -363,8 +363,9 @@ type TxStats struct {
 	Rebalance     int           // number of node rebalances
 	RebalanceTime time.Duration // total time spent rebalancing
 
-	// Spill statistics.
-	Spill     int           // number of node spilled
+	// Split/Spill statistics.
+	Split     int           // number of nodes split
+	Spill     int           // number of nodes spilled
 	SpillTime time.Duration // total time spent spilling
 
 	// Write statistics.
@@ -380,6 +381,7 @@ func (s *TxStats) add(other *TxStats) {
 	s.NodeDeref += other.NodeDeref
 	s.Rebalance += other.Rebalance
 	s.RebalanceTime += other.RebalanceTime
+	s.Split += other.Split
 	s.Spill += other.Spill
 	s.SpillTime += other.SpillTime
 	s.Write += other.Write
@@ -398,6 +400,7 @@ func (s *TxStats) Sub(other *TxStats) TxStats {
 	diff.NodeDeref = s.NodeDeref - other.NodeDeref
 	diff.Rebalance = s.Rebalance - other.Rebalance
 	diff.RebalanceTime = s.RebalanceTime - other.RebalanceTime
+	diff.Split = s.Split - other.Split
 	diff.Spill = s.Spill - other.Spill
 	diff.SpillTime = s.SpillTime - other.SpillTime
 	diff.Write = s.Write - other.Write

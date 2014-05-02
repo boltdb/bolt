@@ -192,7 +192,7 @@ func (c *Cursor) last() {
 func (c *Cursor) search(key []byte, pgid pgid) {
 	p, n := c.bucket.pageNode(pgid)
 	if p != nil {
-		_assert((p.flags&(branchPageFlag|leafPageFlag)) != 0, "invalid page type: "+p.typ())
+		_assert((p.flags&(branchPageFlag|leafPageFlag)) != 0, "invalid page type: %d: %s", p.id, p.typ())
 	}
 	e := elemRef{page: p, node: n}
 	c.stack = append(c.stack, e)

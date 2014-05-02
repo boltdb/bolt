@@ -161,6 +161,64 @@ func TestBucket_Delete(t *testing.T) {
 	})
 }
 
+// Ensure that accessing and updating nested buckets is ok across transactions.
+func TestBucket_Nested(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			// Create a widgets bucket.
+			b, err := tx.CreateBucket([]byte("widgets"))
+			assert.NoError(t, err)
+
+			// Create a widgets/foo bucket.
+			_, err = b.CreateBucket([]byte("foo"))
+			assert.NoError(t, err)
+
+			// Create a widgets/bar key.
+			assert.NoError(t, b.Put([]byte("bar"), []byte("0000")))
+
+			return nil
+		})
+		mustCheck(db)
+
+		// Update widgets/bar.
+		db.Update(func(tx *Tx) error {
+			var b = tx.Bucket([]byte("widgets"))
+			assert.NoError(t, b.Put([]byte("bar"), []byte("xxxx")))
+			return nil
+		})
+		mustCheck(db)
+
+		// Cause a split.
+		db.Update(func(tx *Tx) error {
+			var b = tx.Bucket([]byte("widgets"))
+			for i := 0; i < 10000; i++ {
+				assert.NoError(t, b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i))))
+			}
+			return nil
+		})
+		mustCheck(db)
+
+		// Insert into widgets/foo/baz.
+		db.Update(func(tx *Tx) error {
+			var b = tx.Bucket([]byte("widgets"))
+			assert.NoError(t, b.Bucket([]byte("foo")).Put([]byte("baz"), []byte("yyyy")))
+			return nil
+		})
+		mustCheck(db)
+
+		// Verify.
+		db.View(func(tx *Tx) error {
+			var b = tx.Bucket([]byte("widgets"))
+			assert.Equal(t, []byte("yyyy"), b.Bucket([]byte("foo")).Get([]byte("baz")))
+			assert.Equal(t, []byte("xxxx"), b.Get([]byte("bar")))
+			for i := 0; i < 10000; i++ {
+				assert.Equal(t, []byte(strconv.Itoa(i)), b.Get([]byte(strconv.Itoa(i))))
+			}
+			return nil
+		})
+	})
+}
+
 // Ensure that deleting a bucket using Delete() returns an error.
 func TestBucket_Delete_Bucket(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
@@ -550,31 +608,35 @@ func TestBucket_Stats_Large(t *testing.T) {
 	}
 
 	withOpenDB(func(db *DB, path string) {
-		db.Update(func(tx *Tx) error {
-			// Add bucket with lots of keys.
-			tx.CreateBucket([]byte("widgets"))
-			b := tx.Bucket([]byte("widgets"))
-			for i := 0; i < 100000; i++ {
-				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
-			}
-			return nil
-		})
+		var index int
+		for i := 0; i < 1000; i++ {
+			db.Update(func(tx *Tx) error {
+				// Add bucket with lots of keys.
+				b, _ := tx.CreateBucketIfNotExists([]byte("widgets"))
+				for i := 0; i < 100; i++ {
+					b.Put([]byte(strconv.Itoa(index)), []byte(strconv.Itoa(index)))
+					index++
+				}
+				return nil
+			})
+		}
 		mustCheck(db)
+
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket([]byte("widgets"))
 			stats := b.Stats()
-			assert.Equal(t, stats.BranchPageN, 15)
-			assert.Equal(t, stats.BranchOverflowN, 0)
-			assert.Equal(t, stats.LeafPageN, 1281)
-			assert.Equal(t, stats.LeafOverflowN, 0)
-			assert.Equal(t, stats.KeyN, 100000)
-			assert.Equal(t, stats.Depth, 3)
+			assert.Equal(t, 19, stats.BranchPageN)
+			assert.Equal(t, 0, stats.BranchOverflowN)
+			assert.Equal(t, 1291, stats.LeafPageN)
+			assert.Equal(t, 0, stats.LeafOverflowN)
+			assert.Equal(t, 100000, stats.KeyN)
+			assert.Equal(t, 3, stats.Depth)
 			if os.Getpagesize() != 4096 {
 				// Incompatible page size
-				assert.Equal(t, stats.BranchInuse, 27289)
-				assert.Equal(t, stats.BranchAlloc, 61440)
-				assert.Equal(t, stats.LeafInuse, 2598276)
-				assert.Equal(t, stats.LeafAlloc, 5246976)
+				assert.Equal(t, 27289, stats.BranchInuse)
+				assert.Equal(t, 61440, stats.BranchAlloc)
+				assert.Equal(t, 2598276, stats.LeafInuse)
+				assert.Equal(t, 5246976, stats.LeafAlloc)
 			}
 			return nil
 		})
@@ -703,13 +765,12 @@ func TestBucket_Delete_Quick(t *testing.T) {
 				db.View(func(tx *Tx) error {
 					b := tx.Bucket([]byte("widgets"))
 					for j, exp := range items {
+						value := b.Get(exp.Key)
 						if j > i {
-							value := b.Get(exp.Key)
 							if !assert.Equal(t, exp.Value, value) {
 								t.FailNow()
 							}
 						} else {
-							value := b.Get(exp.Key)
 							if !assert.Nil(t, value) {
 								t.FailNow()
 							}
