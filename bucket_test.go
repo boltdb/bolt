@@ -583,18 +583,18 @@ func TestBucket_Stats_Small(t *testing.T) {
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket([]byte("whozawhats"))
 			stats := b.Stats()
-			assert.Equal(t, stats.BranchPageN, 0)
-			assert.Equal(t, stats.BranchOverflowN, 0)
-			assert.Equal(t, stats.LeafPageN, 1)
-			assert.Equal(t, stats.LeafOverflowN, 0)
-			assert.Equal(t, stats.KeyN, 1)
-			assert.Equal(t, stats.Depth, 1)
+			assert.Equal(t, 0, stats.BranchPageN)
+			assert.Equal(t, 0, stats.BranchOverflowN)
+			assert.Equal(t, 1, stats.LeafPageN)
+			assert.Equal(t, 0, stats.LeafOverflowN)
+			assert.Equal(t, 1, stats.KeyN)
+			assert.Equal(t, 1, stats.Depth)
 			if os.Getpagesize() != 4096 {
 				// Incompatible page size
-				assert.Equal(t, stats.BranchInuse, 0)
-				assert.Equal(t, stats.BranchAlloc, 0)
-				assert.Equal(t, stats.LeafInuse, 38)
-				assert.Equal(t, stats.LeafAlloc, 4096)
+				assert.Equal(t, 0, stats.BranchInuse)
+				assert.Equal(t, 0, stats.BranchAlloc)
+				assert.Equal(t, 38, stats.LeafInuse)
+				assert.Equal(t, 4096, stats.LeafAlloc)
 			}
 			return nil
 		})

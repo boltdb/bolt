@@ -563,6 +563,11 @@ func (db *DB) Check() error {
 }
 
 func (db *DB) checkBucket(b *Bucket, reachable map[pgid]*page, errors *ErrorList) {
+	// Ignore inline buckets.
+	if b.root == 0 {
+		return
+	}
+
 	// Check every page used by this bucket.
 	b.tx.forEachPage(b.root, 0, func(p *page, _ int) {
 		// Ensure each page is only referenced once.
@@ -576,7 +581,6 @@ func (db *DB) checkBucket(b *Bucket, reachable map[pgid]*page, errors *ErrorList
 
 		// Retrieve page info.
 		info, err := b.tx.Page(int(p.id))
-		// warnf("[page] %d + %d (%s)", p.id, p.overflow, info.Type)
 		if err != nil {
 			*errors = append(*errors, err)
 		} else if info == nil {

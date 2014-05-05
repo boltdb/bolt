@@ -275,7 +275,7 @@ func TestDB_Stats(t *testing.T) {
 			return err
 		})
 		stats := db.Stats()
-		assert.Equal(t, 3, stats.TxStats.PageCount)
+		assert.Equal(t, 2, stats.TxStats.PageCount)
 	})
 }
 
@@ -324,13 +324,7 @@ func TestDB_Consistency(t *testing.T) {
 			if p, _ := tx.Page(5); assert.NotNil(t, p) {
 				assert.Equal(t, "leaf", p.Type) // root leaf
 			}
-			if p, _ := tx.Page(6); assert.NotNil(t, p) {
-				assert.Equal(t, "leaf", p.Type)
-			}
-			if p, _ := tx.Page(7); assert.NotNil(t, p) {
-				assert.Equal(t, "free", p.Type)
-			}
-			p, _ := tx.Page(8)
+			p, _ := tx.Page(6)
 			assert.Nil(t, p)
 			return nil
 		})
