@@ -7,6 +7,14 @@ import (
 	"unsafe"
 )
 
+const (
+	// MaxKeySize is the maximum length of a key, in bytes.
+	MaxKeySize = 32768
+
+	// MaxValueSize is the maximum length of a value, in bytes.
+	MaxValueSize = 4294967295
+)
+
 var (
 	// ErrBucketNotFound is returned when trying to access a bucket that has
 	// not been created yet.
@@ -35,6 +43,13 @@ var (
 	// ErrSequenceOverflow is returned when the next sequence number will be
 	// larger than the maximum integer size.
 	ErrSequenceOverflow = errors.New("sequence overflow")
+)
+
+const (
+	maxUint = ^uint(0)
+	minUint = 0
+	maxInt  = int(^uint(0) >> 1)
+	minInt  = -maxInt - 1
 )
 
 // Bucket represents a collection of key/value pairs inside the database.

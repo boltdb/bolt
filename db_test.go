@@ -353,6 +353,18 @@ func TestDBStats_Sub(t *testing.T) {
 	assert.Equal(t, 7, diff.TxStats.PageCount)
 }
 
+// Ensure that meta with bad magic is invalid.
+func TestMeta_validate_magic(t *testing.T) {
+	m := &meta{magic: 0x01234567}
+	assert.Equal(t, m.validate(), ErrInvalid)
+}
+
+// Ensure that meta with a bad version is invalid.
+func TestMeta_validate_version(t *testing.T) {
+	m := &meta{magic: magic, version: 200}
+	assert.Equal(t, m.validate(), ErrVersionMismatch)
+}
+
 func ExampleDB_Update() {
 	// Open the database.
 	db, _ := Open(tempfile(), 0666)
