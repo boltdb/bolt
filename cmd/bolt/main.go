@@ -34,14 +34,6 @@ func NewApp() *cli.App {
 			},
 		},
 		{
-			Name:  "set",
-			Usage: "Sets a value for given key in a bucket",
-			Action: func(c *cli.Context) {
-				path, name, key, value := c.Args().Get(0), c.Args().Get(1), c.Args().Get(2), c.Args().Get(3)
-				Set(path, name, key, value)
-			},
-		},
-		{
 			Name:  "keys",
 			Usage: "Retrieve a list of all keys in a bucket",
 			Action: func(c *cli.Context) {
