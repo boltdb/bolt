@@ -3,6 +3,7 @@ package bolt
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"os"
 	"sync"
@@ -16,6 +17,12 @@ const minMmapSize = 1 << 22 // 4MB
 // The largest step that can be taken when remapping the mmap.
 const maxMmapStep = 1 << 30 // 1GB
 
+// The data file format version.
+const version = 2
+
+// Represents a marker value to indicate that a file is a Bolt DB.
+const magic uint32 = 0xED0CDAED
+
 var (
 	// ErrDatabaseNotOpen is returned when a DB instance is accessed before it
 	// is opened or after it is closed.
@@ -24,6 +31,16 @@ var (
 	// ErrDatabaseOpen is returned when opening a database that is
 	// already open.
 	ErrDatabaseOpen = errors.New("database already open")
+
+	// ErrInvalid is returned when a data file is not a Bolt-formatted database.
+	ErrInvalid = errors.New("invalid database")
+
+	// ErrVersionMismatch is returned when the data file was created with a
+	// different version of Bolt.
+	ErrVersionMismatch = errors.New("version mismatch")
+
+	// ErrChecksum is returned when either meta page checksum does not match.
+	ErrChecksum = errors.New("checksum error")
 )
 
 // DB represents a collection of buckets persisted to a file on disk.
@@ -651,4 +668,75 @@ func (s *Stats) add(other *Stats) {
 type Info struct {
 	Data     []byte
 	PageSize int
+}
+
+type meta struct {
+	magic    uint32
+	version  uint32
+	pageSize uint32
+	flags    uint32
+	root     bucket
+	freelist pgid
+	pgid     pgid
+	txid     txid
+	checksum uint64
+}
+
+// validate checks the marker bytes and version of the meta page to ensure it matches this binary.
+func (m *meta) validate() error {
+	if m.checksum != 0 && m.checksum != m.sum64() {
+		return ErrChecksum
+	} else if m.magic != magic {
+		return ErrInvalid
+	} else if m.version != version {
+		return ErrVersionMismatch
+	}
+	return nil
+}
+
+// copy copies one meta object to another.
+func (m *meta) copy(dest *meta) {
+	*dest = *m
+}
+
+// write writes the meta onto a page.
+func (m *meta) write(p *page) {
+	// Page id is either going to be 0 or 1 which we can determine by the transaction ID.
+	p.id = pgid(m.txid % 2)
+	p.flags |= metaPageFlag
+
+	// Calculate the checksum.
+	m.checksum = m.sum64()
+
+	m.copy(p.meta())
+}
+
+// generates the checksum for the meta.
+func (m *meta) sum64() uint64 {
+	var h = fnv.New64a()
+	_, _ = h.Write((*[unsafe.Offsetof(meta{}.checksum)]byte)(unsafe.Pointer(m))[:])
+	return h.Sum64()
+}
+
+// ErrorList represents a slice of errors.
+type ErrorList []error
+
+// Error returns a readable count of the errors in the list.
+func (l ErrorList) Error() string {
+	return fmt.Sprintf("%d errors occurred", len(l))
+}
+
+// _assert will panic with a given formatted message if the given condition is false.
+func _assert(condition bool, msg string, v ...interface{}) {
+	if !condition {
+		panic(fmt.Sprintf("assertion failed: "+msg, v...))
+	}
+}
+
+func warn(v ...interface{}) {
+	fmt.Fprintln(os.Stderr, v...)
+}
+
+func warnf(msg string, v ...interface{}) {
+	fmt.Fprintf(os.Stderr, msg+"\n", v...)
 }
