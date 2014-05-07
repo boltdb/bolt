@@ -447,7 +447,7 @@ func (b *Bucket) spill() error {
 
 			// Update the child bucket header in this bucket.
 			value = make([]byte, unsafe.Sizeof(bucket{}))
-			bucket := (*bucket)(unsafe.Pointer(&value[0]))
+			var bucket = (*bucket)(unsafe.Pointer(&value[0]))
 			*bucket = *child.bucket
 		}
 
