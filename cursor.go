@@ -148,7 +148,7 @@ func (c *Cursor) seek(seek []byte) (key []byte, value []byte, flags uint32) {
 func (c *Cursor) first() {
 	for {
 		// Exit when we hit a leaf page.
-		ref := &c.stack[len(c.stack)-1]
+		var ref = &c.stack[len(c.stack)-1]
 		if ref.isLeaf() {
 			break
 		}

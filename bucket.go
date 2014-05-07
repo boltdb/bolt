@@ -52,19 +52,25 @@ const (
 	minInt  = -maxInt - 1
 )
 
+const bucketHeaderSize = int(unsafe.Sizeof(bucket{}))
+
 // Bucket represents a collection of key/value pairs inside the database.
 type Bucket struct {
 	*bucket
-	tx       *Tx
-	buckets  map[string]*Bucket
-	rootNode *node
-	nodes    map[pgid]*node
+	tx       *Tx                // the associated transaction
+	buckets  map[string]*Bucket // subbucket cache
+	page     *page              // inline page reference
+	rootNode *node              // materialized node for the root page.
+	nodes    map[pgid]*node     // node cache
 }
 
 // bucket represents the on-file representation of a bucket.
+// This is stored as the "value" of a bucket key. If the bucket is small enough,
+// then its root page can be stored inline in the "value", after the bucket
+// header. In the case of inline buckets, the "root" will be 0.
 type bucket struct {
-	root     pgid
-	sequence uint64
+	root     pgid   // page id of the bucket's root-level page
+	sequence uint64 // monotonically incrementing, used by NextSequence()
 }
 
 // newBucket returns a new bucket associated with a transaction.
@@ -128,6 +134,11 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 	*child.bucket = *(*bucket)(unsafe.Pointer(&v[0]))
 	b.buckets[string(name)] = &child
 
+	// Save a reference to the inline page if the bucket is inline.
+	if child.root == 0 {
+		child.page = (*page)(unsafe.Pointer(&v[bucketHeaderSize]))
+	}
+
 	return &child
 }
 
@@ -155,21 +166,18 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 		}
 	}
 
-	// Create a blank root leaf page.
-	p, err := b.tx.allocate(1)
-	if err != nil {
-		return nil, err
-	}
-	p.flags = leafPageFlag
-
-	// Insert key/value.
-	value := make([]byte, unsafe.Sizeof(bucket{}))
-	bucket := (*bucket)(unsafe.Pointer(&value[0]))
-	bucket.root = p.id
+	// Create empty, inline bucket.
+	var bucket = Bucket{bucket: &bucket{}, rootNode: &node{isLeaf: true}}
+	var value = bucket.write()
 
 	// Insert into node.
 	key = cloneBytes(key)
 	c.node().put(key, key, value, 0, bucketLeafFlag)
+
+	// Since subbuckets are not allowed on inline buckets, we need to
+	// dereference the inline page, if it exists. This will cause the bucket
+	// to be treated as a regular, non-inline bucket for the rest of the tx.
+	b.page = nil
 
 	return b.Bucket(key), nil
 }
@@ -224,9 +232,9 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 	delete(b.buckets, string(key))
 
 	// Release all bucket pages to freelist.
-	b.tx.forEachPage(child.root, 0, func(p *page, _ int) {
-		b.tx.db.freelist.free(b.tx.id(), p)
-	})
+	child.nodes = nil
+	child.rootNode = nil
+	child.free()
 
 	// Delete the node if we have a matching key.
 	c.node().del(key)
@@ -348,7 +356,7 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 func (b *Bucket) Stats() BucketStats {
 	var s BucketStats
 	pageSize := b.tx.db.pageSize
-	b.tx.forEachPage(b.root, 0, func(p *page, depth int) {
+	b.forEachPage(func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
 			s.LeafPageN++
 			s.KeyN += int(p.count)
@@ -375,21 +383,81 @@ func (b *Bucket) Stats() BucketStats {
 	return s
 }
 
+// forEachPage iterates over every page in a bucket, including inline pages.
+func (b *Bucket) forEachPage(fn func(*page, int)) {
+	// If we have an inline page then just use that.
+	if b.page != nil {
+		fn(b.page, 0)
+		return
+	}
+
+	// Otherwise traverse the page hierarchy.
+	b.tx.forEachPage(b.root, 0, fn)
+}
+
+// forEachPageNode iterates over every page (or node) in a bucket.
+// This also includes inline pages.
+func (b *Bucket) forEachPageNode(fn func(*page, *node, int)) {
+	// If we have an inline page or root node then just use that.
+	if b.page != nil {
+		fn(b.page, nil, 0)
+		return
+	}
+	b._forEachPageNode(b.root, 0, fn)
+}
+
+func (b *Bucket) _forEachPageNode(pgid pgid, depth int, fn func(*page, *node, int)) {
+	var p, n = b.pageNode(pgid)
+
+	// Execute function.
+	fn(p, n, depth)
+
+	// Recursively loop over children.
+	if p != nil {
+		if (p.flags & branchPageFlag) != 0 {
+			for i := 0; i < int(p.count); i++ {
+				elem := p.branchPageElement(uint16(i))
+				b._forEachPageNode(elem.pgid, depth+1, fn)
+			}
+		}
+	} else {
+		if !n.isLeaf {
+			for _, inode := range n.inodes {
+				b._forEachPageNode(inode.pgid, depth+1, fn)
+			}
+		}
+	}
+}
+
 // spill writes all the nodes for this bucket to dirty pages.
 func (b *Bucket) spill() error {
 	// Spill all child buckets first.
 	for name, child := range b.buckets {
-		if err := child.spill(); err != nil {
-			return err
+		// If the child bucket is small enough and it has no child buckets then
+		// write it inline into the parent bucket's page. Otherwise spill it
+		// like a normal bucket and make the parent value a pointer to the page.
+		var value []byte
+		if child.inlineable() {
+			child.free()
+			value = child.write()
+		} else {
+			if err := child.spill(); err != nil {
+				return err
+			}
+
+			// Update the child bucket header in this bucket.
+			value = make([]byte, unsafe.Sizeof(bucket{}))
+			var bucket = (*bucket)(unsafe.Pointer(&value[0]))
+			*bucket = *child.bucket
 		}
 
-		// Update the child bucket header in this bucket.
-		value := make([]byte, unsafe.Sizeof(bucket{}))
-		bucket := (*bucket)(unsafe.Pointer(&value[0]))
-		*bucket = *child.bucket
+		// Skip writing the bucket if there are no materialized nodes.
+		if child.rootNode == nil {
+			continue
+		}
 
 		// Update parent node.
-		c := b.Cursor()
+		var c = b.Cursor()
 		k, _, flags := c.seek([]byte(name))
 		_assert(bytes.Equal([]byte(name), k), "misplaced bucket header: %x -> %x", []byte(name), k)
 		_assert(flags&bucketLeafFlag != 0, "unexpected bucket header flag: %x", flags)
@@ -413,6 +481,54 @@ func (b *Bucket) spill() error {
 	return nil
 }
 
+// inlineable returns true if a bucket is small enough to be written inline
+// and if it contains no subbuckets. Otherwise returns false.
+func (b *Bucket) inlineable() bool {
+	var n = b.rootNode
+
+	// Bucket must only contain a single leaf node.
+	if n == nil || !n.isLeaf {
+		return false
+	}
+
+	// Bucket is not inlineable if it contains subbuckets or if it goes beyond
+	// our threshold for inline bucket size.
+	var size = pageHeaderSize
+	for _, inode := range n.inodes {
+		size += leafPageElementSize + len(inode.key) + len(inode.value)
+
+		if inode.flags&bucketLeafFlag != 0 {
+			return false
+		} else if size > b.maxInlineBucketSize() {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Returns the maximum total size of a bucket to make it a candidate for inlining.
+func (b *Bucket) maxInlineBucketSize() int {
+	return b.tx.db.pageSize / 4
+}
+
+// write allocates and writes a bucket to a byte slice.
+func (b *Bucket) write() []byte {
+	// Allocate the appropriate size.
+	var n = b.rootNode
+	var value = make([]byte, bucketHeaderSize+pageHeaderSize+n.size())
+
+	// Write a bucket header.
+	var bucket = (*bucket)(unsafe.Pointer(&value[0]))
+	*bucket = *b.bucket
+
+	// Convert byte slice to a fake page and write the root node.
+	var p = (*page)(unsafe.Pointer(&value[bucketHeaderSize]))
+	n.write(p)
+
+	return value
+}
+
 // rebalance attempts to balance all nodes.
 func (b *Bucket) rebalance() {
 	for _, n := range b.nodes {
@@ -431,20 +547,45 @@ func (b *Bucket) node(pgid pgid, parent *node) *node {
 		return n
 	}
 
-	// Otherwise create a branch node and cache it.
+	// Otherwise create a node and cache it.
 	n := &node{bucket: b, parent: parent}
 	if parent == nil {
 		b.rootNode = n
 	} else {
 		parent.children = append(parent.children, n)
 	}
-	n.read(b.tx.page(pgid))
+
+	// Use the inline page if this is an inline bucket.
+	var p = b.page
+	if p == nil {
+		p = b.tx.page(pgid)
+	}
+
+	// Read the page into the node and cache it.
+	n.read(p)
 	b.nodes[pgid] = n
 
 	// Update statistics.
 	b.tx.stats.NodeCount++
 
 	return n
+}
+
+// free recursively frees all pages in the bucket.
+func (b *Bucket) free() {
+	if b.root == 0 {
+		return
+	}
+
+	var tx = b.tx
+	b.forEachPageNode(func(p *page, n *node, _ int) {
+		if p != nil {
+			tx.db.freelist.free(tx.id(), p)
+		} else {
+			n.free()
+		}
+	})
+	b.root = 0
 }
 
 // dereference removes all references to the old mmap.
@@ -464,11 +605,24 @@ func (b *Bucket) dereference() {
 // pageNode returns the in-memory node, if it exists.
 // Otherwise returns the underlying page.
 func (b *Bucket) pageNode(id pgid) (*page, *node) {
+	// Inline buckets have a fake page embedded in their value so treat them
+	// differently. We'll return the rootNode (if available) or the fake page.
+	if b.root == 0 {
+		_assert(id == 0, "inline bucket non-zero page access(2): %d != 0", id)
+		if b.rootNode != nil {
+			return nil, b.rootNode
+		}
+		return b.page, nil
+	}
+
+	// Check the node cache for non-inline buckets.
 	if b.nodes != nil {
 		if n := b.nodes[id]; n != nil {
 			return nil, n
 		}
 	}
+
+	// Finally lookup the page from the transaction if no node is materialized.
 	return b.tx.page(id), nil
 }
 
