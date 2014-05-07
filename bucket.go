@@ -57,17 +57,20 @@ const bucketHeaderSize = int(unsafe.Sizeof(bucket{}))
 // Bucket represents a collection of key/value pairs inside the database.
 type Bucket struct {
 	*bucket
-	tx       *Tx
-	buckets  map[string]*Bucket
-	page     *page
-	rootNode *node
-	nodes    map[pgid]*node
+	tx       *Tx                // the associated transaction
+	buckets  map[string]*Bucket // subbucket cache
+	page     *page              // inline page reference
+	rootNode *node              // materialized node for the root page.
+	nodes    map[pgid]*node     // node cache
 }
 
 // bucket represents the on-file representation of a bucket.
+// This is stored as the "value" of a bucket key. If the bucket is small enough,
+// then its root page can be stored inline in the "value", after the bucket
+// header. In the case of inline buckets, the "root" will be 0.
 type bucket struct {
-	root     pgid
-	sequence uint64
+	root     pgid   // page id of the bucket's root-level page
+	sequence uint64 // monotonically incrementing, used by NextSequence()
 }
 
 // newBucket returns a new bucket associated with a transaction.
@@ -171,10 +174,10 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	key = cloneBytes(key)
 	c.node().put(key, key, value, 0, bucketLeafFlag)
 
-	// De-inline the parent bucket, if necessary.
-	if b.root == 0 {
-		b.page = nil
-	}
+	// Since subbuckets are not allowed on inline buckets, we need to
+	// dereference the inline page, if it exists. This will cause the bucket
+	// to be treated as a regular, non-inline bucket for the rest of the tx.
+	b.page = nil
 
 	return b.Bucket(key), nil
 }
