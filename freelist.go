@@ -1,7 +1,6 @@
 package bolt
 
 import (
-	"fmt"
 	"sort"
 	"unsafe"
 )
@@ -64,7 +63,7 @@ func (f *freelist) free(txid txid, p *page) {
 	}
 	f.pending[txid] = ids
 
-	f.check() // DEBUG ONLY:
+	// DEBUG ONLY: f.check()
 }
 
 // release moves all page ids for a transaction id (or older) to the freelist.
@@ -115,6 +114,7 @@ func (f *freelist) write(p *page) {
 // check verifies there are no double free pages.
 // This is slow so it should only be used while debugging.
 // If errors are found then a panic invoked.
+/*
 func (f *freelist) check() {
 	var lookup = make(map[pgid]txid)
 	for _, id := range f.ids {
@@ -132,6 +132,7 @@ func (f *freelist) check() {
 		}
 	}
 }
+*/
 
 type reverseSortedPgids []pgid
 

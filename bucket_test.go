@@ -161,6 +161,33 @@ func TestBucket_Delete(t *testing.T) {
 	})
 }
 
+// Ensure that deleting a large set of keys will work correctly.
+func TestBucket_Delete_Large(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			var b, _ = tx.CreateBucket([]byte("widgets"))
+			for i := 0; i < 100; i++ {
+				assert.NoError(t, b.Put([]byte(strconv.Itoa(i)), []byte(strings.Repeat("*", 1024))))
+			}
+			return nil
+		})
+		db.Update(func(tx *Tx) error {
+			var b = tx.Bucket([]byte("widgets"))
+			for i := 0; i < 100; i++ {
+				assert.NoError(t, b.Delete([]byte(strconv.Itoa(i))))
+			}
+			return nil
+		})
+		db.View(func(tx *Tx) error {
+			var b = tx.Bucket([]byte("widgets"))
+			for i := 0; i < 100; i++ {
+				assert.Nil(t, b.Get([]byte(strconv.Itoa(i))))
+			}
+			return nil
+		})
+	})
+}
+
 // Ensure that accessing and updating nested buckets is ok across transactions.
 func TestBucket_Nested(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {

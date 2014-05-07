@@ -336,7 +336,7 @@ func (n *node) rebalance() {
 		// If root node is a branch and only has one node then collapse it.
 		if !n.isLeaf && len(n.inodes) == 1 {
 			// Move root's child up.
-			child := n.bucket.nodes[n.inodes[0].pgid]
+			child := n.bucket.node(n.inodes[0].pgid, n)
 			n.isLeaf = child.isLeaf
 			n.inodes = child.inodes[:]
 			n.children = child.children
@@ -354,6 +354,16 @@ func (n *node) rebalance() {
 			child.free()
 		}
 
+		return
+	}
+
+	// If node has no keys then just remove it.
+	if n.numChildren() == 0 {
+		n.parent.del(n.key)
+		n.parent.removeChild(n)
+		delete(n.bucket.nodes, n.pgid)
+		n.free()
+		n.parent.rebalance()
 		return
 	}
 

@@ -392,6 +392,40 @@ func (b *Bucket) forEachPage(fn func(*page, int)) {
 	b.tx.forEachPage(b.root, 0, fn)
 }
 
+// forEachPageNode iterates over every page (or node) in a bucket.
+// This also includes inline pages.
+func (b *Bucket) forEachPageNode(fn func(*page, *node, int)) {
+	// If we have an inline page or root node then just use that.
+	if b.page != nil {
+		fn(b.page, nil, 0)
+		return
+	}
+	b._forEachPageNode(b.root, 0, fn)
+}
+
+func (b *Bucket) _forEachPageNode(pgid pgid, depth int, fn func(*page, *node, int)) {
+	var p, n = b.pageNode(pgid)
+
+	// Execute function.
+	fn(p, n, depth)
+
+	// Recursively loop over children.
+	if p != nil {
+		if (p.flags & branchPageFlag) != 0 {
+			for i := 0; i < int(p.count); i++ {
+				elem := p.branchPageElement(uint16(i))
+				b._forEachPageNode(elem.pgid, depth+1, fn)
+			}
+		}
+	} else {
+		if !n.isLeaf {
+			for _, inode := range n.inodes {
+				b._forEachPageNode(inode.pgid, depth+1, fn)
+			}
+		}
+	}
+}
+
 // spill writes all the nodes for this bucket to dirty pages.
 func (b *Bucket) spill() error {
 	// Spill all child buckets first.
@@ -541,8 +575,12 @@ func (b *Bucket) free() {
 	}
 
 	var tx = b.tx
-	tx.forEachPage(b.root, 0, func(p *page, _ int) {
-		tx.db.freelist.free(tx.id(), p)
+	b.forEachPageNode(func(p *page, n *node, _ int) {
+		if p != nil {
+			tx.db.freelist.free(tx.id(), p)
+		} else {
+			n.free()
+		}
 	})
 	b.root = 0
 }
