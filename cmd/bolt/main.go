@@ -26,6 +26,14 @@ func NewApp() *cli.App {
 	app.Version = fmt.Sprintf("0.1.0 (%s %s)", branch, commit)
 	app.Commands = []cli.Command{
 		{
+			Name:  "info",
+			Usage: "Print basic information about a database",
+			Action: func(c *cli.Context) {
+				path := c.Args().Get(0)
+				Info(path)
+			},
+		},
+		{
 			Name:  "get",
 			Usage: "Retrieve a value for given key in a bucket",
 			Action: func(c *cli.Context) {
