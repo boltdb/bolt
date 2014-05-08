@@ -2,8 +2,6 @@ package bolt
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 	"sort"
 	"unsafe"
 )
@@ -98,6 +96,9 @@ func (n *node) prevSibling() *node {
 
 // put inserts a key/value.
 func (n *node) put(oldKey, newKey, value []byte, pgid pgid, flags uint32) {
+	_assert(len(oldKey) > 0, "put: zero-length old key")
+	_assert(len(newKey) > 0, "put: zero-length new key")
+
 	// Find insertion index.
 	index := sort.Search(len(n.inodes), func(i int) bool { return bytes.Compare(n.inodes[i].key, oldKey) != -1 })
 
@@ -113,6 +114,7 @@ func (n *node) put(oldKey, newKey, value []byte, pgid pgid, flags uint32) {
 	inode.key = newKey
 	inode.value = value
 	inode.pgid = pgid
+	_assert(len(inode.key) > 0, "put: zero-length inode key")
 }
 
 // del removes a key from the node.
@@ -150,11 +152,13 @@ func (n *node) read(p *page) {
 			inode.pgid = elem.pgid
 			inode.key = elem.key()
 		}
+		_assert(len(inode.key) > 0, "read: zero-length inode key")
 	}
 
 	// Save first key so we can find the node in the parent when we spill.
 	if len(n.inodes) > 0 {
 		n.key = n.inodes[0].key
+		_assert(len(n.key) > 0, "read: zero-length node key")
 	} else {
 		n.key = nil
 	}
@@ -173,6 +177,8 @@ func (n *node) write(p *page) {
 	// Loop over each item and write it to the page.
 	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
 	for i, item := range n.inodes {
+		_assert(len(item.key) > 0, "write: zero-length inode key")
+
 		// Write the page element.
 		if n.isLeaf {
 			elem := p.leafPageElement(uint16(i))
@@ -194,7 +200,7 @@ func (n *node) write(p *page) {
 		b = b[len(item.value):]
 	}
 
-	// DEBUG ONLY: n.dump(os.Stderr)
+	// DEBUG ONLY: n.dump()
 }
 
 // split breaks up a node into smaller nodes, if appropriate.
@@ -290,6 +296,7 @@ func (n *node) spill() error {
 
 			node.parent.put(key, node.inodes[0].key, nil, node.pgid, 0)
 			node.key = node.inodes[0].key
+			_assert(len(n.key) > 0, "spill: zero-length node key")
 		}
 
 		// Update the statistics.
@@ -393,6 +400,7 @@ func (n *node) rebalance() {
 			// Update target key on parent.
 			target.parent.put(target.key, target.inodes[0].key, nil, target.pgid, 0)
 			target.key = target.inodes[0].key
+			_assert(len(target.key) > 0, "rebalance(1): zero-length node key")
 		} else {
 			// Reparent and move node.
 			if child, ok := n.bucket.nodes[target.inodes[len(target.inodes)-1].pgid]; ok {
@@ -409,6 +417,7 @@ func (n *node) rebalance() {
 		// Update parent key for node.
 		n.parent.put(n.key, n.inodes[0].key, nil, n.pgid, 0)
 		n.key = n.inodes[0].key
+		_assert(len(n.key) > 0, "rebalance(2): zero-length node key")
 
 		return
 	}
@@ -467,9 +476,12 @@ func (n *node) removeChild(target *node) {
 // dereference causes the node to copy all its inode key/value references to heap memory.
 // This is required when the mmap is reallocated so inodes are not pointing to stale data.
 func (n *node) dereference() {
-	key := make([]byte, len(n.key))
-	copy(key, n.key)
-	n.key = key
+	if n.key != nil {
+		key := make([]byte, len(n.key))
+		copy(key, n.key)
+		n.key = key
+		_assert(n.pgid == 0 || len(n.key) > 0, "dereference: zero-length node key on existing node")
+	}
 
 	for i := range n.inodes {
 		inode := &n.inodes[i]
@@ -477,11 +489,20 @@ func (n *node) dereference() {
 		key := make([]byte, len(inode.key))
 		copy(key, inode.key)
 		inode.key = key
+		_assert(len(inode.key) > 0, "dereference: zero-length inode key")
 
 		value := make([]byte, len(inode.value))
 		copy(value, inode.value)
 		inode.value = value
 	}
+
+	// Recursively dereference children.
+	for _, child := range n.children {
+		child.dereference()
+	}
+
+	// Update statistics.
+	n.bucket.tx.stats.NodeDeref++
 }
 
 // free adds the node's underlying page to the freelist.
@@ -492,30 +513,32 @@ func (n *node) free() {
 	}
 }
 
-// dump writes the contents of the node for debugging purposes.
-func (n *node) dump(w io.Writer) {
+// dump writes the contents of the node to STDERR for debugging purposes.
+/*
+func (n *node) dump() {
 	// Write node header.
 	var typ = "branch"
 	if n.isLeaf {
 		typ = "leaf"
 	}
-	fmt.Fprintf(w, "[NODE %d {type=%s count=%d}]\n", n.pgid, typ, len(n.inodes))
+	warnf("[NODE %d {type=%s count=%d}]", n.pgid, typ, len(n.inodes))
 
 	// Write out abbreviated version of each item.
 	for _, item := range n.inodes {
 		if n.isLeaf {
 			if item.flags&bucketLeafFlag != 0 {
 				bucket := (*bucket)(unsafe.Pointer(&item.value[0]))
-				fmt.Fprintf(w, "[L \"%s\" -> (bucket root=%d)]\n", item.key, bucket.root)
+				warnf("+L %08x -> (bucket root=%d)", trunc(item.key, 4), bucket.root)
 			} else {
-				fmt.Fprintf(w, "[L \"%s\" -> \"%s\"]\n", item.key, item.value)
+				warnf("+L %08x -> %08x", trunc(item.key, 4), trunc(item.value, 4))
 			}
 		} else {
-			fmt.Fprintf(w, "[B \"%s\" -> pgid=%d]\n", item.key, item.pgid)
+			warnf("+B %08x -> pgid=%d", trunc(item.key, 4), item.pgid)
 		}
 	}
-	fmt.Fprint(w, "\n")
+	warn("")
 }
+*/
 
 // inode represents an internal node inside of a node.
 // It can be used to point to elements in a page or point
