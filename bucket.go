@@ -476,6 +476,7 @@ func (b *Bucket) spill() error {
 	b.rootNode = b.rootNode.root()
 
 	// Update the root node for this bucket.
+	_assert(b.rootNode.pgid < b.tx.meta.pgid, "pgid (%d) above high water mark (%d)", b.rootNode.pgid, b.tx.meta.pgid)
 	b.root = b.rootNode.pgid
 
 	return nil

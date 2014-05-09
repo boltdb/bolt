@@ -96,6 +96,7 @@ func (n *node) prevSibling() *node {
 
 // put inserts a key/value.
 func (n *node) put(oldKey, newKey, value []byte, pgid pgid, flags uint32) {
+	_assert(pgid < n.bucket.tx.meta.pgid, "pgid (%d) above high water mark (%d)", pgid, n.bucket.tx.meta.pgid)
 	_assert(len(oldKey) > 0, "put: zero-length old key")
 	_assert(len(newKey) > 0, "put: zero-length new key")
 
@@ -284,6 +285,7 @@ func (n *node) spill() error {
 		}
 
 		// Write the node.
+		_assert(p.id < tx.meta.pgid, "pgid (%d) above high water mark (%d)", p.id, tx.meta.pgid)
 		node.pgid = p.id
 		node.write(p)
 
@@ -314,6 +316,7 @@ func (n *node) spill() error {
 		}
 
 		// Write the new root.
+		_assert(p.id < tx.meta.pgid, "pgid (%d) above high water mark (%d)", p.id, tx.meta.pgid)
 		parent.pgid = p.id
 		parent.write(p)
 	}
