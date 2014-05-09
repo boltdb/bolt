@@ -93,7 +93,7 @@ func NewApp() *cli.App {
 		},
 		{
 			Name:  "stats",
-			Usage: "Retrieve statistics for a bucket (aggregated recursively)",
+			Usage: "Aggregate statistics for all buckets matching specified prefix",
 			Action: func(c *cli.Context) {
 				path, name := c.Args().Get(0), c.Args().Get(1)
 				Stats(path, name)

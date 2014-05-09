@@ -628,6 +628,50 @@ func TestBucket_Stats_Small(t *testing.T) {
 	})
 }
 
+// Ensure a bucket can calculate stats.
+func TestBucket_Stats_Nested(t *testing.T) {
+
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			b, err := tx.CreateBucket([]byte("foo"))
+			assert.NoError(t, err)
+			for i := 0; i < 100; i++ {
+				b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+			}
+			bar, err := b.CreateBucket([]byte("bar"))
+			assert.NoError(t, err)
+			for i := 0; i < 10; i++ {
+				bar.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+			}
+			baz, err := b.CreateBucket([]byte("baz"))
+			assert.NoError(t, err)
+			for i := 0; i < 10; i++ {
+				baz.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
+			}
+			return nil
+		})
+		mustCheck(db)
+		db.View(func(tx *Tx) error {
+			b := tx.Bucket([]byte("foo"))
+			stats := b.Stats()
+			assert.Equal(t, stats.BranchPageN, 0)
+			assert.Equal(t, stats.BranchOverflowN, 0)
+			assert.Equal(t, stats.LeafPageN, 3)
+			assert.Equal(t, stats.LeafOverflowN, 0)
+			assert.Equal(t, stats.KeyN, 122)
+			assert.Equal(t, stats.Depth, 2)
+			if os.Getpagesize() != 4096 {
+				// Incompatible page size
+				assert.Equal(t, stats.BranchInuse, 0)
+				assert.Equal(t, stats.BranchAlloc, 0)
+				assert.Equal(t, stats.LeafInuse, 38)
+				assert.Equal(t, stats.LeafAlloc, 4096)
+			}
+			return nil
+		})
+	})
+}
+
 // Ensure a large bucket can calculate stats.
 func TestBucket_Stats_Large(t *testing.T) {
 	if testing.Short() {

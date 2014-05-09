@@ -366,6 +366,9 @@ func (b *Bucket) Stats() BucketStats {
 	b.forEachPage(func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
 			s.LeafPageN++
+			if p.count == 0 {
+				return
+			}
 			s.KeyN += int(p.count)
 			lastElement := p.leafPageElement(p.count - 1)
 			used := pageHeaderSize + (leafPageElementSize * int(p.count-1))
@@ -373,9 +376,10 @@ func (b *Bucket) Stats() BucketStats {
 			s.LeafInuse += used
 			s.LeafOverflowN += int(p.overflow)
 
-			// Recurse into sub-buckets
-			for _, e := range p.leafPageElements() {
-				if e.flags&bucketLeafFlag != 0 {
+			// Collect stats from sub-buckets
+			for i := uint16(0); i < p.count; i++ {
+				e := p.leafPageElement(i)
+				if (e.flags & bucketLeafFlag) != 0 {
 					subStats.Add(b.openBucket(e.value()).Stats())
 				}
 			}
@@ -666,7 +670,7 @@ func (s *BucketStats) Add(other BucketStats) {
 	s.BranchOverflowN += other.BranchOverflowN
 	s.LeafPageN += other.LeafPageN
 	s.LeafOverflowN += other.LeafOverflowN
-	s.KeyN += s.KeyN
+	s.KeyN += other.KeyN
 	if s.Depth < other.Depth {
 		s.Depth = other.Depth
 	}

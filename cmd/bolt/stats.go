@@ -1,13 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"os"
 
 	"github.com/boltdb/bolt"
 )
 
-// Keys retrieves a list of keys for a given bucket.
-func Stats(path, name string) {
+// Collect stats for all top level buckets matching the prefix.
+func Stats(path, prefix string) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		fatal(err)
 		return
@@ -21,15 +22,18 @@ func Stats(path, name string) {
 	defer db.Close()
 
 	err = db.View(func(tx *bolt.Tx) error {
-		// Find bucket.
-		b := tx.Bucket([]byte(name))
-		if b == nil {
-			fatalf("bucket not found: %s", name)
+		var s bolt.BucketStats
+		var count int
+		var prefix = []byte(prefix)
+		tx.ForEach(func(name []byte, b *bolt.Bucket) error {
+			if bytes.HasPrefix(name, prefix) {
+				s.Add(b.Stats())
+				count += 1
+			}
 			return nil
-		}
+		})
+		printf("Aggregate statistics for %d buckets\n\n", count)
 
-		// Iterate over each key.
-		s := b.Stats()
 		println("Page count statistics")
 		printf("\tNumber of logical branch pages: %d\n", s.BranchPageN)
 		printf("\tNumber of physical branch overflow pages: %d\n", s.BranchOverflowN)
@@ -42,9 +46,11 @@ func Stats(path, name string) {
 
 		println("Page size utilization")
 		printf("\tBytes allocated for physical branch pages: %d\n", s.BranchAlloc)
-		printf("\tBytes actually used for branch data: %d\n", s.BranchInuse)
+		percentage := int(float32(s.BranchInuse) * 100.0 / float32(s.BranchAlloc))
+		printf("\tBytes actually used for branch data: %d (%d%%)\n", s.BranchInuse, percentage)
 		printf("\tBytes allocated for physical leaf pages: %d\n", s.LeafAlloc)
-		printf("\tBytes actually used for leaf data: %d\n", s.LeafInuse)
+		percentage = int(float32(s.LeafInuse) * 100.0 / float32(s.LeafAlloc))
+		printf("\tBytes actually used for leaf data: %d (%d%%)\n", s.LeafInuse, percentage)
 		return nil
 	})
 	if err != nil {
