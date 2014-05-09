@@ -591,16 +591,13 @@ func (b *Bucket) free() {
 
 // dereference removes all references to the old mmap.
 func (b *Bucket) dereference() {
-	for _, n := range b.nodes {
-		n.dereference()
+	if b.rootNode != nil {
+		b.rootNode.dereference()
 	}
 
 	for _, child := range b.buckets {
 		child.dereference()
 	}
-
-	// Update statistics
-	b.tx.stats.NodeDeref += len(b.nodes)
 }
 
 // pageNode returns the in-memory node, if it exists.

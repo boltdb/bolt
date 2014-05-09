@@ -128,7 +128,7 @@ func simulateGetHandler(tx *Tx, qdb *QuickDB) {
 	// Retrieve root bucket.
 	b := tx.Bucket(keys[0])
 	if b == nil {
-		panic(fmt.Sprintf("bucket[0] expected: %v\n", keys[0]))
+		panic(fmt.Sprintf("bucket[0] expected: %08x\n", trunc(keys[0], 4)))
 	}
 
 	// Drill into nested buckets.
