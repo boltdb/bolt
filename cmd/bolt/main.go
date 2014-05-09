@@ -92,6 +92,14 @@ func NewApp() *cli.App {
 			},
 		},
 		{
+			Name:  "stats",
+			Usage: "Retrieve statistics for a bucket (aggregated recursively)",
+			Action: func(c *cli.Context) {
+				path, name := c.Args().Get(0), c.Args().Get(1)
+				Stats(path, name)
+			},
+		},
+		{
 			Name:  "bench",
 			Usage: "Performs a synthetic benchmark",
 			Flags: []cli.Flag{
