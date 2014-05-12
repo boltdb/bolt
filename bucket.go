@@ -132,11 +132,6 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 	var child = b.openBucket(v)
 	b.buckets[string(name)] = child
 
-	// Save a reference to the inline page if the bucket is inline.
-	if child.root == 0 {
-		child.page = (*page)(unsafe.Pointer(&v[bucketHeaderSize]))
-	}
-
 	return child
 }
 
@@ -146,6 +141,12 @@ func (b *Bucket) openBucket(value []byte) *Bucket {
 	var child = newBucket(b.tx)
 	child.bucket = &bucket{}
 	*child.bucket = *(*bucket)(unsafe.Pointer(&value[0]))
+
+	// Save a reference to the inline page if the bucket is inline.
+	if child.root == 0 {
+		child.page = (*page)(unsafe.Pointer(&value[bucketHeaderSize]))
+	}
+
 	return &child
 }
 
@@ -363,8 +364,18 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 func (b *Bucket) Stats() BucketStats {
 	var s, subStats BucketStats
 	pageSize := b.tx.db.pageSize
+	s.BucketN += 1
+	if b.root == 0 {
+		s.InlineBucketN += 1
+	}
 	b.forEachPage(func(p *page, depth int) {
-		if (p.flags & leafPageFlag) != 0 {
+		if b.root == 0 { // inline bucket
+			s.KeyN += int(p.count)
+			lastElement := p.leafPageElement(p.count - 1)
+			used := bucketHeaderSize + pageHeaderSize + (leafPageElementSize * int(p.count-1))
+			used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
+			s.InlineBucketInuse += used
+		} else if (p.flags & leafPageFlag) != 0 {
 			s.LeafPageN++
 			if p.count == 0 {
 				return
@@ -663,6 +674,11 @@ type BucketStats struct {
 	BranchInuse int // bytes actually used for branch data
 	LeafAlloc   int // bytes allocated for physical leaf pages
 	LeafInuse   int // bytes actually used for leaf data
+
+	// Bucket statistics
+	BucketN           int // total number of buckets including the top bucket
+	InlineBucketN     int // total number on inlined buckets
+	InlineBucketInuse int // bytes used for inlined buckets (also accounted for in LeafInuse)
 }
 
 func (s *BucketStats) Add(other BucketStats) {
@@ -678,6 +694,10 @@ func (s *BucketStats) Add(other BucketStats) {
 	s.BranchInuse += other.BranchInuse
 	s.LeafAlloc += other.LeafAlloc
 	s.LeafInuse += other.LeafInuse
+
+	s.BucketN += other.BucketN
+	s.InlineBucketN += other.InlineBucketN
+	s.InlineBucketInuse += other.InlineBucketInuse
 }
 
 // cloneBytes returns a copy of a given slice.

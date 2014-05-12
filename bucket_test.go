@@ -576,19 +576,22 @@ func TestBucket_Stats(t *testing.T) {
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket([]byte("woojits"))
 			stats := b.Stats()
-			assert.Equal(t, stats.BranchPageN, 1)
-			assert.Equal(t, stats.BranchOverflowN, 0)
-			assert.Equal(t, stats.LeafPageN, 6)
-			assert.Equal(t, stats.LeafOverflowN, 2)
-			assert.Equal(t, stats.KeyN, 501)
-			assert.Equal(t, stats.Depth, 2)
-			if os.Getpagesize() != 4096 {
+			assert.Equal(t, 1, stats.BranchPageN, "BranchPageN")
+			assert.Equal(t, 0, stats.BranchOverflowN, "BranchOverflowN")
+			assert.Equal(t, 6, stats.LeafPageN, "LeafPageN")
+			assert.Equal(t, 2, stats.LeafOverflowN, "LeafOverflowN")
+			assert.Equal(t, 501, stats.KeyN, "KeyN")
+			assert.Equal(t, 2, stats.Depth, "Depth")
+			assert.Equal(t, 125, stats.BranchInuse, "BranchInuse")
+			assert.Equal(t, 20908, stats.LeafInuse, "LeafInuse")
+			if os.Getpagesize() == 4096 {
 				// Incompatible page size
-				assert.Equal(t, stats.BranchInuse, 125)
-				assert.Equal(t, stats.BranchAlloc, 4096)
-				assert.Equal(t, stats.LeafInuse, 20908)
-				assert.Equal(t, stats.LeafAlloc, 32768)
+				assert.Equal(t, 4096, stats.BranchAlloc, "BranchAlloc")
+				assert.Equal(t, 32768, stats.LeafAlloc, "LeafAlloc")
 			}
+			assert.Equal(t, 1, stats.BucketN, "BucketN")
+			assert.Equal(t, 0, stats.InlineBucketN, "InlineBucketN")
+			assert.Equal(t, 0, stats.InlineBucketInuse, "InlineBucketInuse")
 			return nil
 		})
 	})
@@ -610,19 +613,22 @@ func TestBucket_Stats_Small(t *testing.T) {
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket([]byte("whozawhats"))
 			stats := b.Stats()
-			assert.Equal(t, 0, stats.BranchPageN)
-			assert.Equal(t, 0, stats.BranchOverflowN)
-			assert.Equal(t, 1, stats.LeafPageN)
-			assert.Equal(t, 0, stats.LeafOverflowN)
-			assert.Equal(t, 1, stats.KeyN)
-			assert.Equal(t, 1, stats.Depth)
-			if os.Getpagesize() != 4096 {
+			assert.Equal(t, 0, stats.BranchPageN, "BranchPageN")
+			assert.Equal(t, 0, stats.BranchOverflowN, "BranchOverflowN")
+			assert.Equal(t, 0, stats.LeafPageN, "LeafPageN")
+			assert.Equal(t, 0, stats.LeafOverflowN, "LeafOverflowN")
+			assert.Equal(t, 1, stats.KeyN, "KeyN")
+			assert.Equal(t, 1, stats.Depth, "Depth")
+			assert.Equal(t, 0, stats.BranchInuse, "BranchInuse")
+			assert.Equal(t, 0, stats.LeafInuse, "LeafInuse")
+			if os.Getpagesize() == 4096 {
 				// Incompatible page size
-				assert.Equal(t, 0, stats.BranchInuse)
-				assert.Equal(t, 0, stats.BranchAlloc)
-				assert.Equal(t, 38, stats.LeafInuse)
-				assert.Equal(t, 4096, stats.LeafAlloc)
+				assert.Equal(t, 0, stats.BranchAlloc, "BranchAlloc")
+				assert.Equal(t, 0, stats.LeafAlloc, "LeafAlloc")
 			}
+			assert.Equal(t, 1, stats.BucketN, "BucketN")
+			assert.Equal(t, 1, stats.InlineBucketN, "InlineBucketN")
+			assert.Equal(t, bucketHeaderSize+pageHeaderSize+leafPageElementSize+6, stats.InlineBucketInuse, "InlineBucketInuse")
 			return nil
 		})
 	})
@@ -643,7 +649,7 @@ func TestBucket_Stats_Nested(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				bar.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
 			}
-			baz, err := b.CreateBucket([]byte("baz"))
+			baz, err := bar.CreateBucket([]byte("baz"))
 			assert.NoError(t, err)
 			for i := 0; i < 10; i++ {
 				baz.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i)))
@@ -654,19 +660,22 @@ func TestBucket_Stats_Nested(t *testing.T) {
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket([]byte("foo"))
 			stats := b.Stats()
-			assert.Equal(t, stats.BranchPageN, 0)
-			assert.Equal(t, stats.BranchOverflowN, 0)
-			assert.Equal(t, stats.LeafPageN, 3)
-			assert.Equal(t, stats.LeafOverflowN, 0)
-			assert.Equal(t, stats.KeyN, 122)
-			assert.Equal(t, stats.Depth, 2)
-			if os.Getpagesize() != 4096 {
+			assert.Equal(t, 0, stats.BranchPageN, "BranchPageN")
+			assert.Equal(t, 0, stats.BranchOverflowN, "BranchOverflowN")
+			assert.Equal(t, 2, stats.LeafPageN, "LeafPageN")
+			assert.Equal(t, 0, stats.LeafOverflowN, "LeafOverflowN")
+			assert.Equal(t, 122, stats.KeyN, "KeyN")
+			assert.Equal(t, 3, stats.Depth, "Depth")
+			assert.Equal(t, 0, stats.BranchInuse, "BranchInuse")
+			assert.Equal(t, 2474, stats.LeafInuse, "LeafInuse")
+			if os.Getpagesize() == 4096 {
 				// Incompatible page size
-				assert.Equal(t, stats.BranchInuse, 0)
-				assert.Equal(t, stats.BranchAlloc, 0)
-				assert.Equal(t, stats.LeafInuse, 38)
-				assert.Equal(t, stats.LeafAlloc, 4096)
+				assert.Equal(t, 0, stats.BranchAlloc, "BranchAlloc")
+				assert.Equal(t, 8192, stats.LeafAlloc, "LeafAlloc")
 			}
+			assert.Equal(t, 3, stats.BucketN, "BucketN")
+			assert.Equal(t, 1, stats.InlineBucketN, "InlineBucketN")
+			assert.Equal(t, 212, stats.InlineBucketInuse, "InlineBucketInuse")
 			return nil
 		})
 	})
@@ -696,19 +705,22 @@ func TestBucket_Stats_Large(t *testing.T) {
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket([]byte("widgets"))
 			stats := b.Stats()
-			assert.Equal(t, 19, stats.BranchPageN)
-			assert.Equal(t, 0, stats.BranchOverflowN)
-			assert.Equal(t, 1291, stats.LeafPageN)
-			assert.Equal(t, 0, stats.LeafOverflowN)
-			assert.Equal(t, 100000, stats.KeyN)
-			assert.Equal(t, 3, stats.Depth)
-			if os.Getpagesize() != 4096 {
+			assert.Equal(t, 19, stats.BranchPageN, "BranchPageN")
+			assert.Equal(t, 0, stats.BranchOverflowN, "BranchOverflowN")
+			assert.Equal(t, 1291, stats.LeafPageN, "LeafPageN")
+			assert.Equal(t, 0, stats.LeafOverflowN, "LeafOverflowN")
+			assert.Equal(t, 100000, stats.KeyN, "KeyN")
+			assert.Equal(t, 3, stats.Depth, "Depth")
+			assert.Equal(t, 27007, stats.BranchInuse, "BranchInuse")
+			assert.Equal(t, 2598436, stats.LeafInuse, "LeafInuse")
+			if os.Getpagesize() == 4096 {
 				// Incompatible page size
-				assert.Equal(t, 27289, stats.BranchInuse)
-				assert.Equal(t, 61440, stats.BranchAlloc)
-				assert.Equal(t, 2598276, stats.LeafInuse)
-				assert.Equal(t, 5246976, stats.LeafAlloc)
+				assert.Equal(t, 77824, stats.BranchAlloc, "BranchAlloc")
+				assert.Equal(t, 5287936, stats.LeafAlloc, "LeafAlloc")
 			}
+			assert.Equal(t, 1, stats.BucketN, "BucketN")
+			assert.Equal(t, 0, stats.InlineBucketN, "InlineBucketN")
+			assert.Equal(t, 0, stats.InlineBucketInuse, "InlineBucketInuse")
 			return nil
 		})
 	})
