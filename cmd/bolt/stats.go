@@ -51,6 +51,14 @@ func Stats(path, prefix string) {
 		printf("\tBytes allocated for physical leaf pages: %d\n", s.LeafAlloc)
 		percentage = int(float32(s.LeafInuse) * 100.0 / float32(s.LeafAlloc))
 		printf("\tBytes actually used for leaf data: %d (%d%%)\n", s.LeafInuse, percentage)
+
+		println("Bucket statistics	")
+		printf("\tTotal number of buckets: %d\n", s.BucketN)
+		percentage = int(float32(s.InlineBucketN) * 100.0 / float32(s.BucketN))
+		printf("\tTotal number on inlined buckets: %d (%d%%)\n", s.InlineBucketN, percentage)
+		percentage = int(float32(s.InlineBucketInuse) * 100.0 / float32(s.LeafInuse))
+		printf("\tBytes used for inlined buckets: %d (%d%%)\n", s.InlineBucketInuse, percentage)
+
 		return nil
 	})
 	if err != nil {
