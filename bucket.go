@@ -371,8 +371,9 @@ func (b *Bucket) Stats() BucketStats {
 	b.forEachPage(func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
 			s.KeyN += int(p.count)
-			used := pageHeaderSize + (leafPageElementSize * int(p.count))
+			used := pageHeaderSize
 			if p.count != 0 {
+				used += leafPageElementSize * int(p.count-1)
 				lastElement := p.leafPageElement(p.count - 1)
 				used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
 			}
