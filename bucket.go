@@ -369,29 +369,26 @@ func (b *Bucket) Stats() BucketStats {
 		s.InlineBucketN += 1
 	}
 	b.forEachPage(func(p *page, depth int) {
-		if b.root == 0 { // inline bucket
+		if (p.flags & leafPageFlag) != 0 {
 			s.KeyN += int(p.count)
-			lastElement := p.leafPageElement(p.count - 1)
-			used := bucketHeaderSize + pageHeaderSize + (leafPageElementSize * int(p.count-1))
-			used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
-			s.InlineBucketInuse += used
-		} else if (p.flags & leafPageFlag) != 0 {
-			s.LeafPageN++
-			if p.count == 0 {
-				return
+			used := pageHeaderSize + (leafPageElementSize * int(p.count))
+			if p.count != 0 {
+				lastElement := p.leafPageElement(p.count - 1)
+				used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
 			}
-			s.KeyN += int(p.count)
-			lastElement := p.leafPageElement(p.count - 1)
-			used := pageHeaderSize + (leafPageElementSize * int(p.count-1))
-			used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
-			s.LeafInuse += used
-			s.LeafOverflowN += int(p.overflow)
+			if b.root == 0 {
+				s.InlineBucketInuse += used
+			} else {
+				s.LeafPageN++
+				s.LeafInuse += used
+				s.LeafOverflowN += int(p.overflow)
 
-			// Collect stats from sub-buckets
-			for i := uint16(0); i < p.count; i++ {
-				e := p.leafPageElement(i)
-				if (e.flags & bucketLeafFlag) != 0 {
-					subStats.Add(b.openBucket(e.value()).Stats())
+				// Collect stats from sub-buckets
+				for i := uint16(0); i < p.count; i++ {
+					e := p.leafPageElement(i)
+					if (e.flags & bucketLeafFlag) != 0 {
+						subStats.Add(b.openBucket(e.value()).Stats())
+					}
 				}
 			}
 		} else if (p.flags & branchPageFlag) != 0 {
