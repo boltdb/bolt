@@ -33,7 +33,12 @@ func Bench(options *BenchOptions) {
 
 	// Find temporary location.
 	path := tempfile()
-	defer os.Remove(path)
+
+	if options.Clean {
+		defer os.Remove(path)
+	} else {
+		println("work:", path)
+	}
 
 	// Create database.
 	db, err := bolt.Open(path, 0600)
@@ -275,6 +280,7 @@ type BenchOptions struct {
 	MemProfile    string
 	BlockProfile  string
 	StatsInterval time.Duration
+	Clean         bool
 }
 
 // BenchResults represents the performance results of the benchmark.
