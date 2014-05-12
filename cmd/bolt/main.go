@@ -106,6 +106,7 @@ func NewApp() *cli.App {
 				&cli.StringFlag{Name: "memprofile", Usage: "Memory profile output path"},
 				&cli.StringFlag{Name: "blockprofile", Usage: "Block profile output path"},
 				&cli.StringFlag{Name: "stats-interval", Value: "0s", Usage: "Continuous stats interval"},
+				&cli.BoolFlag{Name: "work", Usage: "Print the temp db and do not delete on exit"},
 			},
 			Action: func(c *cli.Context) {
 				statsInterval, err := time.ParseDuration(c.String("stats-interval"))
@@ -125,6 +126,7 @@ func NewApp() *cli.App {
 					MemProfile:    c.String("memprofile"),
 					BlockProfile:  c.String("blockprofile"),
 					StatsInterval: statsInterval,
+					Clean:         !c.Bool("work"),
 				})
 			},
 		}}
