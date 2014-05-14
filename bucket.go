@@ -371,11 +371,14 @@ func (b *Bucket) Stats() BucketStats {
 	b.forEachPage(func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
 			s.KeyN += int(p.count)
+
 			// used totals the used bytes for the page
 			used := pageHeaderSize
+
 			if p.count != 0 {
 				// If page has any elements, add all element headers.
 				used += leafPageElementSize * int(p.count-1)
+
 				// Add all element key, value sizes.
 				// The computation takes advantage of the fact that the position
 				// of the last element's key/value equals to the total of the sizes
@@ -384,6 +387,7 @@ func (b *Bucket) Stats() BucketStats {
 				lastElement := p.leafPageElement(p.count - 1)
 				used += int(lastElement.pos + lastElement.ksize + lastElement.vsize)
 			}
+
 			if b.root == 0 {
 				// For inlined bucket just update the inline stats
 				s.InlineBucketInuse += used
@@ -408,9 +412,11 @@ func (b *Bucket) Stats() BucketStats {
 		} else if (p.flags & branchPageFlag) != 0 {
 			s.BranchPageN++
 			lastElement := p.branchPageElement(p.count - 1)
+
 			// used totals the used bytes for the page
 			// Add header and all element headers.
 			used := pageHeaderSize + (branchPageElementSize * int(p.count-1))
+
 			// Add size of all keys and values.
 			// Again, use the fact that last element's position equals to
 			// the total of key, value sizes of all previous elements.
@@ -418,11 +424,13 @@ func (b *Bucket) Stats() BucketStats {
 			s.BranchInuse += used
 			s.BranchOverflowN += int(p.overflow)
 		}
+
 		// Keep track of maximum page depth.
 		if depth+1 > s.Depth {
 			s.Depth = (depth + 1)
 		}
 	})
+
 	// Alloc stats can be computed from page counts and pageSize.
 	s.BranchAlloc = (s.BranchPageN + s.BranchOverflowN) * pageSize
 	s.LeafAlloc = (s.LeafPageN + s.LeafOverflowN) * pageSize
@@ -568,7 +576,7 @@ func (b *Bucket) maxInlineBucketSize() int {
 func (b *Bucket) write() []byte {
 	// Allocate the appropriate size.
 	var n = b.rootNode
-	var value = make([]byte, bucketHeaderSize+pageHeaderSize+n.size())
+	var value = make([]byte, bucketHeaderSize+n.size())
 
 	// Write a bucket header.
 	var bucket = (*bucket)(unsafe.Pointer(&value[0]))
