@@ -46,6 +46,7 @@ func Bench(options *BenchOptions) {
 		fatal(err)
 		return
 	}
+	db.FillPercent = options.FillPercent
 	defer db.Close()
 
 	// Enable streaming stats.
@@ -280,6 +281,7 @@ type BenchOptions struct {
 	MemProfile    string
 	BlockProfile  string
 	StatsInterval time.Duration
+	FillPercent   float64
 	Clean         bool
 }
 

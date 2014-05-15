@@ -215,8 +215,14 @@ func (n *node) split(pageSize int) []*node {
 		return nodes
 	}
 
-	// Set fill threshold to 50%.
-	threshold := pageSize / 2
+	// Determine the threshold before starting a new node.
+	var fillPercent = n.bucket.tx.db.FillPercent
+	if fillPercent < minFillPercent {
+		fillPercent = minFillPercent
+	} else if fillPercent > maxFillPercent {
+		fillPercent = maxFillPercent
+	}
+	threshold := int(float64(pageSize) * fillPercent)
 
 	// Group into smaller pages and target a given fill size.
 	size := pageHeaderSize

@@ -24,6 +24,15 @@ const version = 2
 // Represents a marker value to indicate that a file is a Bolt DB.
 const magic uint32 = 0xED0CDAED
 
+const (
+	minFillPercent = 0.1
+	maxFillPercent = 1.0
+)
+
+// DefaultFillPercent is the percentage that split pages are filled.
+// This value can be changed by setting DB.FillPercent.
+const DefaultFillPercent = 0.5
+
 var (
 	// ErrDatabaseNotOpen is returned when a DB instance is accessed before it
 	// is opened or after it is closed.
@@ -53,6 +62,11 @@ type DB struct {
 	// flag has a large performance impact so it should only be used for
 	// debugging purposes.
 	StrictMode bool
+
+	// Sets the threshold for filling nodes when they split. By default,
+	// the database will fill to 50% but it can be useful to increase this
+	// amount if you know that your write workloads are mostly append-only.
+	FillPercent float64
 
 	path     string
 	file     *os.File
@@ -94,7 +108,7 @@ func (db *DB) String() string {
 // Open creates and opens a database at the given path.
 // If the file does not exist then it will be created automatically.
 func Open(path string, mode os.FileMode) (*DB, error) {
-	var db = &DB{opened: true}
+	var db = &DB{opened: true, FillPercent: DefaultFillPercent}
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
