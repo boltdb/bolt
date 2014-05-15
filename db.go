@@ -63,9 +63,9 @@ type DB struct {
 	// debugging purposes.
 	StrictMode bool
 
-	// Sets the threshold for filling pages when they split. By default,
+	// Sets the threshold for filling nodes when they split. By default,
 	// the database will fill to 50% but it can be useful to increase this
-	// amount if you know that your write workloads are typically append-only.
+	// amount if you know that your write workloads are mostly append-only.
 	FillPercent float64
 
 	path     string
