@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -47,6 +48,12 @@ var (
 // All data access is performed through transactions which can be obtained through the DB.
 // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
 type DB struct {
+	// When enabled, the database will perform a Check() after every commit.
+	// A panic is issued if the database is in an inconsistent state. This
+	// flag has a large performance impact so it should only be used for
+	// debugging purposes.
+	StrictMode bool
+
 	path     string
 	file     *os.File
 	data     []byte
@@ -533,69 +540,7 @@ func (db *DB) Stats() Stats {
 // An error is returned if any inconsistency is found.
 func (db *DB) Check() error {
 	return db.Update(func(tx *Tx) error {
-		var errors ErrorList
-
-		// Track every reachable page.
-		reachable := make(map[pgid]*page)
-		reachable[0] = db.page(0) // meta0
-		reachable[1] = db.page(1) // meta1
-		for i := uint32(0); i <= db.page(tx.meta.freelist).overflow; i++ {
-			reachable[tx.meta.freelist+pgid(i)] = db.page(tx.meta.freelist)
-		}
-
-		// Recursively check buckets.
-		db.checkBucket(&tx.root, reachable, &errors)
-
-		// Ensure all pages below high water mark are either reachable or freed.
-		for i := pgid(0); i < tx.meta.pgid; i++ {
-			_, isReachable := reachable[i]
-			if !isReachable && !db.freelist.isFree(i) {
-				errors = append(errors, fmt.Errorf("page %d: unreachable unfreed", int(i)))
-			}
-		}
-
-		if len(errors) > 0 {
-			return errors
-		}
-
-		return nil
-	})
-}
-
-func (db *DB) checkBucket(b *Bucket, reachable map[pgid]*page, errors *ErrorList) {
-	// Ignore inline buckets.
-	if b.root == 0 {
-		return
-	}
-
-	// Check every page used by this bucket.
-	b.tx.forEachPage(b.root, 0, func(p *page, _ int) {
-		// Ensure each page is only referenced once.
-		for i := pgid(0); i <= pgid(p.overflow); i++ {
-			var id = p.id + i
-			if _, ok := reachable[id]; ok {
-				*errors = append(*errors, fmt.Errorf("page %d: multiple references", int(id)))
-			}
-			reachable[id] = p
-		}
-
-		// Retrieve page info.
-		info, err := b.tx.Page(int(p.id))
-		if err != nil {
-			*errors = append(*errors, err)
-		} else if info == nil {
-			*errors = append(*errors, fmt.Errorf("page %d: out of bounds: %d", int(p.id), int(b.tx.meta.pgid)))
-		} else if info.Type != "branch" && info.Type != "leaf" {
-			*errors = append(*errors, fmt.Errorf("page %d: invalid type: %s", int(p.id), info.Type))
-		}
-	})
-
-	// Check each bucket within this bucket.
-	_ = b.ForEach(func(k, v []byte) error {
-		if child := b.Bucket(k); child != nil {
-			db.checkBucket(child, reachable, errors)
-		}
-		return nil
+		return tx.Check()
 	})
 }
 
@@ -732,6 +677,15 @@ type ErrorList []error
 // Error returns a readable count of the errors in the list.
 func (l ErrorList) Error() string {
 	return fmt.Sprintf("%d errors occurred", len(l))
+}
+
+// join returns a error messages joined by a string.
+func (l ErrorList) join(sep string) string {
+	var a []string
+	for _, e := range l {
+		a = append(a, e.Error())
+	}
+	return strings.Join(a, sep)
 }
 
 // _assert will panic with a given formatted message if the given condition is false.
