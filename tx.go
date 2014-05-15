@@ -2,6 +2,7 @@ package bolt
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 	"unsafe"
@@ -175,6 +176,14 @@ func (tx *Tx) Commit() error {
 		return err
 	}
 
+	// If strict mode is enabled then perform a consistency check.
+	if tx.db.StrictMode {
+		if err := tx.Check(); err != nil {
+			err := err.(ErrorList)
+			panic("check fail: " + err.Error() + ": " + err.join("; "))
+		}
+	}
+
 	// Write meta to disk.
 	if err := tx.writeMeta(); err != nil {
 		tx.close()
@@ -216,6 +225,89 @@ func (tx *Tx) close() {
 		tx.db.removeTx(tx)
 	}
 	tx.db = nil
+}
+
+// Check performs several consistency checks on the database for this transaction.
+// An error is returned if any inconsistency is found or if executed on a read-only transaction.
+func (tx *Tx) Check() error {
+	if !tx.writable {
+		return ErrTxNotWritable
+	}
+
+	var errors ErrorList
+
+	// Check if any pages are double freed.
+	freed := make(map[pgid]bool)
+	for _, id := range tx.db.freelist.all() {
+		if freed[id] {
+			errors = append(errors, fmt.Errorf("page %d: already freed", id))
+		}
+		freed[id] = true
+	}
+
+	// Track every reachable page.
+	reachable := make(map[pgid]*page)
+	reachable[0] = tx.page(0) // meta0
+	reachable[1] = tx.page(1) // meta1
+	for i := uint32(0); i <= tx.page(tx.meta.freelist).overflow; i++ {
+		reachable[tx.meta.freelist+pgid(i)] = tx.page(tx.meta.freelist)
+	}
+
+	// Recursively check buckets.
+	tx.checkBucket(&tx.root, reachable, &errors)
+
+	// Ensure all pages below high water mark are either reachable or freed.
+	for i := pgid(0); i < tx.meta.pgid; i++ {
+		_, isReachable := reachable[i]
+		if !isReachable && !freed[i] {
+			errors = append(errors, fmt.Errorf("page %d: unreachable unfreed", int(i)))
+		} else if isReachable && freed[i] {
+			errors = append(errors, fmt.Errorf("page %d: reachable freed", int(i)))
+		}
+	}
+
+	if len(errors) > 0 {
+		return errors
+	}
+
+	return nil
+}
+
+func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, errors *ErrorList) {
+	// Ignore inline buckets.
+	if b.root == 0 {
+		return
+	}
+
+	// Check every page used by this bucket.
+	b.tx.forEachPage(b.root, 0, func(p *page, _ int) {
+		// Ensure each page is only referenced once.
+		for i := pgid(0); i <= pgid(p.overflow); i++ {
+			var id = p.id + i
+			if _, ok := reachable[id]; ok {
+				*errors = append(*errors, fmt.Errorf("page %d: multiple references", int(id)))
+			}
+			reachable[id] = p
+		}
+
+		// Retrieve page info.
+		info, err := b.tx.Page(int(p.id))
+		if err != nil {
+			*errors = append(*errors, err)
+		} else if info == nil {
+			*errors = append(*errors, fmt.Errorf("page %d: out of bounds: %d", int(p.id), int(b.tx.meta.pgid)))
+		} else if info.Type != "branch" && info.Type != "leaf" {
+			*errors = append(*errors, fmt.Errorf("page %d: invalid type: %s", int(p.id), info.Type))
+		}
+	})
+
+	// Check each bucket within this bucket.
+	_ = b.ForEach(func(k, v []byte) error {
+		if child := b.Bucket(k); child != nil {
+			tx.checkBucket(child, reachable, errors)
+		}
+		return nil
+	})
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
