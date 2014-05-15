@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/boltdb/bolt"
 	"github.com/codegangsta/cli"
 )
 
@@ -114,6 +115,7 @@ func NewApp() *cli.App {
 				&cli.StringFlag{Name: "memprofile", Usage: "Memory profile output path"},
 				&cli.StringFlag{Name: "blockprofile", Usage: "Block profile output path"},
 				&cli.StringFlag{Name: "stats-interval", Value: "0s", Usage: "Continuous stats interval"},
+				&cli.Float64Flag{Name: "fill-percent", Value: bolt.DefaultFillPercent, Usage: "Fill percentage"},
 				&cli.BoolFlag{Name: "work", Usage: "Print the temp db and do not delete on exit"},
 			},
 			Action: func(c *cli.Context) {
@@ -134,6 +136,7 @@ func NewApp() *cli.App {
 					MemProfile:    c.String("memprofile"),
 					BlockProfile:  c.String("blockprofile"),
 					StatsInterval: statsInterval,
+					FillPercent:   c.Float64("fill-percent"),
 					Clean:         !c.Bool("work"),
 				})
 			},
