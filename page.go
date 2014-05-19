@@ -133,4 +133,4 @@ type pgids []pgid
 
 func (s pgids) Len() int           { return len(s) }
 func (s pgids) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s pgids) Less(i, j int) bool { return s[i] > s[j] }
+func (s pgids) Less(i, j int) bool { return s[i] < s[j] }

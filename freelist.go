@@ -55,7 +55,7 @@ func (f *freelist) allocate(n int) pgid {
 			if (i + 1) == n {
 				f.ids = f.ids[i+1:]
 			} else {
-				copy(f.ids[i-1:], f.ids[i+n-1:])
+				copy(f.ids[i-n+1:], f.ids[i+1:])
 				f.ids = f.ids[:len(f.ids)-n]
 			}
 			return initial
@@ -111,7 +111,7 @@ func (f *freelist) read(p *page) {
 	ids := ((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[0:p.count]
 	f.ids = make([]pgid, len(ids))
 	copy(f.ids, ids)
-	sort.Sort(pgids(ids))
+	sort.Sort(pgids(f.ids))
 }
 
 // write writes the page ids onto a freelist page. All free and pending ids are
