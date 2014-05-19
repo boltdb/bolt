@@ -54,6 +54,7 @@ Below is a list of public, open source projects that use Bolt:
 * [ChainStore](https://github.com/nulayer/chainstore) - Simple key-value interface to a variety of storage engines organized as a chain of operations.
 * [MetricBase](https://github.com/msiebuhr/MetricBase) - Single-binary version of Graphite.
 * [Gitchain](https://github.com/gitchain/gitchain) - Decentralized, peer-to-peer Git repositories aka "Git meets Bitcoin".
+* [SkyDB](https://github.com/skydb/sky) - Behavioral analytics database.
 
 
 If you are using Bolt in a project please send a pull request to add it to the list.
