@@ -899,30 +899,21 @@ func TestBucket_Delete_Quick(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Remove items one at a time and check consistency.
-			for i, item := range items {
+			for _, item := range items {
 				err := db.Update(func(tx *Tx) error {
 					return tx.Bucket([]byte("widgets")).Delete(item.Key)
 				})
 				assert.NoError(t, err)
+			}
 
-				// Anything before our deletion index should be nil.
-				db.View(func(tx *Tx) error {
-					b := tx.Bucket([]byte("widgets"))
-					for j, exp := range items {
-						value := b.Get(exp.Key)
-						if j > i {
-							if !assert.Equal(t, exp.Value, value) {
-								t.FailNow()
-							}
-						} else {
-							if !assert.Nil(t, value) {
-								t.FailNow()
-							}
-						}
-					}
+			// Anything before our deletion index should be nil.
+			db.View(func(tx *Tx) error {
+				tx.Bucket([]byte("widgets")).ForEach(func(k, v []byte) error {
+					t.Fatalf("bucket should be empty; found: %06x", trunc(k, 3))
 					return nil
 				})
-			}
+				return nil
+			})
 		})
 		return true
 	}

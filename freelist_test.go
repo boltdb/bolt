@@ -36,15 +36,14 @@ func TestFreelist_release(t *testing.T) {
 
 // Ensure that a freelist can find contiguous blocks of pages.
 func TestFreelist_allocate(t *testing.T) {
-	f := &freelist{ids: []pgid{18, 13, 12, 9, 7, 6, 5, 4, 3}}
-	assert.Equal(t, f.allocate(2), pgid(12))
-	assert.Equal(t, f.allocate(1), pgid(18))
-	assert.Equal(t, f.allocate(3), pgid(5))
-	assert.Equal(t, f.allocate(3), pgid(0))
-	assert.Equal(t, f.allocate(2), pgid(3))
-	assert.Equal(t, f.allocate(1), pgid(9))
-	assert.Equal(t, f.allocate(0), pgid(0))
-	assert.Equal(t, f.ids, []pgid{})
+	f := &freelist{ids: []pgid{3, 4, 5, 6, 7, 9, 12, 13, 18}}
+	assert.Equal(t, 3, int(f.allocate(3)))
+	assert.Equal(t, 6, int(f.allocate(1)))
+	assert.Equal(t, 0, int(f.allocate(3)))
+	assert.Equal(t, 12, int(f.allocate(2)))
+	assert.Equal(t, 7, int(f.allocate(1)))
+	assert.Equal(t, 0, int(f.allocate(0)))
+	assert.Equal(t, []pgid{9, 18}, f.ids)
 }
 
 // Ensure that a freelist can deserialize from a freelist page.

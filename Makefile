@@ -19,7 +19,7 @@ cover: fmt
 
 cpuprofile: fmt
 	@go test -c
-	@./bolt.test -test.v -test.run="^X" -test.bench=$(BENCH) -test.cpuprofile cpu.prof
+	@./bolt.test -test.v -test.run=$(TEST) -test.cpuprofile cpu.prof
 
 # go get github.com/kisielk/errcheck
 errcheck:
