@@ -46,9 +46,15 @@ So why use Bolt? The goal of Bolt is provide a simple, fast data store that is e
 
 Below is a list of public, open source projects that use Bolt:
 
-* [Skybox Analytics](https://github.com/skybox/skybox) - A standalone funnel analysis tool for web analytics.
+* [Bazil](https://github.com/bazillion/bazil) - A file system that lets your data reside where it is most convenient for it to reside.
 * [DVID](https://github.com/janelia-flyem/dvid) - Added Bolt as optional storage engine and testing it against Basho-tuned leveldb.
+* [Skybox Analytics](https://github.com/skybox/skybox) - A standalone funnel analysis tool for web analytics.
 * [Scuttlebutt](https://github.com/benbjohnson/scuttlebutt) - Uses Bolt to store and process all Twitter mentions of GitHub projects.
+* [Wiki](https://github.com/peterhellberg/wiki) - A tiny wiki using Goji, BoltDB and Blackfriday.
+* [ChainStore](https://github.com/nulayer/chainstore) - Simple key-value interface to a variety of storage engines organized as a chain of operations.
+* [MetricBase](https://github.com/msiebuhr/MetricBase) - Single-binary version of Graphite.
+* [Gitchain](https://github.com/gitchain/gitchain) - Decentralized, peer-to-peer Git repositories aka "Git meets Bitcoin".
+
 
 If you are using Bolt in a project please send a pull request to add it to the list.
 
