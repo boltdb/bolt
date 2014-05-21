@@ -73,6 +73,11 @@ func (tx *Tx) DB() *DB {
 	return tx.db
 }
 
+// Size returns current database size in bytes (as seen by this transaction)
+func (tx *Tx) Size() int64 {
+	return int64(tx.meta.pgid) * int64(tx.db.pageSize)
+}
+
 // Writable returns whether the transaction can perform write operations.
 func (tx *Tx) Writable() bool {
 	return tx.writable
@@ -232,6 +237,7 @@ func (tx *Tx) close() {
 // Copy writes the entire database to a writer.
 // A reader transaction is maintained during the copy so it is safe to continue
 // using the database while a copy is in progress.
+// Copy will write exactly tx.Size() bytes into the writer.
 func (tx *Tx) Copy(w io.Writer) error {
 
 	// Open reader on the database.
@@ -252,7 +258,7 @@ func (tx *Tx) Copy(w io.Writer) error {
 	}
 
 	// Copy data pages.
-	if _, err := io.Copy(w, f); err != nil {
+	if _, err := io.CopyN(w, f, tx.Size()-int64(tx.db.pageSize*2)); err != nil {
 		_ = tx.Rollback()
 		_ = f.Close()
 		return err
