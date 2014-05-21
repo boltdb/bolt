@@ -73,7 +73,7 @@ func (tx *Tx) DB() *DB {
 	return tx.db
 }
 
-// Size returns current database size in bytes (as seen by this transaction)
+// Size returns current database size in bytes as seen by this transaction.
 func (tx *Tx) Size() int64 {
 	return int64(tx.meta.pgid) * int64(tx.db.pageSize)
 }
@@ -239,7 +239,6 @@ func (tx *Tx) close() {
 // using the database while a copy is in progress.
 // Copy will write exactly tx.Size() bytes into the writer.
 func (tx *Tx) Copy(w io.Writer) error {
-
 	// Open reader on the database.
 	f, err := os.Open(tx.db.path)
 	if err != nil {
