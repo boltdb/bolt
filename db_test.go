@@ -238,30 +238,6 @@ func TestDB_View_Error(t *testing.T) {
 	})
 }
 
-// Ensure that the database can be copied to a file path.
-func TestDB_CopyFile(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		var dest = tempfile()
-		db.Update(func(tx *Tx) error {
-			tx.CreateBucket([]byte("widgets"))
-			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
-			tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("bat"))
-			return nil
-		})
-		assert.NoError(t, db.CopyFile(dest, 0600))
-
-		db2, err := Open(dest, 0600)
-		assert.NoError(t, err)
-		defer db2.Close()
-
-		db2.View(func(tx *Tx) error {
-			assert.Equal(t, []byte("bar"), tx.Bucket([]byte("widgets")).Get([]byte("foo")))
-			assert.Equal(t, []byte("bat"), tx.Bucket([]byte("widgets")).Get([]byte("baz")))
-			return nil
-		})
-	})
-}
-
 // Ensure that an error is returned when a database write fails.
 func TestDB_Commit_WriteFail(t *testing.T) {
 	t.Skip("pending") // TODO(benbjohnson)
@@ -450,39 +426,6 @@ func ExampleDB_Begin_ReadOnly() {
 	// zephyr likes purple
 }
 
-func ExampleDB_CopyFile() {
-	// Open the database.
-	db, _ := Open(tempfile(), 0666)
-	defer os.Remove(db.Path())
-	defer db.Close()
-
-	// Create a bucket and a key.
-	db.Update(func(tx *Tx) error {
-		tx.CreateBucket([]byte("widgets"))
-		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
-		return nil
-	})
-
-	// Copy the database to another file.
-	toFile := tempfile()
-	db.CopyFile(toFile, 0666)
-	defer os.Remove(toFile)
-
-	// Open the cloned database.
-	db2, _ := Open(toFile, 0666)
-	defer db2.Close()
-
-	// Ensure that the key exists in the copy.
-	db2.View(func(tx *Tx) error {
-		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
-		fmt.Printf("The value for 'foo' in the clone is: %s\n", value)
-		return nil
-	})
-
-	// Output:
-	// The value for 'foo' in the clone is: bar
-}
-
 // tempfile returns a temporary file path.
 func tempfile() string {
 	f, _ := ioutil.TempFile("", "bolt-")
@@ -523,7 +466,7 @@ func mustCheck(db *DB) {
 	if err := db.Check(); err != nil {
 		// Copy db off first.
 		var path = tempfile()
-		db.CopyFile(path, 0600)
+		db.View(func(tx *Tx) error { return tx.CopyFile(path, 0600) })
 
 		if errors, ok := err.(ErrorList); ok {
 			for _, err := range errors {
@@ -564,7 +507,7 @@ func truncDuration(d time.Duration) string {
 // copyAndFailNow copies a database to a new location and then fails then test.
 func copyAndFailNow(t *testing.T, db *DB) {
 	path := tempfile()
-	db.CopyFile(path, 0600)
+	db.View(func(tx *Tx) error { return tx.CopyFile(path, 0600) })
 	fmt.Println("db copied to: ", path)
 	t.FailNow()
 }

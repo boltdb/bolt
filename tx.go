@@ -3,6 +3,8 @@ package bolt
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"sort"
 	"time"
 	"unsafe"
@@ -69,6 +71,11 @@ func (tx *Tx) id() txid {
 // DB returns a reference to the database that created the transaction.
 func (tx *Tx) DB() *DB {
 	return tx.db
+}
+
+// Size returns current database size in bytes as seen by this transaction.
+func (tx *Tx) Size() int64 {
+	return int64(tx.meta.pgid) * int64(tx.db.pageSize)
 }
 
 // Writable returns whether the transaction can perform write operations.
@@ -225,6 +232,55 @@ func (tx *Tx) close() {
 		tx.db.removeTx(tx)
 	}
 	tx.db = nil
+}
+
+// Copy writes the entire database to a writer.
+// A reader transaction is maintained during the copy so it is safe to continue
+// using the database while a copy is in progress.
+// Copy will write exactly tx.Size() bytes into the writer.
+func (tx *Tx) Copy(w io.Writer) error {
+	// Open reader on the database.
+	f, err := os.Open(tx.db.path)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	// Copy the meta pages.
+	tx.db.metalock.Lock()
+	_, err = io.CopyN(w, f, int64(tx.db.pageSize*2))
+	tx.db.metalock.Unlock()
+	if err != nil {
+		_ = tx.Rollback()
+		_ = f.Close()
+		return fmt.Errorf("meta copy: %s", err)
+	}
+
+	// Copy data pages.
+	if _, err := io.CopyN(w, f, tx.Size()-int64(tx.db.pageSize*2)); err != nil {
+		_ = tx.Rollback()
+		_ = f.Close()
+		return err
+	}
+
+	return f.Close()
+}
+
+// CopyFile copies the entire database to file at the given path.
+// A reader transaction is maintained during the copy so it is safe to continue
+// using the database while a copy is in progress.
+func (tx *Tx) CopyFile(path string, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Copy(f)
+	if err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // Check performs several consistency checks on the database for this transaction.

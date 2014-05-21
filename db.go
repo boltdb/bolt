@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"io"
 	"os"
 	"strings"
 	"sync"
@@ -481,65 +480,6 @@ func (db *DB) View(fn func(*Tx) error) error {
 	}
 
 	return nil
-}
-
-// Copy writes the entire database to a writer.
-// A reader transaction is maintained during the copy so it is safe to continue
-// using the database while a copy is in progress.
-func (db *DB) Copy(w io.Writer) error {
-	// Maintain a reader transaction so pages don't get reclaimed.
-	t, err := db.Begin(false)
-	if err != nil {
-		return err
-	}
-
-	// Open reader on the database.
-	f, err := os.Open(db.path)
-	if err != nil {
-		_ = t.Rollback()
-		return err
-	}
-
-	// Copy the meta pages.
-	db.metalock.Lock()
-	_, err = io.CopyN(w, f, int64(db.pageSize*2))
-	db.metalock.Unlock()
-	if err != nil {
-		_ = t.Rollback()
-		_ = f.Close()
-		return fmt.Errorf("meta copy: %s", err)
-	}
-
-	// Copy data pages.
-	if _, err := io.Copy(w, f); err != nil {
-		_ = t.Rollback()
-		_ = f.Close()
-		return err
-	}
-
-	// Close read transaction and exit.
-	if err := t.Rollback(); err != nil {
-		_ = f.Close()
-		return err
-	}
-	return f.Close()
-}
-
-// CopyFile copies the entire database to file at the given path.
-// A reader transaction is maintained during the copy so it is safe to continue
-// using the database while a copy is in progress.
-func (db *DB) CopyFile(path string, mode os.FileMode) error {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, mode)
-	if err != nil {
-		return err
-	}
-
-	err = db.Copy(f)
-	if err != nil {
-		_ = f.Close()
-		return err
-	}
-	return f.Close()
 }
 
 // Stats retrieves ongoing performance stats for the database.
