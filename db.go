@@ -350,7 +350,6 @@ func (db *DB) beginTx() (*Tx, error) {
 
 	// Lock the meta pages while we initialize the transaction.
 	db.metalock.Lock()
-	defer db.metalock.Unlock()
 
 	// Exit if the database is not open yet.
 	if !db.opened {
@@ -364,6 +363,16 @@ func (db *DB) beginTx() (*Tx, error) {
 
 	// Keep track of transaction until it closes.
 	db.txs = append(db.txs, t)
+	n := len(db.txs)
+
+	// Unlock the meta pages.
+	db.metalock.Unlock()
+
+	// Update the transaction stats.
+	db.statlock.Lock()
+	db.stats.TxN++
+	db.stats.OpenTxN = n
+	db.statlock.Unlock()
 
 	return t, nil
 }
@@ -417,12 +426,14 @@ func (db *DB) removeTx(tx *Tx) {
 			break
 		}
 	}
+	n := len(db.txs)
 
 	// Unlock the meta pages.
 	db.metalock.Unlock()
 
 	// Merge statistics.
 	db.statlock.Lock()
+	db.stats.OpenTxN = n
 	db.stats.TxStats.add(&tx.stats)
 	db.statlock.Unlock()
 }
@@ -552,6 +563,10 @@ func (db *DB) allocate(count int) (*page, error) {
 
 // Stats represents statistics about the database.
 type Stats struct {
+	// Transaction stats
+	TxN     int // total number of completed read transactions
+	OpenTxN int // number of currently open read transactions
+
 	TxStats TxStats // global, ongoing stats.
 }
 

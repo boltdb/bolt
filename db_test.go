@@ -295,10 +295,10 @@ func TestDB_Consistency(t *testing.T) {
 				assert.Equal(t, "free", p.Type)
 			}
 			if p, _ := tx.Page(4); assert.NotNil(t, p) {
-				assert.Equal(t, "freelist", p.Type)
+				assert.Equal(t, "leaf", p.Type) // root leaf
 			}
 			if p, _ := tx.Page(5); assert.NotNil(t, p) {
-				assert.Equal(t, "leaf", p.Type) // root leaf
+				assert.Equal(t, "freelist", p.Type)
 			}
 			p, _ := tx.Page(6)
 			assert.Nil(t, p)
