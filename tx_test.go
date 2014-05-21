@@ -313,6 +313,31 @@ func TestTx_Check_Corrupt(t *testing.T) {
 	assert.Equal(t, "check fail: 1 errors occurred: page 3: already freed", msg)
 }
 
+// Ensure that the database can be copied to a file path.
+func TestTx_CopyFile(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		var dest = tempfile()
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
+			tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("bat"))
+			return nil
+		})
+
+		assert.NoError(t, db.View(func(tx *Tx) error { return tx.CopyFile(dest, 0600) }))
+
+		db2, err := Open(dest, 0600)
+		assert.NoError(t, err)
+		defer db2.Close()
+
+		db2.View(func(tx *Tx) error {
+			assert.Equal(t, []byte("bar"), tx.Bucket([]byte("widgets")).Get([]byte("foo")))
+			assert.Equal(t, []byte("bat"), tx.Bucket([]byte("widgets")).Get([]byte("baz")))
+			return nil
+		})
+	})
+}
+
 func ExampleTx_Rollback() {
 	// Open the database.
 	db, _ := Open(tempfile(), 0666)
@@ -345,4 +370,37 @@ func ExampleTx_Rollback() {
 
 	// Output:
 	// The value for 'foo' is still: bar
+}
+
+func ExampleTx_CopyFile() {
+	// Open the database.
+	db, _ := Open(tempfile(), 0666)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Create a bucket and a key.
+	db.Update(func(tx *Tx) error {
+		tx.CreateBucket([]byte("widgets"))
+		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
+		return nil
+	})
+
+	// Copy the database to another file.
+	toFile := tempfile()
+	db.View(func(tx *Tx) error { return tx.CopyFile(toFile, 0666) })
+	defer os.Remove(toFile)
+
+	// Open the cloned database.
+	db2, _ := Open(toFile, 0666)
+	defer db2.Close()
+
+	// Ensure that the key exists in the copy.
+	db2.View(func(tx *Tx) error {
+		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
+		fmt.Printf("The value for 'foo' in the clone is: %s\n", value)
+		return nil
+	})
+
+	// Output:
+	// The value for 'foo' in the clone is: bar
 }
