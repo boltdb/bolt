@@ -5,6 +5,8 @@ BRANCH=`git rev-parse --abbrev-ref HEAD`
 COMMIT=`git rev-parse --short HEAD`
 GOLDFLAGS="-X main.branch $(BRANCH) -X main.commit $(COMMIT)"
 
+default: build
+
 bench:
 	go test -v -test.run=NOTHINCONTAINSTHIS -test.bench=$(BENCH)
 

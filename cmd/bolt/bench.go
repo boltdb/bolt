@@ -100,6 +100,10 @@ func benchWrite(db *bolt.DB, options *BenchOptions, results *BenchResults) error
 		err = benchWriteSequential(db, options, results)
 	case "rnd":
 		err = benchWriteRandom(db, options, results)
+	case "seq-nest":
+		err = benchWriteSequentialNested(db, options, results)
+	case "rnd-nest":
+		err = benchWriteRandomNested(db, options, results)
 	default:
 		return fmt.Errorf("invalid write mode: %s", options.WriteMode)
 	}
@@ -117,6 +121,16 @@ func benchWriteSequential(db *bolt.DB, options *BenchOptions, results *BenchResu
 func benchWriteRandom(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return benchWriteWithSource(db, options, results, func() uint32 { return r.Uint32() })
+}
+
+func benchWriteSequentialNested(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
+	var i = uint32(0)
+	return benchWriteNestedWithSource(db, options, results, func() uint32 { i++; return i })
+}
+
+func benchWriteRandomNested(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return benchWriteNestedWithSource(db, options, results, func() uint32 { return r.Uint32() })
 }
 
 func benchWriteWithSource(db *bolt.DB, options *BenchOptions, results *BenchResults, keySource func() uint32) error {
@@ -144,6 +158,35 @@ func benchWriteWithSource(db *bolt.DB, options *BenchOptions, results *BenchResu
 	return nil
 }
 
+func benchWriteNestedWithSource(db *bolt.DB, options *BenchOptions, results *BenchResults, keySource func() uint32) error {
+	results.WriteOps = options.Iterations
+
+	for i := 0; i < options.Iterations; i += options.BatchSize {
+		err := db.Update(func(tx *bolt.Tx) error {
+			top, _ := tx.CreateBucketIfNotExists(benchBucketName)
+
+			var name = make([]byte, options.KeySize)
+			binary.BigEndian.PutUint32(name, keySource())
+			b, _ := top.CreateBucketIfNotExists(name)
+
+			for j := 0; j < options.BatchSize; j++ {
+				var key = make([]byte, options.KeySize)
+				var value = make([]byte, options.ValueSize)
+				binary.BigEndian.PutUint32(key, keySource())
+				if err := b.Put(key, value); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Reads from the database.
 func benchRead(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
 	var err error
@@ -151,7 +194,11 @@ func benchRead(db *bolt.DB, options *BenchOptions, results *BenchResults) error 
 
 	switch options.ReadMode {
 	case "seq":
-		err = benchReadSequential(db, options, results)
+		if options.WriteMode == "seq-nest" || options.WriteMode == "rnd-nest" {
+			err = benchReadSequentialNested(db, options, results)
+		} else {
+			err = benchReadSequential(db, options, results)
+		}
 	default:
 		return fmt.Errorf("invalid read mode: %s", options.ReadMode)
 	}
@@ -177,6 +224,40 @@ func benchReadSequential(db *bolt.DB, options *BenchOptions, results *BenchResul
 
 			if options.WriteMode == "seq" && count != options.Iterations {
 				return fmt.Errorf("read seq: iter mismatch: expected %d, got %d", options.Iterations, count)
+			}
+
+			results.ReadOps += count
+
+			// Make sure we do this for at least a second.
+			if time.Since(t) >= time.Second {
+				break
+			}
+		}
+
+		return nil
+	})
+}
+
+func benchReadSequentialNested(db *bolt.DB, options *BenchOptions, results *BenchResults) error {
+	return db.View(func(tx *bolt.Tx) error {
+		var t = time.Now()
+
+		for {
+			var count int
+			var top = tx.Bucket(benchBucketName)
+			top.ForEach(func(name, _ []byte) error {
+				c := top.Bucket(name).Cursor()
+				for k, v := c.First(); k != nil; k, v = c.Next() {
+					if v == nil {
+						return errors.New("invalid value")
+					}
+					count++
+				}
+				return nil
+			})
+
+			if options.WriteMode == "seq-nest" && count != options.Iterations {
+				return fmt.Errorf("read seq-nest: iter mismatch: expected %d, got %d", options.Iterations, count)
 			}
 
 			results.ReadOps += count
