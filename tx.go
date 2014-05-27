@@ -284,12 +284,14 @@ func (tx *Tx) CopyFile(path string, mode os.FileMode) error {
 }
 
 // Check performs several consistency checks on the database for this transaction.
-// An error is returned if any inconsistency is found or if executed on a read-only transaction.
+// An error is returned if any inconsistency is found.
+//
+// It can be safely run concurrently on a writable transaction. However, this
+// incurs a high cost for large databases and databases with a lot of subbuckets
+// because of caching. This overhead can be removed if running on a read-only
+// transaction, however, it is not safe to execute other writer transactions at
+// the same time.
 func (tx *Tx) Check() error {
-	if !tx.writable {
-		return ErrTxNotWritable
-	}
-
 	var errors ErrorList
 
 	// Check if any pages are double freed.
@@ -466,12 +468,10 @@ func (tx *Tx) forEachPage(pgid pgid, depth int, fn func(*page, int)) {
 }
 
 // Page returns page information for a given page number.
-// This is only available from writable transactions.
+// This is only safe for concurrent use when used by a writable transaction.
 func (tx *Tx) Page(id int) (*PageInfo, error) {
 	if tx.db == nil {
 		return nil, ErrTxClosed
-	} else if !tx.writable {
-		return nil, ErrTxNotWritable
 	} else if pgid(id) >= tx.meta.pgid {
 		return nil, nil
 	}

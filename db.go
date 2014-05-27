@@ -501,14 +501,6 @@ func (db *DB) Stats() Stats {
 	return db.stats
 }
 
-// Check performs several consistency checks on the database.
-// An error is returned if any inconsistency is found.
-func (db *DB) Check() error {
-	return db.Update(func(tx *Tx) error {
-		return tx.Check()
-	})
-}
-
 // This is for internal access to the raw data bytes from the C cursor, use
 // carefully, or not at all.
 func (db *DB) Info() *Info {
