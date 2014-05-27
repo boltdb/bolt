@@ -21,7 +21,12 @@ func Check(path string) {
 	defer db.Close()
 
 	// Perform consistency check.
-	if err := db.Check(); err != nil {
+	err = db.View(func(tx *bolt.Tx) error {
+		return tx.Check()
+	})
+
+	// Print out any errors that occur.
+	if err != nil {
 		if errors, ok := err.(bolt.ErrorList); ok {
 			for _, err := range errors {
 				println(err)
