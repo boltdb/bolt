@@ -76,8 +76,8 @@ type bucket struct {
 // newBucket returns a new bucket associated with a transaction.
 func newBucket(tx *Tx) Bucket {
 	var b = Bucket{tx: tx}
-	b.buckets = make(map[string]*Bucket)
 	if tx.writable {
+		b.buckets = make(map[string]*Bucket)
 		b.nodes = make(map[pgid]*node)
 	}
 	return b
@@ -115,8 +115,10 @@ func (b *Bucket) Cursor() *Cursor {
 // Bucket retrieves a nested bucket by name.
 // Returns nil if the bucket does not exist.
 func (b *Bucket) Bucket(name []byte) *Bucket {
-	if child := b.buckets[string(name)]; child != nil {
-		return child
+	if b.buckets != nil {
+		if child := b.buckets[string(name)]; child != nil {
+			return child
+		}
 	}
 
 	// Move cursor to key.
@@ -130,7 +132,9 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 
 	// Otherwise create a bucket and cache it.
 	var child = b.openBucket(v)
-	b.buckets[string(name)] = child
+	if b.buckets != nil {
+		b.buckets[string(name)] = child
+	}
 
 	return child
 }
@@ -139,8 +143,15 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 // from a parent into a Bucket
 func (b *Bucket) openBucket(value []byte) *Bucket {
 	var child = newBucket(b.tx)
-	child.bucket = &bucket{}
-	*child.bucket = *(*bucket)(unsafe.Pointer(&value[0]))
+
+	// If this is a writable transaction then we need to copy the bucket entry.
+	// Read-only transactions can point directly at the mmap entry.
+	if b.tx.writable {
+		child.bucket = &bucket{}
+		*child.bucket = *(*bucket)(unsafe.Pointer(&value[0]))
+	} else {
+		child.bucket = (*bucket)(unsafe.Pointer(&value[0]))
+	}
 
 	// Save a reference to the inline page if the bucket is inline.
 	if child.root == 0 {
