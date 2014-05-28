@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"os"
-	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -630,23 +629,6 @@ func (m *meta) sum64() uint64 {
 	var h = fnv.New64a()
 	_, _ = h.Write((*[unsafe.Offsetof(meta{}.checksum)]byte)(unsafe.Pointer(m))[:])
 	return h.Sum64()
-}
-
-// ErrorList represents a slice of errors.
-type ErrorList []error
-
-// Error returns a readable count of the errors in the list.
-func (l ErrorList) Error() string {
-	return fmt.Sprintf("%d errors occurred", len(l))
-}
-
-// join returns a error messages joined by a string.
-func (l ErrorList) join(sep string) string {
-	var a []string
-	for _, e := range l {
-		a = append(a, e.Error())
-	}
-	return strings.Join(a, sep)
 }
 
 // _assert will panic with a given formatted message if the given condition is false.

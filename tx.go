@@ -184,10 +184,10 @@ func (tx *Tx) Commit() error {
 	}
 
 	// If strict mode is enabled then perform a consistency check.
+	// Only the first consistency error is reported in the panic.
 	if tx.db.StrictMode {
-		if err := tx.Check(); err != nil {
-			err := err.(ErrorList)
-			panic("check fail: " + err.Error() + ": " + err.join("; "))
+		if err, ok := <-tx.Check(); ok {
+			panic("check fail: " + err.Error())
 		}
 	}
 
@@ -291,14 +291,18 @@ func (tx *Tx) CopyFile(path string, mode os.FileMode) error {
 // because of caching. This overhead can be removed if running on a read-only
 // transaction, however, it is not safe to execute other writer transactions at
 // the same time.
-func (tx *Tx) Check() error {
-	var errors ErrorList
+func (tx *Tx) Check() <-chan error {
+	ch := make(chan error)
+	go tx.check(ch)
+	return ch
+}
 
+func (tx *Tx) check(ch chan error) {
 	// Check if any pages are double freed.
 	freed := make(map[pgid]bool)
 	for _, id := range tx.db.freelist.all() {
 		if freed[id] {
-			errors = append(errors, fmt.Errorf("page %d: already freed", id))
+			ch <- fmt.Errorf("page %d: already freed", id)
 		}
 		freed[id] = true
 	}
@@ -312,26 +316,23 @@ func (tx *Tx) Check() error {
 	}
 
 	// Recursively check buckets.
-	tx.checkBucket(&tx.root, reachable, &errors)
+	tx.checkBucket(&tx.root, reachable, ch)
 
 	// Ensure all pages below high water mark are either reachable or freed.
 	for i := pgid(0); i < tx.meta.pgid; i++ {
 		_, isReachable := reachable[i]
 		if !isReachable && !freed[i] {
-			errors = append(errors, fmt.Errorf("page %d: unreachable unfreed", int(i)))
+			ch <- fmt.Errorf("page %d: unreachable unfreed", int(i))
 		} else if isReachable && freed[i] {
-			errors = append(errors, fmt.Errorf("page %d: reachable freed", int(i)))
+			ch <- fmt.Errorf("page %d: reachable freed", int(i))
 		}
 	}
 
-	if len(errors) > 0 {
-		return errors
-	}
-
-	return nil
+	// Close the channel to signal completion.
+	close(ch)
 }
 
-func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, errors *ErrorList) {
+func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, ch chan error) {
 	// Ignore inline buckets.
 	if b.root == 0 {
 		return
@@ -343,7 +344,7 @@ func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, errors *ErrorList
 		for i := pgid(0); i <= pgid(p.overflow); i++ {
 			var id = p.id + i
 			if _, ok := reachable[id]; ok {
-				*errors = append(*errors, fmt.Errorf("page %d: multiple references", int(id)))
+				ch <- fmt.Errorf("page %d: multiple references", int(id))
 			}
 			reachable[id] = p
 		}
@@ -351,18 +352,18 @@ func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, errors *ErrorList
 		// Retrieve page info.
 		info, err := b.tx.Page(int(p.id))
 		if err != nil {
-			*errors = append(*errors, err)
+			ch <- err
 		} else if info == nil {
-			*errors = append(*errors, fmt.Errorf("page %d: out of bounds: %d", int(p.id), int(b.tx.meta.pgid)))
+			ch <- fmt.Errorf("page %d: out of bounds: %d", int(p.id), int(b.tx.meta.pgid))
 		} else if info.Type != "branch" && info.Type != "leaf" {
-			*errors = append(*errors, fmt.Errorf("page %d: invalid type: %s", int(p.id), info.Type))
+			ch <- fmt.Errorf("page %d: invalid type: %s", int(p.id), info.Type)
 		}
 	})
 
 	// Check each bucket within this bucket.
 	_ = b.ForEach(func(k, v []byte) error {
 		if child := b.Bucket(k); child != nil {
-			tx.checkBucket(child, reachable, errors)
+			tx.checkBucket(child, reachable, ch)
 		}
 		return nil
 	})

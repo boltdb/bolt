@@ -53,12 +53,12 @@ func TestOpen_Check(t *testing.T) {
 	withTempPath(func(path string) {
 		db, err := Open(path, 0666)
 		assert.NoError(t, err)
-		assert.NoError(t, db.View(func(tx *Tx) error { return tx.Check() }))
+		assert.NoError(t, db.View(func(tx *Tx) error { return <-tx.Check() }))
 		db.Close()
 
 		db, err = Open(path, 0666)
 		assert.NoError(t, err)
-		assert.NoError(t, db.View(func(tx *Tx) error { return tx.Check() }))
+		assert.NoError(t, db.View(func(tx *Tx) error { return <-tx.Check() }))
 		db.Close()
 	})
 }
@@ -464,20 +464,13 @@ func withOpenDB(fn func(*DB, string)) {
 // mustCheck runs a consistency check on the database and panics if any errors are found.
 func mustCheck(db *DB) {
 	err := db.Update(func(tx *Tx) error {
-		return tx.Check()
+		return <-tx.Check()
 	})
 	if err != nil {
 		// Copy db off first.
 		var path = tempfile()
 		db.View(func(tx *Tx) error { return tx.CopyFile(path, 0600) })
-
-		if errors, ok := err.(ErrorList); ok {
-			for _, err := range errors {
-				warn(err)
-			}
-		}
-		warn(err)
-		panic("check failure: " + path)
+		panic("check failure: " + err.Error() + ": " + path)
 	}
 }
 

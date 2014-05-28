@@ -310,7 +310,7 @@ func TestTx_Check_Corrupt(t *testing.T) {
 		})
 	}()
 
-	assert.Equal(t, "check fail: 1 errors occurred: page 3: already freed", msg)
+	assert.Equal(t, "check fail: page 3: already freed", msg)
 }
 
 // Ensure that the database can be copied to a file path.
