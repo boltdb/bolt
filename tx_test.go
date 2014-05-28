@@ -338,6 +338,57 @@ func TestTx_CopyFile(t *testing.T) {
 	})
 }
 
+type failWriterError struct{}
+
+func (failWriterError) Error() string {
+	return "error injected for tests"
+}
+
+type failWriter struct {
+	// fail after this many bytes
+	After int
+}
+
+func (f *failWriter) Write(p []byte) (n int, err error) {
+	n = len(p)
+	if n > f.After {
+		n = f.After
+		err = failWriterError{}
+	}
+	f.After -= n
+	return n, err
+}
+
+// Ensure that Copy handles write errors right.
+func TestTx_CopyFile_Error_Meta(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
+			tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("bat"))
+			return nil
+		})
+
+		err := db.View(func(tx *Tx) error { return tx.Copy(&failWriter{}) })
+		assert.EqualError(t, err, "meta copy: error injected for tests")
+	})
+}
+
+// Ensure that Copy handles write errors right.
+func TestTx_CopyFile_Error_Normal(t *testing.T) {
+	withOpenDB(func(db *DB, path string) {
+		db.Update(func(tx *Tx) error {
+			tx.CreateBucket([]byte("widgets"))
+			tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
+			tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("bat"))
+			return nil
+		})
+
+		err := db.View(func(tx *Tx) error { return tx.Copy(&failWriter{3 * db.pageSize}) })
+		assert.EqualError(t, err, "error injected for tests")
+	})
+}
+
 func ExampleTx_Rollback() {
 	// Open the database.
 	db, _ := Open(tempfile(), 0666)
