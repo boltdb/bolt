@@ -242,7 +242,6 @@ func (tx *Tx) Copy(w io.Writer) error {
 	// Open reader on the database.
 	f, err := os.OpenFile(tx.db.path, os.O_RDONLY|odirect, 0)
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 
@@ -251,14 +250,12 @@ func (tx *Tx) Copy(w io.Writer) error {
 	_, err = io.CopyN(w, f, int64(tx.db.pageSize*2))
 	tx.db.metalock.Unlock()
 	if err != nil {
-		_ = tx.Rollback()
 		_ = f.Close()
 		return fmt.Errorf("meta copy: %s", err)
 	}
 
 	// Copy data pages.
 	if _, err := io.CopyN(w, f, tx.Size()-int64(tx.db.pageSize*2)); err != nil {
-		_ = tx.Rollback()
 		_ = f.Close()
 		return err
 	}
