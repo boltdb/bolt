@@ -192,6 +192,7 @@ func (n *node) write(p *page) {
 			elem.pos = uint32(uintptr(unsafe.Pointer(&b[0])) - uintptr(unsafe.Pointer(elem)))
 			elem.ksize = uint32(len(item.key))
 			elem.pgid = item.pgid
+			_assert(elem.pgid != p.id, "write: circular dependency occurred")
 		}
 
 		// Write data for the element to the end of the page.
