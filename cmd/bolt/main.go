@@ -10,11 +10,13 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/codegangsta/cli"
+	// "github.com/davecheney/profile"
 )
 
 var branch, commit string
 
 func main() {
+	// defer profile.Start(&profile.Config{CPUProfile: true, MemProfile: true}).Stop()
 	log.SetFlags(0)
 	NewApp().Run(os.Args)
 }

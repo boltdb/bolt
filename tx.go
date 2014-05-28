@@ -316,15 +316,13 @@ func (tx *Tx) check(ch chan error) {
 	}
 
 	// Recursively check buckets.
-	tx.checkBucket(&tx.root, reachable, ch)
+	tx.checkBucket(&tx.root, reachable, freed, ch)
 
 	// Ensure all pages below high water mark are either reachable or freed.
 	for i := pgid(0); i < tx.meta.pgid; i++ {
 		_, isReachable := reachable[i]
 		if !isReachable && !freed[i] {
 			ch <- fmt.Errorf("page %d: unreachable unfreed", int(i))
-		} else if isReachable && freed[i] {
-			ch <- fmt.Errorf("page %d: reachable freed", int(i))
 		}
 	}
 
@@ -332,7 +330,7 @@ func (tx *Tx) check(ch chan error) {
 	close(ch)
 }
 
-func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, ch chan error) {
+func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, freed map[pgid]bool, ch chan error) {
 	// Ignore inline buckets.
 	if b.root == 0 {
 		return
@@ -340,6 +338,10 @@ func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, ch chan error) {
 
 	// Check every page used by this bucket.
 	b.tx.forEachPage(b.root, 0, func(p *page, _ int) {
+		if p.id > tx.meta.pgid {
+			ch <- fmt.Errorf("page %d: out of bounds: %d", int(p.id), int(b.tx.meta.pgid))
+		}
+
 		// Ensure each page is only referenced once.
 		for i := pgid(0); i <= pgid(p.overflow); i++ {
 			var id = p.id + i
@@ -349,21 +351,18 @@ func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, ch chan error) {
 			reachable[id] = p
 		}
 
-		// Retrieve page info.
-		info, err := b.tx.Page(int(p.id))
-		if err != nil {
-			ch <- err
-		} else if info == nil {
-			ch <- fmt.Errorf("page %d: out of bounds: %d", int(p.id), int(b.tx.meta.pgid))
-		} else if info.Type != "branch" && info.Type != "leaf" {
-			ch <- fmt.Errorf("page %d: invalid type: %s", int(p.id), info.Type)
+		// We should only encounter un-freed leaf and branch pages.
+		if freed[p.id] {
+			ch <- fmt.Errorf("page %d: reachable freed", int(p.id))
+		} else if (p.flags&branchPageFlag) == 0 && (p.flags&leafPageFlag) == 0 {
+			ch <- fmt.Errorf("page %d: invalid type: %s", int(p.id), p.typ())
 		}
 	})
 
 	// Check each bucket within this bucket.
 	_ = b.ForEach(func(k, v []byte) error {
 		if child := b.Bucket(k); child != nil {
-			tx.checkBucket(child, reachable, ch)
+			tx.checkBucket(child, reachable, freed, ch)
 		}
 		return nil
 	})

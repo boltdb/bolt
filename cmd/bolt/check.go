@@ -38,7 +38,7 @@ func Check(path string) {
 
 		// Print summary of errors.
 		if count > 0 {
-			fatalf("%d errors found")
+			fatalf("%d errors found", count)
 		} else {
 			println("OK")
 		}
