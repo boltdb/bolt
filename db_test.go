@@ -335,6 +335,52 @@ func TestMeta_validate_version(t *testing.T) {
 	assert.Equal(t, m.validate(), ErrVersionMismatch)
 }
 
+// Ensure that a DB in strict mode will fail when corrupted.
+func TestDB_StrictMode(t *testing.T) {
+	var msg string
+	func() {
+		defer func() {
+			msg = fmt.Sprintf("%s", recover())
+		}()
+
+		withOpenDB(func(db *DB, path string) {
+			db.StrictMode = true
+			db.Update(func(tx *Tx) error {
+				tx.CreateBucket([]byte("foo"))
+
+				// Corrupt the DB by extending the high water mark.
+				tx.meta.pgid++
+
+				return nil
+			})
+		})
+	}()
+
+	assert.Equal(t, "check fail: page 4: unreachable unfreed", msg)
+}
+
+// Ensure that a double freeing a page will result in a panic.
+func TestDB_DoubleFree(t *testing.T) {
+	var msg string
+	func() {
+		defer func() {
+			msg = fmt.Sprintf("%s", recover())
+		}()
+		withOpenDB(func(db *DB, path string) {
+			db.Update(func(tx *Tx) error {
+				tx.CreateBucket([]byte("foo"))
+
+				// Corrupt the DB by adding a page to the freelist.
+				db.freelist.free(0, tx.page(3))
+
+				return nil
+			})
+		})
+	}()
+
+	assert.Equal(t, "tx 2: page 3 already freed in tx 0", msg)
+}
+
 func ExampleDB_Update() {
 	// Open the database.
 	db, _ := Open(tempfile(), 0666)

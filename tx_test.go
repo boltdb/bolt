@@ -288,31 +288,6 @@ func TestTx_OnCommit_Rollback(t *testing.T) {
 	assert.Equal(t, 0, x)
 }
 
-// Ensure that a Tx in strict mode will fail when corrupted.
-func TestTx_Check_Corrupt(t *testing.T) {
-	var msg string
-	func() {
-		defer func() {
-			msg = fmt.Sprintf("%s", recover())
-		}()
-
-		withOpenDB(func(db *DB, path string) {
-			db.StrictMode = true
-			db.Update(func(tx *Tx) error {
-				tx.CreateBucket([]byte("foo"))
-
-				// Corrupt the DB by adding a page to the freelist.
-				warn("---")
-				db.freelist.free(0, tx.page(3))
-
-				return nil
-			})
-		})
-	}()
-
-	assert.Equal(t, "check fail: page 3: already freed", msg)
-}
-
 // Ensure that the database can be copied to a file path.
 func TestTx_CopyFile(t *testing.T) {
 	withOpenDB(func(db *DB, path string) {
