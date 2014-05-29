@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"fmt"
 	"sort"
 	"unsafe"
 )
@@ -67,15 +68,31 @@ func (f *freelist) allocate(n int) pgid {
 }
 
 // free releases a page and its overflow for a given transaction id.
+// If the page is already free then a panic will occur.
 func (f *freelist) free(txid txid, p *page) {
-	var ids = f.pending[txid]
 	_assert(p.id > 1, "cannot free page 0 or 1: %d", p.id)
+
+	// Verify that page is not already free.
+	minid, maxid := p.id, p.id+pgid(p.overflow)
+	for _, id := range f.ids {
+		if id >= minid && id <= maxid {
+			panic(fmt.Sprintf("page %d already freed in tx", id))
+		}
+	}
+	for ptxid, m := range f.pending {
+		for _, id := range m {
+			if id >= minid && id <= maxid {
+				panic(fmt.Sprintf("tx %d: page %d already freed in tx %d", txid, id, ptxid))
+			}
+		}
+	}
+
+	// Free page and all its overflow pages.
+	var ids = f.pending[txid]
 	for i := 0; i < int(p.overflow+1); i++ {
 		ids = append(ids, p.id+pgid(i))
 	}
 	f.pending[txid] = ids
-
-	// DEBUG ONLY: f.check()
 }
 
 // release moves all page ids for a transaction id (or older) to the freelist.
@@ -123,26 +140,3 @@ func (f *freelist) write(p *page) {
 	p.count = uint16(len(ids))
 	copy(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[:], ids)
 }
-
-// check verifies there are no double free pages.
-// This is slow so it should only be used while debugging.
-// If errors are found then a panic invoked.
-/*
-func (f *freelist) check() {
-	var lookup = make(map[pgid]txid)
-	for _, id := range f.ids {
-		if _, ok := lookup[id]; ok {
-			panic(fmt.Sprintf("page %d already freed", id))
-		}
-		lookup[id] = 0
-	}
-	for txid, m := range f.pending {
-		for _, id := range m {
-			if _, ok := lookup[id]; ok {
-				panic(fmt.Sprintf("tx %d: page %d already freed in tx %d", txid, id, lookup[id]))
-			}
-			lookup[id] = txid
-		}
-	}
-}
-*/
