@@ -939,7 +939,7 @@ func ExampleBucket_Put() {
 	})
 
 	// Read value back in a different read-only transaction.
-	db.Update(func(tx *Tx) error {
+	db.View(func(tx *Tx) error {
 		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 		fmt.Printf("The value of 'foo' is: %s\n", value)
 		return nil
