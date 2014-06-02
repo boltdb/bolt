@@ -55,6 +55,7 @@ Below is a list of public, open source projects that use Bolt:
 * [MetricBase](https://github.com/msiebuhr/MetricBase) - Single-binary version of Graphite.
 * [Gitchain](https://github.com/gitchain/gitchain) - Decentralized, peer-to-peer Git repositories aka "Git meets Bitcoin".
 * [SkyDB](https://github.com/skydb/sky) - Behavioral analytics database.
+* [event-shuttle](https://github.com/sclasen/event-shuttle) - A Unix system service to collect and reliably deliver messages to Kafka.
 
 
 If you are using Bolt in a project please send a pull request to add it to the list.
