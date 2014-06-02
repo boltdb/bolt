@@ -70,12 +70,14 @@ func (f *freelist) allocate(n int) pgid {
 // free releases a page and its overflow for a given transaction id.
 // If the page is already free then a panic will occur.
 func (f *freelist) free(txid txid, p *page) {
+	warn("free:", txid, p.id, p.overflow)
 	_assert(p.id > 1, "cannot free page 0 or 1: %d", p.id)
 
 	// Verify that page is not already free.
 	minid, maxid := p.id, p.id+pgid(p.overflow)
 	for _, id := range f.ids {
 		if id >= minid && id <= maxid {
+			warn("  ‡", id, "|", minid, maxid)
 			panic(fmt.Sprintf("page %d already freed in tx", id))
 		}
 	}
@@ -90,6 +92,9 @@ func (f *freelist) free(txid txid, p *page) {
 	// Free page and all its overflow pages.
 	var ids = f.pending[txid]
 	for i := 0; i < int(p.overflow+1); i++ {
+		if p.id+pgid(i) == 55 {
+			warn("  •", txid, p.id+pgid(i))
+		}
 		ids = append(ids, p.id+pgid(i))
 	}
 	f.pending[txid] = ids
