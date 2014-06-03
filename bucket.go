@@ -613,6 +613,7 @@ func (b *Bucket) rebalance() {
 // node creates a node from a page and associates it with a given parent.
 func (b *Bucket) node(pgid pgid, parent *node) *node {
 	_assert(b.nodes != nil, "nodes map expected")
+
 	// Retrieve node if it's already been created.
 	if n := b.nodes[pgid]; n != nil {
 		return n

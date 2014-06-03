@@ -580,17 +580,17 @@ func TestBucket_Stats(t *testing.T) {
 			stats := b.Stats()
 			assert.Equal(t, 1, stats.BranchPageN, "BranchPageN")
 			assert.Equal(t, 0, stats.BranchOverflowN, "BranchOverflowN")
-			assert.Equal(t, 6, stats.LeafPageN, "LeafPageN")
+			assert.Equal(t, 7, stats.LeafPageN, "LeafPageN")
 			assert.Equal(t, 2, stats.LeafOverflowN, "LeafOverflowN")
 			assert.Equal(t, 501, stats.KeyN, "KeyN")
 			assert.Equal(t, 2, stats.Depth, "Depth")
 
 			branchInuse := pageHeaderSize            // branch page header
-			branchInuse += 6 * branchPageElementSize // branch elements
-			branchInuse += 6 * 3                     // branch keys (6 3-byte keys)
+			branchInuse += 7 * branchPageElementSize // branch elements
+			branchInuse += 7 * 3                     // branch keys (6 3-byte keys)
 			assert.Equal(t, branchInuse, stats.BranchInuse, "BranchInuse")
 
-			leafInuse := 6 * pageHeaderSize          // leaf page header
+			leafInuse := 7 * pageHeaderSize          // leaf page header
 			leafInuse += 501 * leafPageElementSize   // leaf elements
 			leafInuse += 500*3 + len(big_key)        // leaf keys
 			leafInuse += 1*10 + 2*90 + 3*400 + 10000 // leaf values
@@ -599,7 +599,7 @@ func TestBucket_Stats(t *testing.T) {
 			if os.Getpagesize() == 4096 {
 				// Incompatible page size
 				assert.Equal(t, 4096, stats.BranchAlloc, "BranchAlloc")
-				assert.Equal(t, 32768, stats.LeafAlloc, "LeafAlloc")
+				assert.Equal(t, 36864, stats.LeafAlloc, "LeafAlloc")
 			}
 
 			assert.Equal(t, 1, stats.BucketN, "BucketN")
@@ -612,6 +612,9 @@ func TestBucket_Stats(t *testing.T) {
 
 // Ensure a bucket with random insertion utilizes fill percentage correctly.
 func TestBucket_Stats_RandomFill(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 	if os.Getpagesize() != 4096 {
 		t.Skip("invalid page size for test")
 	}
@@ -621,6 +624,7 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 
 		// Add a set of values in random order. It will be the same random
 		// order so we can maintain consistency between test runs.
+		var count int
 		r := rand.New(rand.NewSource(42))
 		for _, i := range r.Perm(1000) {
 			db.Update(func(tx *Tx) error {
@@ -628,11 +632,12 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 				for _, j := range r.Perm(100) {
 					index := (j * 10000) + i
 					b.Put([]byte(fmt.Sprintf("%d000000000000000", index)), []byte("0000000000"))
+					count++
 				}
 				return nil
 			})
-			mustCheck(db)
 		}
+		mustCheck(db)
 
 		db.View(func(tx *Tx) error {
 			s := tx.Bucket([]byte("woojits")).Stats()
@@ -640,13 +645,13 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 
 			assert.Equal(t, 22, s.BranchPageN, "BranchPageN")
 			assert.Equal(t, 0, s.BranchOverflowN, "BranchOverflowN")
-			assert.Equal(t, 62963, s.BranchInuse, "BranchInuse")
+			assert.Equal(t, 61708, s.BranchInuse, "BranchInuse")
 			assert.Equal(t, 90112, s.BranchAlloc, "BranchAlloc")
 
-			assert.Equal(t, 1677, s.LeafPageN, "LeafPageN")
+			assert.Equal(t, 1643, s.LeafPageN, "LeafPageN")
 			assert.Equal(t, 0, s.LeafOverflowN, "LeafOverflowN")
-			assert.Equal(t, 4714722, s.LeafInuse, "LeafInuse")
-			assert.Equal(t, 6868992, s.LeafAlloc, "LeafAlloc")
+			assert.Equal(t, 4714178, s.LeafInuse, "LeafInuse")
+			assert.Equal(t, 6729728, s.LeafAlloc, "LeafAlloc")
 			return nil
 		})
 	})

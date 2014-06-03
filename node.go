@@ -14,7 +14,7 @@ type node struct {
 	key        []byte
 	pgid       pgid
 	parent     *node
-	children   []*node
+	children   nodes
 	inodes     inodes
 }
 
@@ -231,6 +231,7 @@ func (n *node) split(pageSize int) []*node {
 	// If we can fit our extra keys on the next page then merge into it.
 	if next := n.nextSibling(); next != nil && next.size()+sz1 < threshold {
 		next.inodes = append(n.inodes[splitIndex:], next.inodes...)
+		n.inodes = n.inodes[:splitIndex]
 		return []*node{n}
 	}
 
@@ -284,22 +285,29 @@ func (n *node) splitIndex(threshold int) (index, sz int) {
 func (n *node) spill() error {
 	var tx = n.bucket.tx
 
-	// Spill child nodes first.
-	for _, child := range n.children {
-		if err := child.spill(); err != nil {
+	// Spill child nodes first. Child nodes can materialize sibling nodes in
+	// the case of split-merge so we cannot use a range loop. We have to check
+	// the children size on every loop iteration.
+	sort.Sort(n.children)
+	for i := 0; i < len(n.children); i++ {
+		if err := n.children[i].spill(); err != nil {
 			return err
 		}
 	}
 
-	// Add node's page to the freelist if it's not new.
-	if n.pgid > 0 {
-		tx.db.freelist.free(tx.id(), tx.page(n.pgid))
-		n.pgid = 0
-	}
+	// We no longer need the child list because it's only used for spill tracking.
+	n.children = nil
 
-	// Spill nodes by deepest first.
+	// Spill nodes by deepest first. The first node returned from split() will
+	// always be "n".
 	var nodes = n.split(tx.db.pageSize)
 	for _, node := range nodes {
+		// Add node's page to the freelist if it's not new.
+		if node.pgid > 0 {
+			tx.db.freelist.free(tx.id(), tx.page(node.pgid))
+			node.pgid = 0
+		}
+
 		// Allocate contiguous space for the node.
 		p, err := tx.allocate((node.size() / tx.db.pageSize) + 1)
 		if err != nil {
@@ -564,6 +572,12 @@ func (n *node) dump() {
 	warn("")
 }
 */
+
+type nodes []*node
+
+func (s nodes) Len() int           { return len(s) }
+func (s nodes) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s nodes) Less(i, j int) bool { return bytes.Compare(s[i].inodes[0].key, s[j].inodes[0].key) == -1 }
 
 // inode represents an internal node inside of a node.
 // It can be used to point to elements in a page or point
