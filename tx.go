@@ -239,10 +239,15 @@ func (tx *Tx) close() {
 // using the database while a copy is in progress.
 // Copy will write exactly tx.Size() bytes into the writer.
 func (tx *Tx) Copy(w io.Writer) error {
-	// Open reader on the database.
-	f, err := os.OpenFile(tx.db.path, os.O_RDONLY|odirect, 0)
-	if err != nil {
-		return err
+	var f *os.File
+	var err error
+
+	// Attempt to open reader directly.
+	if f, err = os.OpenFile(tx.db.path, os.O_RDONLY|odirect, 0); err != nil {
+		// Fallback to a regular open if that doesn't work.
+		if f, err = os.OpenFile(tx.db.path, os.O_RDONLY, 0); err != nil {
+			return err
+		}
 	}
 
 	// Copy the meta pages.
