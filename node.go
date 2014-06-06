@@ -486,7 +486,6 @@ func (n *node) rebalance() {
 		target.inodes = append(target.inodes, n.inodes...)
 		n.parent.del(n.key)
 		n.parent.removeChild(n)
-		n.parent.put(target.key, target.inodes[0].key, nil, target.pgid, 0)
 		delete(n.bucket.nodes, n.pgid)
 		n.free()
 	}
