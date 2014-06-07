@@ -2,6 +2,7 @@ package bolt
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -183,6 +184,50 @@ func TestBucket_Delete_Large(t *testing.T) {
 			var b = tx.Bucket([]byte("widgets"))
 			for i := 0; i < 100; i++ {
 				assert.Nil(t, b.Get([]byte(strconv.Itoa(i))))
+			}
+			return nil
+		})
+	})
+}
+
+// Ensure that deleting a large set of keys will work correctly.
+// Reported by Jordan Sherer: https://github.com/boltdb/bolt/issues/184
+func TestBucket_Delete_Large2(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	withOpenDB(func(db *DB, path string) {
+		k := make([]byte, 16)
+		for i := uint64(0); i < 10000; i++ {
+			err := db.Update(func(tx *Tx) error {
+				b, err := tx.CreateBucketIfNotExists([]byte("0"))
+				if err != nil {
+					t.Fatalf("bucket error: %s", err)
+				}
+
+				for j := uint64(0); j < 1000; j++ {
+					binary.BigEndian.PutUint64(k[:8], i)
+					binary.BigEndian.PutUint64(k[8:], j)
+					if err := b.Put(k, nil); err != nil {
+						t.Fatalf("put error: %s", err)
+					}
+				}
+
+				return nil
+			})
+
+			if err != nil {
+				t.Fatalf("update error: %s", err)
+			}
+		}
+
+		// Delete all of them in one large transaction
+		db.Update(func(tx *Tx) error {
+			b := tx.Bucket([]byte("0"))
+			c := b.Cursor()
+			for k, _ := c.First(); k != nil; k, _ = c.Next() {
+				b.Delete(k)
 			}
 			return nil
 		})
