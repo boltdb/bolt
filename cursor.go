@@ -55,29 +55,7 @@ func (c *Cursor) Last() (key []byte, value []byte) {
 // If the cursor is at the end of the bucket then a nil key and value are returned.
 func (c *Cursor) Next() (key []byte, value []byte) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
-
-	// Attempt to move over one element until we're successful.
-	// Move up the stack as we hit the end of each page in our stack.
-	var i int
-	for i = len(c.stack) - 1; i >= 0; i-- {
-		elem := &c.stack[i]
-		if elem.index < elem.count()-1 {
-			elem.index++
-			break
-		}
-	}
-
-	// If we've hit the root page then stop and return. This will leave the
-	// cursor on this last page.
-	if i == -1 {
-		return nil, nil
-	}
-
-	// Otherwise start from where we left off in the stack and find the
-	// first element of the first leaf page.
-	c.stack = c.stack[:i+1]
-	c.first()
-	k, v, flags := c.keyValue()
+	k, v, flags := c.next()
 	if (flags & uint32(bucketLeafFlag)) != 0 {
 		return k, nil
 	}
