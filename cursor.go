@@ -111,6 +111,25 @@ func (c *Cursor) Seek(seek []byte) (key []byte, value []byte) {
 	return k, v
 }
 
+// Delete removes the current key/value under the cursor from the bucket.
+// Delete fails if current key/value is a bucket or if the transaction is not writable.
+func (c *Cursor) Delete() error {
+	if c.bucket.tx.db == nil {
+		return ErrTxClosed
+	} else if !c.bucket.Writable() {
+		return ErrTxNotWritable
+	}
+
+	key, _, flags := c.keyValue()
+	// Return an error if current value is a bucket.
+	if (flags & bucketLeafFlag) != 0 {
+		return ErrIncompatibleValue
+	}
+	c.node().del(key)
+
+	return nil
+}
+
 // seek moves the cursor to a given key and returns it.
 // If the key does not exist then the next key is used.
 func (c *Cursor) seek(seek []byte) (key []byte, value []byte, flags uint32) {
