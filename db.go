@@ -6,7 +6,6 @@ import (
 	"hash/fnv"
 	"os"
 	"sync"
-	"syscall"
 	"unsafe"
 )
 
@@ -120,7 +119,7 @@ func Open(path string, mode os.FileMode) (*DB, error) {
 	// Lock file so that other processes using Bolt cannot use the database
 	// at the same time. This would cause corruption since the two processes
 	// would write meta pages and free pages separately.
-	if err := syscall.Flock(int(db.file.Fd()), syscall.LOCK_EX); err != nil {
+	if err := flock(db.file); err != nil {
 		_ = db.close()
 		return nil, err
 	}
@@ -192,8 +191,13 @@ func (db *DB) mmap(minsz int) error {
 	}
 	size = db.mmapSize(size)
 
+	// Truncate the database to the size of the mmap.
+	if err := db.file.Truncate(int64(size)); err != nil {
+		return fmt.Errorf("truncate: %s", err)
+	}
+
 	// Memory-map the data file as a byte slice.
-	if db.data, err = syscall.Mmap(int(db.file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
+	if db.data, err = mmap(db.file, size); err != nil {
 		return err
 	}
 
@@ -215,7 +219,7 @@ func (db *DB) mmap(minsz int) error {
 // munmap unmaps the data file from memory.
 func (db *DB) munmap() error {
 	if db.data != nil {
-		if err := syscall.Munmap(db.data); err != nil {
+		if err := munmap(db.data); err != nil {
 			return fmt.Errorf("unmap error: " + err.Error())
 		}
 		db.data = nil
@@ -314,7 +318,7 @@ func (db *DB) close() error {
 	// Close file handles.
 	if db.file != nil {
 		// Unlock the file.
-		_ = syscall.Flock(int(db.file.Fd()), syscall.LOCK_UN)
+		_ = funlock(db.file)
 
 		// Close the file descriptor.
 		if err := db.file.Close(); err != nil {

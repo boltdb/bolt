@@ -5,11 +5,11 @@ import (
 	"syscall"
 )
 
-var odirect = syscall.O_DIRECT
+var odirect int
 
 // fdatasync flushes written data to a file descriptor.
 func fdatasync(f *os.File) error {
-	return syscall.Fdatasync(int(f.Fd()))
+	return f.Sync()
 }
 
 // flock acquires an advisory lock on a file descriptor.
