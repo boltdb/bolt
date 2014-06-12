@@ -1,6 +1,7 @@
 package bolt
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 	"unsafe"
@@ -23,36 +24,48 @@ func funlock(f *os.File) error {
 	return nil
 }
 
-// mmap memory maps a file to a byte slice.
+// mmap memory maps a DB's data file.
 // Based on: https://github.com/edsrzf/mmap-go
-func mmap(f *os.File, sz int) ([]byte, error) {
+func mmap(db *DB, sz int) error {
+	// Truncate the database to the size of the mmap.
+	if err := db.file.Truncate(int64(sz)); err != nil {
+		return fmt.Errorf("truncate: %s", err)
+	}
+
 	// Open a file mapping handle.
-	sizelo, sizehi := uint32(sz>>32), uint32(sz&0xffffffff)
-	h, errno := syscall.CreateFileMapping(syscall.Handle(f.Fd()), nil, syscall.PAGE_READONLY, sizehi, sizelo, nil)
+	sizelo := uint32(sz >> 32)
+	sizehi := uint32(sz & 0xffffffff)
+	h, errno := syscall.CreateFileMapping(syscall.Handle(db.file.Fd()), nil, syscall.PAGE_READONLY, sizelo, sizehi, nil)
 	if h == 0 {
-		return nil, os.NewSyscallError("CreateFileMapping", errno)
+		return os.NewSyscallError("CreateFileMapping", errno)
 	}
 
 	// Create the memory map.
 	addr, errno := syscall.MapViewOfFile(h, syscall.FILE_MAP_READ, 0, 0, uintptr(sz))
 	if addr == 0 {
-		return nil, os.NewSyscallError("MapViewOfFile", errno)
+		return os.NewSyscallError("MapViewOfFile", errno)
 	}
 
 	// Close mapping handle.
 	if err := syscall.CloseHandle(syscall.Handle(h)); err != nil {
-		return nil, os.NewSyscallError("CloseHandle", err)
+		return os.NewSyscallError("CloseHandle", err)
 	}
 
-	// Convert to a byte slice.
-	b := ((*[0xFFFFFFF]byte)(unsafe.Pointer(addr)))[0:sz]
-	return b, nil
+	// Convert to a byte array.
+	db.data = ((*[maxMapSize]byte)(unsafe.Pointer(addr)))
+	db.datasz = sz
+
+	return nil
 }
 
 // munmap unmaps a pointer from a file.
 // Based on: https://github.com/edsrzf/mmap-go
-func munmap(b []byte) error {
-	addr := (uintptr)(unsafe.Pointer(&b[0]))
+func munmap(db *DB) error {
+	if db.data == nil {
+		return nil
+	}
+
+	addr := (uintptr)(unsafe.Pointer(&db.data[0]))
 	if err := syscall.UnmapViewOfFile(addr); err != nil {
 		return os.NewSyscallError("UnmapViewOfFile", err)
 	}

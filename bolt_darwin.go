@@ -3,6 +3,7 @@ package bolt
 import (
 	"os"
 	"syscall"
+	"unsafe"
 )
 
 var odirect int
@@ -22,12 +23,31 @@ func funlock(f *os.File) error {
 	return syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 }
 
-// mmap memory maps a file to a byte slice.
-func mmap(f *os.File, sz int) ([]byte, error) {
-	return syscall.Mmap(int(f.Fd()), 0, sz, syscall.PROT_READ, syscall.MAP_SHARED)
+// mmap memory maps a DB's data file.
+func mmap(db *DB, sz int) error {
+	b, err := syscall.Mmap(int(db.file.Fd()), 0, sz, syscall.PROT_READ, syscall.MAP_SHARED)
+	if err != nil {
+		return err
+	}
+
+	// Save the original byte slice and convert to a byte array pointer.
+	db.dataref = b
+	db.data = (*[maxMapSize]byte)(unsafe.Pointer(&b[0]))
+	db.datasz = sz
+	return nil
 }
 
-// munmap unmaps a pointer from a file.
-func munmap(b []byte) error {
-	return syscall.Munmap(b)
+// munmap unmaps a DB's data file from memory.
+func munmap(db *DB) error {
+	// Ignore the unmap if we have no mapped data.
+	if db.dataref == nil {
+		return nil
+	}
+
+	// Unmap using the original byte slice.
+	err := syscall.Munmap(db.dataref)
+	db.dataref = nil
+	db.data = nil
+	db.datasz = 0
+	return err
 }

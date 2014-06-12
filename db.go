@@ -67,7 +67,9 @@ type DB struct {
 
 	path     string
 	file     *os.File
-	data     []byte
+	dataref  []byte
+	data     *[maxMapSize]byte
+	datasz   int
 	meta0    *meta
 	meta1    *meta
 	pageSize int
@@ -191,13 +193,8 @@ func (db *DB) mmap(minsz int) error {
 	}
 	size = db.mmapSize(size)
 
-	// Truncate the database to the size of the mmap.
-	if err := db.file.Truncate(int64(size)); err != nil {
-		return fmt.Errorf("truncate: %s", err)
-	}
-
 	// Memory-map the data file as a byte slice.
-	if db.data, err = mmap(db.file, size); err != nil {
+	if err := mmap(db, size); err != nil {
 		return err
 	}
 
@@ -218,11 +215,8 @@ func (db *DB) mmap(minsz int) error {
 
 // munmap unmaps the data file from memory.
 func (db *DB) munmap() error {
-	if db.data != nil {
-		if err := munmap(db.data); err != nil {
-			return fmt.Errorf("unmap error: " + err.Error())
-		}
-		db.data = nil
+	if err := munmap(db); err != nil {
+		return fmt.Errorf("unmap error: " + err.Error())
 	}
 	return nil
 }
@@ -507,7 +501,7 @@ func (db *DB) Stats() Stats {
 // This is for internal access to the raw data bytes from the C cursor, use
 // carefully, or not at all.
 func (db *DB) Info() *Info {
-	return &Info{db.data, db.pageSize}
+	return &Info{uintptr(unsafe.Pointer(&db.data[0])), db.pageSize}
 }
 
 // page retrieves a page reference from the mmap based on the current page size.
@@ -544,7 +538,7 @@ func (db *DB) allocate(count int) (*page, error) {
 	// Resize mmap() if we're at the end.
 	p.id = db.rwtx.meta.pgid
 	var minsz = int((p.id+pgid(count))+1) * db.pageSize
-	if minsz >= len(db.data) {
+	if minsz >= db.datasz {
 		if err := db.mmap(minsz); err != nil {
 			return nil, fmt.Errorf("mmap allocate error: %s", err)
 		}
@@ -579,7 +573,7 @@ func (s *Stats) add(other *Stats) {
 }
 
 type Info struct {
-	Data     []byte
+	Data     uintptr
 	PageSize int
 }
 
