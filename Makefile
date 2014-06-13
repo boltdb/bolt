@@ -38,7 +38,7 @@ build: get
 	@mkdir -p bin
 	@go build -ldflags=$(GOLDFLAGS) -a -o bin/bolt ./cmd/bolt
 
-test: fmt errcheck
+test: fmt
 	@go get github.com/stretchr/testify/assert
 	@echo "=== TESTS ==="
 	@go test -v -cover -test.run=$(TEST)
