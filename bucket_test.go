@@ -190,9 +190,9 @@ func TestBucket_Delete_Large(t *testing.T) {
 	})
 }
 
-// Ensure that deleting a large set of keys will work correctly.
-// Reported by Jordan Sherer: https://github.com/boltdb/bolt/issues/184
-func TestBucket_Delete_Large2(t *testing.T) {
+// Deleting a very large list of keys will overflow the freelist.
+// https://github.com/boltdb/bolt/issues/192
+func TestBucket_Delete_ErrFreelistOverflow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -223,7 +223,7 @@ func TestBucket_Delete_Large2(t *testing.T) {
 		}
 
 		// Delete all of them in one large transaction
-		db.Update(func(tx *Tx) error {
+		err := db.Update(func(tx *Tx) error {
 			b := tx.Bucket([]byte("0"))
 			c := b.Cursor()
 			for k, _ := c.First(); k != nil; k, _ = c.Next() {
@@ -231,6 +231,9 @@ func TestBucket_Delete_Large2(t *testing.T) {
 			}
 			return nil
 		})
+
+		// Check that a freelist overflow occurred.
+		assert.Equal(t, ErrFreelistOverflow, err)
 	})
 }
 
