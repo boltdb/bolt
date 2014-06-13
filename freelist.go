@@ -1,9 +1,16 @@
 package bolt
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"unsafe"
+)
+
+var (
+	// ErrFreelistOverflow is returned when the total number of free pages
+	// exceeds 65,536 and the freelist cannot hold any more.
+	ErrFreelistOverflow = errors.New("freelist overflow")
 )
 
 // freelist represents a list of all pages that are available for allocation.
@@ -134,9 +141,19 @@ func (f *freelist) read(p *page) {
 // write writes the page ids onto a freelist page. All free and pending ids are
 // saved to disk since in the event of a program crash, all pending ids will
 // become free.
-func (f *freelist) write(p *page) {
+func (f *freelist) write(p *page) error {
+	// Combine the old free pgids and pgids waiting on an open transaction.
 	ids := f.all()
+
+	// Make sure that the sum of all free pages is less than the max uint16 size.
+	if len(ids) > (1 << 16) {
+		return ErrFreelistOverflow
+	}
+
+	// Update the header and write the ids to the page.
 	p.flags |= freelistPageFlag
 	p.count = uint16(len(ids))
 	copy(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[:], ids)
+
+	return nil
 }

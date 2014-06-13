@@ -173,7 +173,9 @@ func (tx *Tx) Commit() error {
 		tx.close()
 		return err
 	}
-	tx.db.freelist.write(p)
+	if err := tx.db.freelist.write(p); err != nil {
+		return err
+	}
 	tx.meta.freelist = p.id
 
 	// Write dirty pages to disk.
