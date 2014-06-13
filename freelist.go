@@ -113,6 +113,11 @@ func (f *freelist) release(txid txid) {
 	sort.Sort(pgids(f.ids))
 }
 
+// rollback removes the pages from a given pending tx.
+func (f *freelist) rollback(txid txid) {
+	delete(f.pending, txid)
+}
+
 // isFree returns whether a given page is in the free list.
 func (f *freelist) isFree(pgid pgid) bool {
 	for _, id := range f.ids {
@@ -146,7 +151,7 @@ func (f *freelist) write(p *page) error {
 	ids := f.all()
 
 	// Make sure that the sum of all free pages is less than the max uint16 size.
-	if len(ids) > (1 << 16) {
+	if len(ids) >= 65565 {
 		return ErrFreelistOverflow
 	}
 
@@ -156,4 +161,21 @@ func (f *freelist) write(p *page) error {
 	copy(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[:], ids)
 
 	return nil
+}
+
+// reload reads the freelist from a page and filters out pending items.
+func (f *freelist) reload(p *page) {
+	f.read(p)
+
+	// Filter out pending free pages.
+	ids := f.ids
+	f.ids = nil
+
+	var a []pgid
+	for _, id := range ids {
+		if !f.isFree(id) {
+			a = append(a, id)
+		}
+	}
+	f.ids = a
 }

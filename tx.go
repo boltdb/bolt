@@ -157,7 +157,7 @@ func (tx *Tx) Commit() error {
 	// spill data onto dirty pages.
 	startTime = time.Now()
 	if err := tx.root.spill(); err != nil {
-		tx.close()
+		tx.rollback()
 		return err
 	}
 	tx.stats.SpillTime += time.Since(startTime)
@@ -170,10 +170,11 @@ func (tx *Tx) Commit() error {
 	tx.db.freelist.free(tx.id(), tx.db.page(tx.meta.freelist))
 	p, err := tx.allocate((tx.db.freelist.size() / tx.db.pageSize) + 1)
 	if err != nil {
-		tx.close()
+		tx.rollback()
 		return err
 	}
 	if err := tx.db.freelist.write(p); err != nil {
+		tx.rollback()
 		return err
 	}
 	tx.meta.freelist = p.id
@@ -181,7 +182,7 @@ func (tx *Tx) Commit() error {
 	// Write dirty pages to disk.
 	startTime = time.Now()
 	if err := tx.write(); err != nil {
-		tx.close()
+		tx.rollback()
 		return err
 	}
 
@@ -195,7 +196,7 @@ func (tx *Tx) Commit() error {
 
 	// Write meta to disk.
 	if err := tx.writeMeta(); err != nil {
-		tx.close()
+		tx.rollback()
 		return err
 	}
 	tx.stats.WriteTime += time.Since(startTime)
@@ -217,8 +218,16 @@ func (tx *Tx) Rollback() error {
 	if tx.db == nil {
 		return ErrTxClosed
 	}
-	tx.close()
+	tx.rollback()
 	return nil
+}
+
+func (tx *Tx) rollback() {
+	if tx.writable {
+		tx.db.freelist.rollback(tx.id())
+		tx.db.freelist.reload(tx.db.page(tx.db.meta().freelist))
+	}
+	tx.close()
 }
 
 func (tx *Tx) close() {
