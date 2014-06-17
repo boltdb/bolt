@@ -556,8 +556,12 @@ func (db *DB) allocate(count int) (*page, error) {
 
 // Stats represents statistics about the database.
 type Stats struct {
+	// Freelist stats
+	FreelistN     int // total number of pages on the freelist
+	FreelistAlloc int // total bytes used by the freelist and the pages on it
+
 	// Transaction stats
-	TxN     int // total number of completed read transactions
+	TxN     int // total number of started read transactions
 	OpenTxN int // number of currently open read transactions
 
 	TxStats TxStats // global, ongoing stats.

@@ -22,7 +22,16 @@ type freelist struct {
 
 // size returns the size of the page after serialization.
 func (f *freelist) size() int {
-	return pageHeaderSize + (int(unsafe.Sizeof(pgid(0))) * len(f.all()))
+	return pageHeaderSize + (int(unsafe.Sizeof(pgid(0))) * f.count())
+}
+
+// count returns count of pages on the freelist
+func (f *freelist) count() int {
+	var count = len(f.ids)
+	for _, list := range f.pending {
+		count += len(list)
+	}
+	return count
 }
 
 // all returns a list of all free ids and all pending ids in one sorted list.

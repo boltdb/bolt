@@ -253,7 +253,8 @@ func TestDB_Stats(t *testing.T) {
 			return err
 		})
 		stats := db.Stats()
-		assert.Equal(t, 2, stats.TxStats.PageCount)
+		assert.Equal(t, 2, stats.TxStats.PageCount, "PageCount")
+		assert.Equal(t, 2, stats.FreelistN, "FreelistN %d", db.freelist.count())
 	})
 }
 

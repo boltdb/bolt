@@ -232,11 +232,17 @@ func (tx *Tx) rollback() {
 
 func (tx *Tx) close() {
 	if tx.writable {
+		// Grab freelist stats.
+		var freelistN = tx.db.freelist.count()
+		var freelistAlloc = tx.db.freelist.size()
+
 		// Remove writer lock.
 		tx.db.rwlock.Unlock()
 
 		// Merge statistics.
 		tx.db.statlock.Lock()
+		tx.db.stats.FreelistN = freelistN
+		tx.db.stats.FreelistAlloc = freelistAlloc
 		tx.db.stats.TxStats.add(&tx.stats)
 		tx.db.statlock.Unlock()
 	} else {
