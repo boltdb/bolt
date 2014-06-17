@@ -427,16 +427,12 @@ func (db *DB) removeTx(tx *Tx) {
 			break
 		}
 	}
-	n := len(db.txs)
 
 	// Unlock the meta pages.
 	db.metalock.Unlock()
 
 	// Merge statistics.
-	db.statlock.Lock()
-	db.stats.OpenTxN = n
-	db.stats.TxStats.add(&tx.stats)
-	db.statlock.Unlock()
+	db.mergeStats(&tx.stats)
 }
 
 // Update executes a function within the context of a read-write managed transaction.
@@ -554,10 +550,24 @@ func (db *DB) allocate(count int) (*page, error) {
 	return p, nil
 }
 
+// mergeStats updates db stats in thread-safe manner.
+func (db *DB) mergeStats(txStats *TxStats) {
+	db.statlock.Lock()
+	db.stats.FreelistN = db.freelist.count()
+	db.stats.FreelistAlloc = db.freelist.size()
+	db.stats.OpenTxN = len(db.txs)
+	db.stats.TxStats.add(txStats)
+	db.statlock.Unlock()
+}
+
 // Stats represents statistics about the database.
 type Stats struct {
+	// Freelist stats
+	FreelistN     int // total number of pages on the freelist
+	FreelistAlloc int // total bytes used by the freelist and the pages on it
+
 	// Transaction stats
-	TxN     int // total number of completed read transactions
+	TxN     int // total number of started read transactions
 	OpenTxN int // number of currently open read transactions
 
 	TxStats TxStats // global, ongoing stats.

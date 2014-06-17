@@ -236,9 +236,7 @@ func (tx *Tx) close() {
 		tx.db.rwlock.Unlock()
 
 		// Merge statistics.
-		tx.db.statlock.Lock()
-		tx.db.stats.TxStats.add(&tx.stats)
-		tx.db.statlock.Unlock()
+		tx.db.mergeStats(&tx.stats)
 	} else {
 		tx.db.removeTx(tx)
 	}
