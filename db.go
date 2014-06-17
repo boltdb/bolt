@@ -427,12 +427,16 @@ func (db *DB) removeTx(tx *Tx) {
 			break
 		}
 	}
+	n := len(db.txs)
 
 	// Unlock the meta pages.
 	db.metalock.Unlock()
 
 	// Merge statistics.
-	db.mergeStats(&tx.stats)
+	db.statlock.Lock()
+	db.stats.OpenTxN = n
+	db.stats.TxStats.add(&tx.stats)
+	db.statlock.Unlock()
 }
 
 // Update executes a function within the context of a read-write managed transaction.
@@ -548,16 +552,6 @@ func (db *DB) allocate(count int) (*page, error) {
 	db.rwtx.meta.pgid += pgid(count)
 
 	return p, nil
-}
-
-// mergeStats updates db stats in thread-safe manner.
-func (db *DB) mergeStats(txStats *TxStats) {
-	db.statlock.Lock()
-	db.stats.FreelistN = db.freelist.count()
-	db.stats.FreelistAlloc = db.freelist.size()
-	db.stats.OpenTxN = len(db.txs)
-	db.stats.TxStats.add(txStats)
-	db.statlock.Unlock()
 }
 
 // Stats represents statistics about the database.
