@@ -56,23 +56,23 @@ func (p *page) meta() *meta {
 
 // leafPageElement retrieves the leaf node by index
 func (p *page) leafPageElement(index uint16) *leafPageElement {
-	n := &((*[0xFFFFFFF]leafPageElement)(unsafe.Pointer(&p.ptr)))[index]
+	n := &((*[0x7FFFFFF]leafPageElement)(unsafe.Pointer(&p.ptr)))[index]
 	return n
 }
 
 // leafPageElements retrieves a list of leaf nodes.
 func (p *page) leafPageElements() []leafPageElement {
-	return ((*[0xFFFFFFF]leafPageElement)(unsafe.Pointer(&p.ptr)))[:]
+	return ((*[0x7FFFFFF]leafPageElement)(unsafe.Pointer(&p.ptr)))[:]
 }
 
 // branchPageElement retrieves the branch node by index
 func (p *page) branchPageElement(index uint16) *branchPageElement {
-	return &((*[0xFFFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[index]
+	return &((*[0x7FFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[index]
 }
 
 // branchPageElements retrieves a list of branch nodes.
 func (p *page) branchPageElements() []branchPageElement {
-	return ((*[0xFFFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[:]
+	return ((*[0x7FFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[:]
 }
 
 // dump writes n bytes of the page to STDERR as hex output.
