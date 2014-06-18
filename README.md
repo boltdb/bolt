@@ -58,6 +58,7 @@ Below is a list of public, open source projects that use Bolt:
 * [event-shuttle](https://github.com/sclasen/event-shuttle) - A Unix system service to collect and reliably deliver messages to Kafka.
 * [ipxed](https://github.com/kelseyhightower/ipxed) - Web interface and api for ipxed.
 * [BoltStore](https://github.com/yosssi/boltstore) - Session store using Bolt.
+* [photosite/session](http://godoc.org/bitbucket.org/kardianos/photosite/session) - Sessions for a photo viewing site.
 
 
 If you are using Bolt in a project please send a pull request to add it to the list.
