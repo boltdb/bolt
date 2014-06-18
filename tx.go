@@ -241,8 +241,9 @@ func (tx *Tx) close() {
 
 		// Merge statistics.
 		tx.db.statlock.Lock()
-		tx.db.stats.FreelistN = freelistN
-		tx.db.stats.FreelistAlloc = freelistAlloc
+		tx.db.stats.FreePageN = freelistN
+		tx.db.stats.FreeAlloc = freelistN * tx.db.pageSize
+		tx.db.stats.FreelistInuse = freelistAlloc
 		tx.db.stats.TxStats.add(&tx.stats)
 		tx.db.statlock.Unlock()
 	} else {
