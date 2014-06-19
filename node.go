@@ -9,6 +9,7 @@ import (
 // node represents an in-memory, deserialized page.
 type node struct {
 	bucket     *Bucket
+	dirty      bool
 	isLeaf     bool
 	unbalanced bool
 	key        []byte
@@ -205,14 +206,37 @@ func (n *node) write(p *page) {
 	// DEBUG ONLY: n.dump()
 }
 
-// split breaks up a node into two smaller nodes, if appropriate.
+// split breaks up a node into multiple smaller nodes, if appropriate.
 // This should only be called from the spill() function.
 func (n *node) split(pageSize int) []*node {
+	var nodes []*node
+
+	node := n
+	for {
+		// Split node into two.
+		a, b := node.splitTwo(pageSize)
+		nodes = append(nodes, a)
+
+		// If we can't split then exit the loop.
+		if b == nil {
+			break
+		}
+
+		// Set node to b so it gets split on the next iteration.
+		node = b
+	}
+
+	return nodes
+}
+
+// splitTwo breaks up a node into two smaller nodes, if appropriate.
+// This should only be called from the split() function.
+func (n *node) splitTwo(pageSize int) (*node, *node) {
 	// Ignore the split if the page doesn't have at least enough nodes for
 	// two pages or if the data can fit on a single page.
 	sz := n.size()
 	if len(n.inodes) <= (minKeysPerPage*2) || sz < pageSize {
-		return []*node{n}
+		return n, nil
 	}
 
 	// Determine the threshold before starting a new node.
@@ -225,18 +249,10 @@ func (n *node) split(pageSize int) []*node {
 	threshold := int(float64(pageSize) * fillPercent)
 
 	// Determine split position and sizes of the two pages.
-	splitIndex, sz0 := n.splitIndex(threshold)
-	sz1 := pageHeaderSize + (sz - sz0)
+	splitIndex, _ := n.splitIndex(threshold)
 
-	// If we can fit our extra keys on the next page then merge into it.
-	if next := n.nextSibling(); next != nil && next.size()+sz1 < threshold {
-		next.inodes = append(n.inodes[splitIndex:], next.inodes...)
-		n.inodes = n.inodes[:splitIndex]
-		return []*node{n}
-	}
-
-	// Otherwise split node into two separate nodes. If there's no parent then
-	// we'll need to create one.
+	// Split node into two separate nodes.
+	// If there's no parent then we'll need to create one.
 	if n.parent == nil {
 		n.parent = &node{bucket: n.bucket, children: []*node{n}}
 	}
@@ -252,7 +268,7 @@ func (n *node) split(pageSize int) []*node {
 	// Update the statistics.
 	n.bucket.tx.stats.Split++
 
-	return []*node{n, next}
+	return n, next
 }
 
 // splitIndex finds the position where a page will fill a given threshold.
@@ -298,8 +314,7 @@ func (n *node) spill() error {
 	// We no longer need the child list because it's only used for spill tracking.
 	n.children = nil
 
-	// Spill nodes by deepest first. The first node returned from split() will
-	// always be "n".
+	// Split nodes into appropriate sizes. The first node will always be n.
 	var nodes = n.split(tx.db.pageSize)
 	for _, node := range nodes {
 		// Add node's page to the freelist if it's not new.
@@ -328,7 +343,7 @@ func (n *node) spill() error {
 
 			node.parent.put(key, node.inodes[0].key, nil, node.pgid, 0)
 			node.key = node.inodes[0].key
-			_assert(len(n.key) > 0, "spill: zero-length node key")
+			_assert(len(node.key) > 0, "spill: zero-length node key")
 		}
 
 		// Update the statistics.

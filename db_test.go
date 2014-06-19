@@ -512,7 +512,7 @@ func withOpenDB(fn func(*DB, string)) {
 
 // mustCheck runs a consistency check on the database and panics if any errors are found.
 func mustCheck(db *DB) {
-	err := db.Update(func(tx *Tx) error {
+	err := db.View(func(tx *Tx) error {
 		return <-tx.Check()
 	})
 	if err != nil {

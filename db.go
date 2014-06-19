@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"os"
+	"runtime/debug"
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -651,4 +653,9 @@ func warn(v ...interface{}) {
 
 func warnf(msg string, v ...interface{}) {
 	fmt.Fprintf(os.Stderr, msg+"\n", v...)
+}
+
+func printstack() {
+	stack := strings.Join(strings.Split(string(debug.Stack()), "\n")[2:], "\n")
+	fmt.Fprintln(os.Stderr, stack)
 }
