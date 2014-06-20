@@ -233,7 +233,8 @@ func (tx *Tx) rollback() {
 func (tx *Tx) close() {
 	if tx.writable {
 		// Grab freelist stats.
-		var freelistN = tx.db.freelist.count()
+		var freelistFreeN = tx.db.freelist.free_count()
+		var freelistPendingN = tx.db.freelist.pending_count()
 		var freelistAlloc = tx.db.freelist.size()
 
 		// Remove writer lock.
@@ -241,8 +242,9 @@ func (tx *Tx) close() {
 
 		// Merge statistics.
 		tx.db.statlock.Lock()
-		tx.db.stats.FreePageN = freelistN
-		tx.db.stats.FreeAlloc = freelistN * tx.db.pageSize
+		tx.db.stats.FreePageN = freelistFreeN
+		tx.db.stats.PendingPageN = freelistPendingN
+		tx.db.stats.FreeAlloc = (freelistFreeN + freelistPendingN) * tx.db.pageSize
 		tx.db.stats.FreelistInuse = freelistAlloc
 		tx.db.stats.TxStats.add(&tx.stats)
 		tx.db.statlock.Unlock()
