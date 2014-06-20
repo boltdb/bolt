@@ -254,7 +254,8 @@ func TestDB_Stats(t *testing.T) {
 		})
 		stats := db.Stats()
 		assert.Equal(t, 2, stats.TxStats.PageCount, "PageCount")
-		assert.Equal(t, 2, stats.FreePageN, "FreelistN")
+		assert.Equal(t, 0, stats.FreePageN, "FreePageN")
+		assert.Equal(t, 2, stats.PendingPageN, "PendingPageN")
 	})
 }
 

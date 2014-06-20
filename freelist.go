@@ -27,7 +27,17 @@ func (f *freelist) size() int {
 
 // count returns count of pages on the freelist
 func (f *freelist) count() int {
-	var count = len(f.ids)
+	return f.free_count() + f.pending_count()
+}
+
+// free_count returns count of free pages
+func (f *freelist) free_count() int {
+	return len(f.ids)
+}
+
+// pending_count returns count of pending pages
+func (f *freelist) pending_count() int {
+	var count int
 	for _, list := range f.pending {
 		count += len(list)
 	}
