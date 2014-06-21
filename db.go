@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -50,6 +51,10 @@ var (
 
 	// ErrChecksum is returned when either meta page checksum does not match.
 	ErrChecksum = errors.New("checksum error")
+
+	// ErrTimeout is returned when a database cannot obtain an exclusive lock
+	// on the data file after the timeout passed to Open().
+	ErrTimeout = errors.New("timeout")
 )
 
 // DB represents a collection of buckets persisted to a file on disk.
@@ -108,8 +113,14 @@ func (db *DB) String() string {
 
 // Open creates and opens a database at the given path.
 // If the file does not exist then it will be created automatically.
-func Open(path string, mode os.FileMode) (*DB, error) {
+// Passing in nil options will cause Bolt to open the database with the default options.
+func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	var db = &DB{opened: true, FillPercent: DefaultFillPercent}
+
+	// Set default options.
+	if options == nil {
+		options = &Options{}
+	}
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
@@ -123,7 +134,7 @@ func Open(path string, mode os.FileMode) (*DB, error) {
 	// Lock file so that other processes using Bolt cannot use the database
 	// at the same time. This would cause corruption since the two processes
 	// would write meta pages and free pages separately.
-	if err := flock(db.file); err != nil {
+	if err := flock(db.file, options.Timeout); err != nil {
 		_ = db.close()
 		return nil, err
 	}
@@ -554,6 +565,14 @@ func (db *DB) allocate(count int) (*page, error) {
 	db.rwtx.meta.pgid += pgid(count)
 
 	return p, nil
+}
+
+// Options represents the options that can be set when opening a database.
+type Options struct {
+	// Timeout is the amount of time to wait to obtain a file lock.
+	// When set to zero it will wait indefinitely. This option is only
+	// available on Darwin and Linux.
+	Timeout time.Duration
 }
 
 // Stats represents statistics about the database.

@@ -1021,7 +1021,7 @@ func TestBucket_Delete_Quick(t *testing.T) {
 
 func ExampleBucket_Put() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666)
+	db, _ := Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
@@ -1048,7 +1048,7 @@ func ExampleBucket_Put() {
 
 func ExampleBucket_Delete() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666)
+	db, _ := Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
@@ -1088,7 +1088,7 @@ func ExampleBucket_Delete() {
 
 func ExampleBucket_ForEach() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666)
+	db, _ := Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 

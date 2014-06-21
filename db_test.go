@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -18,31 +19,17 @@ import (
 
 var statsFlag = flag.Bool("stats", false, "show performance stats")
 
-// Ensure that a database can be opened without error.
-func TestOpen(t *testing.T) {
-	f, _ := ioutil.TempFile("", "bolt-")
-	path := f.Name()
-	f.Close()
-	os.Remove(path)
-	defer os.RemoveAll(path)
-
-	db, err := Open(path, 0666)
-	assert.NoError(t, err)
-	assert.NotNil(t, db)
-	db.Close()
-}
-
 // Ensure that opening a database with a bad path returns an error.
 func TestOpen_BadPath(t *testing.T) {
-	db, err := Open("/../bad-path", 0666)
+	db, err := Open("/../bad-path", 0666, nil)
 	assert.Error(t, err)
 	assert.Nil(t, db)
 }
 
 // Ensure that a database can be opened without error.
-func TestDB_Open(t *testing.T) {
+func TestOpen(t *testing.T) {
 	withTempPath(func(path string) {
-		db, err := Open(path, 0666)
+		db, err := Open(path, 0666, nil)
 		assert.NotNil(t, db)
 		assert.NoError(t, err)
 		assert.Equal(t, db.Path(), path)
@@ -50,15 +37,60 @@ func TestDB_Open(t *testing.T) {
 	})
 }
 
+// Ensure that opening an already open database file will timeout.
+func TestOpen_Timeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("timeout not supported on windows")
+	}
+	withTempPath(func(path string) {
+		// Open a data file.
+		db0, err := Open(path, 0666, nil)
+		assert.NotNil(t, db0)
+		assert.NoError(t, err)
+
+		// Attempt to open the database again.
+		start := time.Now()
+		db1, err := Open(path, 0666, &Options{Timeout: 100 * time.Millisecond})
+		assert.Nil(t, db1)
+		assert.Equal(t, ErrTimeout, err)
+		assert.True(t, time.Since(start) > 100*time.Millisecond)
+
+		db0.Close()
+	})
+}
+
+// Ensure that opening an already open database file will wait until its closed.
+func TestOpen_Wait(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("timeout not supported on windows")
+	}
+	withTempPath(func(path string) {
+		// Open a data file.
+		db0, err := Open(path, 0666, nil)
+		assert.NotNil(t, db0)
+		assert.NoError(t, err)
+
+		// Close it in just a bit.
+		time.AfterFunc(100*time.Millisecond, func() { db0.Close() })
+
+		// Attempt to open the database again.
+		start := time.Now()
+		db1, err := Open(path, 0666, &Options{Timeout: 200 * time.Millisecond})
+		assert.NotNil(t, db1)
+		assert.NoError(t, err)
+		assert.True(t, time.Since(start) > 100*time.Millisecond)
+	})
+}
+
 // Ensure that a re-opened database is consistent.
 func TestOpen_Check(t *testing.T) {
 	withTempPath(func(path string) {
-		db, err := Open(path, 0666)
+		db, err := Open(path, 0666, nil)
 		assert.NoError(t, err)
 		assert.NoError(t, db.View(func(tx *Tx) error { return <-tx.Check() }))
 		db.Close()
 
-		db, err = Open(path, 0666)
+		db, err = Open(path, 0666, nil)
 		assert.NoError(t, err)
 		assert.NoError(t, db.View(func(tx *Tx) error { return <-tx.Check() }))
 		db.Close()
@@ -68,7 +100,7 @@ func TestOpen_Check(t *testing.T) {
 // Ensure that the database returns an error if the file handle cannot be open.
 func TestDB_Open_FileError(t *testing.T) {
 	withTempPath(func(path string) {
-		_, err := Open(path+"/youre-not-my-real-parent", 0666)
+		_, err := Open(path+"/youre-not-my-real-parent", 0666, nil)
 		if err, _ := err.(*os.PathError); assert.Error(t, err) {
 			assert.Equal(t, path+"/youre-not-my-real-parent", err.Path)
 			assert.Equal(t, "open", err.Op)
@@ -84,14 +116,14 @@ func TestDB_Open_MetaInitWriteError(t *testing.T) {
 // Ensure that a database that is too small returns an error.
 func TestDB_Open_FileTooSmall(t *testing.T) {
 	withTempPath(func(path string) {
-		db, err := Open(path, 0666)
+		db, err := Open(path, 0666, nil)
 		assert.NoError(t, err)
 		db.Close()
 
 		// corrupt the database
 		assert.NoError(t, os.Truncate(path, int64(os.Getpagesize())))
 
-		db, err = Open(path, 0666)
+		db, err = Open(path, 0666, nil)
 		assert.Equal(t, errors.New("file size too small"), err)
 	})
 }
@@ -115,7 +147,7 @@ func TestDB_Open_CorruptMeta0(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Open the database.
-		_, err = Open(path, 0666)
+		_, err = Open(path, 0666, nil)
 		assert.Equal(t, err, errors.New("meta0 error: invalid database"))
 	})
 }
@@ -124,7 +156,7 @@ func TestDB_Open_CorruptMeta0(t *testing.T) {
 func TestDB_Open_MetaChecksumError(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		withTempPath(func(path string) {
-			db, err := Open(path, 0600)
+			db, err := Open(path, 0600, nil)
 			pageSize := db.pageSize
 			db.Update(func(tx *Tx) error {
 				_, err := tx.CreateBucket([]byte("widgets"))
@@ -143,7 +175,7 @@ func TestDB_Open_MetaChecksumError(t *testing.T) {
 			f.Close()
 
 			// Reopen the database.
-			_, err = Open(path, 0600)
+			_, err = Open(path, 0600, nil)
 			if assert.Error(t, err) {
 				if i == 0 {
 					assert.Equal(t, "meta0 error: checksum error", err.Error())
@@ -387,7 +419,7 @@ func TestDB_DoubleFree(t *testing.T) {
 
 func ExampleDB_Update() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666)
+	db, _ := Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
@@ -418,7 +450,7 @@ func ExampleDB_Update() {
 
 func ExampleDB_View() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666)
+	db, _ := Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
@@ -444,7 +476,7 @@ func ExampleDB_View() {
 
 func ExampleDB_Begin_ReadOnly() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666)
+	db, _ := Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
@@ -494,7 +526,7 @@ func withTempPath(fn func(string)) {
 // withOpenDB executes a function with an already opened database.
 func withOpenDB(fn func(*DB, string)) {
 	withTempPath(func(path string) {
-		db, err := Open(path, 0666)
+		db, err := Open(path, 0666, nil)
 		if err != nil {
 			panic("cannot open db: " + err.Error())
 		}
