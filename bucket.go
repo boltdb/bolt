@@ -2,7 +2,6 @@ package bolt
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"unsafe"
 )
@@ -13,32 +12,6 @@ const (
 
 	// MaxValueSize is the maximum length of a value, in bytes.
 	MaxValueSize = 4294967295
-)
-
-var (
-	// ErrBucketNotFound is returned when trying to access a bucket that has
-	// not been created yet.
-	ErrBucketNotFound = errors.New("bucket not found")
-
-	// ErrBucketExists is returned when creating a bucket that already exists.
-	ErrBucketExists = errors.New("bucket already exists")
-
-	// ErrBucketNameRequired is returned when creating a bucket with a blank name.
-	ErrBucketNameRequired = errors.New("bucket name required")
-
-	// ErrKeyRequired is returned when inserting a zero-length key.
-	ErrKeyRequired = errors.New("key required")
-
-	// ErrKeyTooLarge is returned when inserting a key that is larger than MaxKeySize.
-	ErrKeyTooLarge = errors.New("key too large")
-
-	// ErrValueTooLarge is returned when inserting a value that is larger than MaxValueSize.
-	ErrValueTooLarge = errors.New("value too large")
-
-	// ErrIncompatibleValue is returned when trying create or delete a bucket
-	// on an existing non-bucket key or when trying to create or delete a
-	// non-bucket key on an existing bucket key.
-	ErrIncompatibleValue = errors.New("incompatible value")
 )
 
 const (

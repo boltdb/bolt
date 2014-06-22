@@ -1,7 +1,6 @@
 package bolt
 
 import (
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -32,30 +31,6 @@ const (
 // DefaultFillPercent is the percentage that split pages are filled.
 // This value can be changed by setting DB.FillPercent.
 const DefaultFillPercent = 0.5
-
-var (
-	// ErrDatabaseNotOpen is returned when a DB instance is accessed before it
-	// is opened or after it is closed.
-	ErrDatabaseNotOpen = errors.New("database not open")
-
-	// ErrDatabaseOpen is returned when opening a database that is
-	// already open.
-	ErrDatabaseOpen = errors.New("database already open")
-
-	// ErrInvalid is returned when a data file is not a Bolt-formatted database.
-	ErrInvalid = errors.New("invalid database")
-
-	// ErrVersionMismatch is returned when the data file was created with a
-	// different version of Bolt.
-	ErrVersionMismatch = errors.New("version mismatch")
-
-	// ErrChecksum is returned when either meta page checksum does not match.
-	ErrChecksum = errors.New("checksum error")
-
-	// ErrTimeout is returned when a database cannot obtain an exclusive lock
-	// on the data file after the timeout passed to Open().
-	ErrTimeout = errors.New("timeout")
-)
 
 // DB represents a collection of buckets persisted to a file on disk.
 // All data access is performed through transactions which can be obtained through the DB.
@@ -117,9 +92,9 @@ func (db *DB) String() string {
 func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	var db = &DB{opened: true, FillPercent: DefaultFillPercent}
 
-	// Set default options.
+	// Set default options if no options are provided.
 	if options == nil {
-		options = &Options{}
+		options = DefaultOptions
 	}
 
 	// Open data file and separate sync handler for metadata writes.
@@ -573,6 +548,12 @@ type Options struct {
 	// When set to zero it will wait indefinitely. This option is only
 	// available on Darwin and Linux.
 	Timeout time.Duration
+}
+
+// DefaultOptions represent the options used if nil options are passed into Open().
+// No timeout is used which will cause Bolt to wait indefinitely for a lock.
+var DefaultOptions = &Options{
+	Timeout: 0,
 }
 
 // Stats represents statistics about the database.
