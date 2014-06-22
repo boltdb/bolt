@@ -451,15 +451,15 @@ func TestBucket_NextSequence(t *testing.T) {
 			// Make sure sequence increments.
 			seq, err := tx.Bucket([]byte("widgets")).NextSequence()
 			assert.NoError(t, err)
-			assert.Equal(t, seq, 1)
+			assert.Equal(t, seq, uint64(1))
 			seq, err = tx.Bucket([]byte("widgets")).NextSequence()
 			assert.NoError(t, err)
-			assert.Equal(t, seq, 2)
+			assert.Equal(t, seq, uint64(2))
 
 			// Buckets should be separate.
 			seq, err = tx.Bucket([]byte("woojits")).NextSequence()
 			assert.NoError(t, err)
-			assert.Equal(t, seq, 1)
+			assert.Equal(t, seq, uint64(1))
 			return nil
 		})
 	})
@@ -475,26 +475,8 @@ func TestBucket_NextSequence_ReadOnly(t *testing.T) {
 		db.View(func(tx *Tx) error {
 			b := tx.Bucket([]byte("widgets"))
 			i, err := b.NextSequence()
-			assert.Equal(t, i, 0)
+			assert.Equal(t, i, uint64(0))
 			assert.Equal(t, err, ErrTxNotWritable)
-			return nil
-		})
-	})
-}
-
-// Ensure that incrementing past the maximum sequence number will return an error.
-func TestBucket_NextSequence_Overflow(t *testing.T) {
-	withOpenDB(func(db *DB, path string) {
-		db.Update(func(tx *Tx) error {
-			tx.CreateBucket([]byte("widgets"))
-			return nil
-		})
-		db.Update(func(tx *Tx) error {
-			b := tx.Bucket([]byte("widgets"))
-			b.bucket.sequence = uint64(maxInt)
-			seq, err := b.NextSequence()
-			assert.Equal(t, err, ErrSequenceOverflow)
-			assert.Equal(t, seq, 0)
 			return nil
 		})
 	})
