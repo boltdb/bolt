@@ -14,7 +14,7 @@ func open(fn func(*bolt.DB, string)) {
 	path := tempfile()
 	defer os.RemoveAll(path)
 
-	db, err := bolt.Open(path, 0600)
+	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
 		panic("db open error: " + err.Error())
 	}

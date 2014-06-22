@@ -14,7 +14,7 @@ func Stats(path, prefix string) {
 		return
 	}
 
-	db, err := bolt.Open(path, 0600)
+	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
 		fatal(err)
 		return

@@ -23,7 +23,7 @@ func TestImport(t *testing.T) {
 	assert.Equal(t, ``, output)
 
 	// Open database and verify contents.
-	db, err := bolt.Open(path, 0600)
+	db, err := bolt.Open(path, 0600, nil)
 	assert.NoError(t, err)
 	db.View(func(tx *bolt.Tx) error {
 		assert.NotNil(t, tx.Bucket([]byte("empty")))

@@ -301,7 +301,7 @@ func TestTx_CopyFile(t *testing.T) {
 
 		assert.NoError(t, db.View(func(tx *Tx) error { return tx.CopyFile(dest, 0600) }))
 
-		db2, err := Open(dest, 0600)
+		db2, err := Open(dest, 0600, nil)
 		assert.NoError(t, err)
 		defer db2.Close()
 
@@ -366,7 +366,7 @@ func TestTx_CopyFile_Error_Normal(t *testing.T) {
 
 func ExampleTx_Rollback() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666)
+	db, _ := Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
@@ -400,7 +400,7 @@ func ExampleTx_Rollback() {
 
 func ExampleTx_CopyFile() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666)
+	db, _ := Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
@@ -417,7 +417,7 @@ func ExampleTx_CopyFile() {
 	defer os.Remove(toFile)
 
 	// Open the cloned database.
-	db2, _ := Open(toFile, 0666)
+	db2, _ := Open(toFile, 0666, nil)
 	defer db2.Close()
 
 	// Ensure that the key exists in the copy.

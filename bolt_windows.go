@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -15,7 +16,7 @@ func fdatasync(f *os.File) error {
 }
 
 // flock acquires an advisory lock on a file descriptor.
-func flock(f *os.File) error {
+func flock(f *os.File, _ time.Duration) error {
 	return nil
 }
 
