@@ -1,16 +1,9 @@
 package bolt
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"unsafe"
-)
-
-var (
-	// ErrFreelistOverflow is returned when the total number of free pages
-	// exceeds 65,536 and the freelist cannot hold any more.
-	ErrFreelistOverflow = errors.New("freelist overflow")
 )
 
 // freelist represents a list of all pages that are available for allocation.
