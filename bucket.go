@@ -39,10 +39,6 @@ var (
 	// on an existing non-bucket key or when trying to create or delete a
 	// non-bucket key on an existing bucket key.
 	ErrIncompatibleValue = errors.New("incompatible value")
-
-	// ErrSequenceOverflow is returned when the next sequence number will be
-	// larger than the maximum integer size.
-	ErrSequenceOverflow = errors.New("sequence overflow")
 )
 
 const (
@@ -336,23 +332,16 @@ func (b *Bucket) Delete(key []byte) error {
 }
 
 // NextSequence returns an autoincrementing integer for the bucket.
-func (b *Bucket) NextSequence() (int, error) {
+func (b *Bucket) NextSequence() (uint64, error) {
 	if b.tx.db == nil {
 		return 0, ErrTxClosed
 	} else if !b.Writable() {
 		return 0, ErrTxNotWritable
 	}
 
-	// Make sure next sequence number will not be larger than the maximum
-	// integer size of the system.
-	if b.bucket.sequence == uint64(maxInt) {
-		return 0, ErrSequenceOverflow
-	}
-
 	// Increment and return the sequence.
 	b.bucket.sequence++
-
-	return int(b.bucket.sequence), nil
+	return b.bucket.sequence, nil
 }
 
 // ForEach executes a function for each key/value pair in a bucket.
