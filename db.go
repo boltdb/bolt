@@ -577,7 +577,11 @@ type Stats struct {
 func (s *Stats) Sub(other *Stats) Stats {
 	var diff Stats
 	if s == nil {
-		return diff
+		if other == nil {
+			return diff
+		} else {
+			return *other
+		}
 	}
 	diff = *s
 	if other == nil {
