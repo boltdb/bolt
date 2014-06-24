@@ -575,7 +575,8 @@ type Stats struct {
 // This is useful when obtaining stats at two different points and time and
 // you need the performance counters that occurred within that time span.
 func (s *Stats) Sub(other *Stats) Stats {
-	var diff Stats
+	var diff Stats = *s
+	diff.TxN = other.TxN - s.TxN
 	diff.TxStats = s.TxStats.Sub(&other.TxStats)
 	return diff
 }
