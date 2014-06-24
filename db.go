@@ -578,7 +578,7 @@ func (s *Stats) Sub(other *Stats) Stats {
 	if other == nil {
 		return *s
 	}
-	var diff Stat
+	var diff Stats
 	diff.TxN = other.TxN - s.TxN
 	diff.TxStats = s.TxStats.Sub(&other.TxStats)
 	return diff
