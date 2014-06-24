@@ -576,6 +576,18 @@ type Stats struct {
 // you need the performance counters that occurred within that time span.
 func (s *Stats) Sub(other *Stats) Stats {
 	var diff Stats
+	if s == nil {
+		if other == nil {
+			return diff
+		} else {
+			return *other
+		}
+	}
+	diff = *s
+	if other == nil {
+		return diff
+	}
+	diff.TxN = other.TxN - diff.TxN
 	diff.TxStats = s.TxStats.Sub(&other.TxStats)
 	return diff
 }
