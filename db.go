@@ -579,6 +579,10 @@ func (s *Stats) Sub(other *Stats) Stats {
 		return *s
 	}
 	var diff Stats
+	diff.FreePageN = s.FreePageN
+	diff.PendingPageN = s.PendingPageN
+	diff.FreeAlloc = s.FreeAlloc
+	diff.FreelistInuse = s.FreelistInuse
 	diff.TxN = other.TxN - s.TxN
 	diff.TxStats = s.TxStats.Sub(&other.TxStats)
 	return diff
