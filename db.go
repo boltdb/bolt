@@ -144,7 +144,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 
 	// Read in the freelist.
-	db.freelist = &freelist{pending: make(map[txid][]pgid)}
+	db.freelist = newFreelist()
 	db.freelist.read(db.page(db.meta().freelist))
 
 	// Mark the database as opened and return.

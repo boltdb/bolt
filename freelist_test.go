@@ -9,21 +9,21 @@ import (
 
 // Ensure that a page is added to a transaction's freelist.
 func TestFreelist_free(t *testing.T) {
-	f := &freelist{pending: make(map[txid][]pgid)}
+	f := newFreelist()
 	f.free(100, &page{id: 12})
 	assert.Equal(t, f.pending[100], []pgid{12})
 }
 
 // Ensure that a page and its overflow is added to a transaction's freelist.
 func TestFreelist_free_overflow(t *testing.T) {
-	f := &freelist{pending: make(map[txid][]pgid)}
+	f := newFreelist()
 	f.free(100, &page{id: 12, overflow: 3})
 	assert.Equal(t, f.pending[100], []pgid{12, 13, 14, 15})
 }
 
 // Ensure that a transaction's free pages can be released.
 func TestFreelist_release(t *testing.T) {
-	f := &freelist{pending: make(map[txid][]pgid)}
+	f := newFreelist()
 	f.free(100, &page{id: 12, overflow: 1})
 	f.free(100, &page{id: 9})
 	f.free(102, &page{id: 39})
@@ -64,7 +64,7 @@ func TestFreelist_read(t *testing.T) {
 	ids[1] = 50
 
 	// Deserialize page into a freelist.
-	f := &freelist{pending: make(map[txid][]pgid)}
+	f := newFreelist()
 	f.read(page)
 
 	// Ensure that there are two page ids in the freelist.
@@ -84,7 +84,7 @@ func TestFreelist_write(t *testing.T) {
 	f.write(p)
 
 	// Read the page back out.
-	f2 := &freelist{pending: make(map[txid][]pgid)}
+	f2 := newFreelist()
 	f2.read(p)
 
 	// Ensure that the freelist is correct.
