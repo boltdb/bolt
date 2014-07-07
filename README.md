@@ -12,6 +12,12 @@ Since Bolt is meant to be used as such a low-level piece of functionality, simpl
 > — [Tobias Lütke](https://twitter.com/tobi)
 
 
+## Resources
+
+For more information on getting started with Bolt, check out the following articles:
+
+* [Intro to BoltDB: Painless Performant Persistence](http://blog.natefinch.com/2014/07/intro-to-boltdb-painless-performant.html) by [Nate Finch](https://github.com/natefinch).
+
 ## Project Status
 
 Bolt is functionally complete and has nearly full unit test coverage. The library test suite also includes randomized black box testing to ensure database consistency and thread safety. Bolt is currently in use in a few projects, however, it is still at a beta stage so please use with caution and report any bugs found.
