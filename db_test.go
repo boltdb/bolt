@@ -419,7 +419,7 @@ func TestDB_DoubleFree(t *testing.T) {
 		})
 	}()
 
-	assert.Equal(t, "tx 2: page 3 already freed in tx 0", msg)
+	assert.Equal(t, "assertion failed: page 3 already freed", msg)
 }
 
 func ExampleDB_Update() {

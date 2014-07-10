@@ -496,7 +496,7 @@ func (tx *Tx) Page(id int) (*PageInfo, error) {
 	}
 
 	// Determine the type (or if it's free).
-	if tx.db.freelist.isFree(pgid(id)) {
+	if tx.db.freelist.freed(pgid(id)) {
 		info.Type = "free"
 	} else {
 		info.Type = p.typ()
