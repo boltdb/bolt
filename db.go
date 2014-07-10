@@ -212,7 +212,7 @@ func (db *DB) munmap() error {
 // mmapSize determines the appropriate size for the mmap given the current size
 // of the database. The minimum size is 4MB and doubles until it reaches 1GB.
 func (db *DB) mmapSize(size int) int {
-	if size < minMmapSize {
+	if size <= minMmapSize {
 		return minMmapSize
 	} else if size < maxMmapStep {
 		size *= 2
