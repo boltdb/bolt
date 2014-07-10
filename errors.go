@@ -36,10 +36,6 @@ var (
 	// ErrTxClosed is returned when committing or rolling back a transaction
 	// that has already been committed or rolled back.
 	ErrTxClosed = errors.New("tx closed")
-
-	// ErrFreelistOverflow is returned when the total number of free pages
-	// exceeds 65,536 and the freelist cannot hold any more.
-	ErrFreelistOverflow = errors.New("freelist overflow")
 )
 
 // These errors can occur when putting or deleting a value or a bucket.
