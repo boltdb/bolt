@@ -21,7 +21,7 @@ var statsFlag = flag.Bool("stats", false, "show performance stats")
 
 // Ensure that opening a database with a bad path returns an error.
 func TestOpen_BadPath(t *testing.T) {
-	db, err := Open("/../bad-path", 0666, nil)
+	db, err := Open("", 0666, nil)
 	assert.Error(t, err)
 	assert.Nil(t, db)
 }
