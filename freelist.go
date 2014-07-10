@@ -153,7 +153,7 @@ func (f *freelist) read(p *page) {
 	f.ids = make([]pgid, len(ids))
 	copy(f.ids, ids)
 	sort.Sort(pgids(f.ids))
-	f.buildcache()
+	f.reindex()
 }
 
 // write writes the page ids onto a freelist page. All free and pending ids are
@@ -180,17 +180,19 @@ func (f *freelist) write(p *page) error {
 func (f *freelist) reload(p *page) {
 	f.read(p)
 
-	// We need to filter out the pending pages from the available freelist
-	// so we rebuild the cache without the newly read freelist.
-	ids := f.ids
-	f.ids = nil
-	f.buildcache()
+	// Build a cache of only pending pages.
+	pcache := make(map[pgid]bool)
+	for _, pendingIDs := range f.pending {
+		for _, pendingID := range pendingIDs {
+			pcache[pendingID] = true
+		}
+	}
 
 	// Check each page in the freelist and build a new available freelist
 	// with any pages not in the pending lists.
 	var a []pgid
-	for _, id := range ids {
-		if !f.freed(id) {
+	for _, id := range f.ids {
+		if !pcache[id] {
 			a = append(a, id)
 		}
 	}
@@ -198,11 +200,11 @@ func (f *freelist) reload(p *page) {
 
 	// Once the available list is rebuilt then rebuild the free cache so that
 	// it includes the available and pending free pages.
-	f.buildcache()
+	f.reindex()
 }
 
-// buildcache rebuilds the free cache based on available and pending free lists.
-func (f *freelist) buildcache() {
+// reindex rebuilds the free cache based on available and pending free lists.
+func (f *freelist) reindex() {
 	f.cache = make(map[pgid]bool)
 	for _, id := range f.ids {
 		f.cache[id] = true
