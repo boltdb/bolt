@@ -21,7 +21,7 @@ var statsFlag = flag.Bool("stats", false, "show performance stats")
 
 // Ensure that opening a database with a bad path returns an error.
 func TestOpen_BadPath(t *testing.T) {
-	db, err := Open("/../bad-path", 0666, nil)
+	db, err := Open("", 0666, nil)
 	assert.Error(t, err)
 	assert.Nil(t, db)
 }
@@ -297,7 +297,8 @@ func TestDB_mmapSize(t *testing.T) {
 	assert.Equal(t, db.mmapSize(0), minMmapSize)
 	assert.Equal(t, db.mmapSize(16384), minMmapSize)
 	assert.Equal(t, db.mmapSize(minMmapSize-1), minMmapSize)
-	assert.Equal(t, db.mmapSize(minMmapSize), minMmapSize*2)
+	assert.Equal(t, db.mmapSize(minMmapSize), minMmapSize)
+	assert.Equal(t, db.mmapSize(minMmapSize+1), (minMmapSize*2)+4096)
 	assert.Equal(t, db.mmapSize(10000000), 20000768)
 	assert.Equal(t, db.mmapSize((1<<30)-1), 2147483648)
 	assert.Equal(t, db.mmapSize(1<<30), 1<<31)
