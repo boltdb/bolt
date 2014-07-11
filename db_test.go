@@ -274,7 +274,6 @@ func TestDB_Update_Panic(t *testing.T) {
 			db.Update(func(tx *Tx) error {
 				tx.CreateBucket([]byte("widgets"))
 				panic("omg")
-				return nil
 			})
 		}()
 
@@ -320,7 +319,6 @@ func TestDB_View_Panic(t *testing.T) {
 			db.View(func(tx *Tx) error {
 				assert.NotNil(t, tx.Bucket([]byte("widgets")))
 				panic("omg")
-				return nil
 			})
 		}()
 
