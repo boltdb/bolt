@@ -440,6 +440,13 @@ func (db *DB) Update(fn func(*Tx) error) error {
 		return err
 	}
 
+	// Make sure the transaction rolls back in the event of a panic.
+	defer func() {
+		if t.db != nil {
+			t.rollback()
+		}
+	}()
+
 	// Mark as a managed tx so that the inner function cannot manually commit.
 	t.managed = true
 
@@ -463,6 +470,13 @@ func (db *DB) View(fn func(*Tx) error) error {
 	if err != nil {
 		return err
 	}
+
+	// Make sure the transaction rolls back in the event of a panic.
+	defer func() {
+		if t.db != nil {
+			t.rollback()
+		}
+	}()
 
 	// Mark as a managed tx so that the inner function cannot manually rollback.
 	t.managed = true

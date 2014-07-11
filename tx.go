@@ -212,6 +212,9 @@ func (tx *Tx) Rollback() error {
 }
 
 func (tx *Tx) rollback() {
+	if tx.db == nil {
+		return
+	}
 	if tx.writable {
 		tx.db.freelist.rollback(tx.id())
 		tx.db.freelist.reload(tx.db.page(tx.db.meta().freelist))
@@ -220,6 +223,9 @@ func (tx *Tx) rollback() {
 }
 
 func (tx *Tx) close() {
+	if tx.db == nil {
+		return
+	}
 	if tx.writable {
 		// Grab freelist stats.
 		var freelistFreeN = tx.db.freelist.free_count()
