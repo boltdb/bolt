@@ -35,7 +35,7 @@ func mmap(db *DB, sz int) error {
 
 	// Open a file mapping handle.
 	sizelo := uint32(sz >> 32)
-	sizehi := uint32(sz & 0xffffffff)
+	sizehi := uint32(sz) & 0xffffffff
 	h, errno := syscall.CreateFileMapping(syscall.Handle(db.file.Fd()), nil, syscall.PAGE_READONLY, sizelo, sizehi, nil)
 	if h == 0 {
 		return os.NewSyscallError("CreateFileMapping", errno)
