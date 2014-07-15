@@ -46,6 +46,7 @@ func Bench(options *BenchOptions) {
 		fatal(err)
 		return
 	}
+	db.NoSync = options.NoSync
 	db.FillPercent = options.FillPercent
 	defer db.Close()
 
@@ -363,6 +364,7 @@ type BenchOptions struct {
 	BlockProfile  string
 	StatsInterval time.Duration
 	FillPercent   float64
+	NoSync        bool
 	Clean         bool
 }
 
