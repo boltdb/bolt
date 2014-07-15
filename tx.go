@@ -141,7 +141,9 @@ func (tx *Tx) Commit() error {
 	// Rebalance nodes which have had deletions.
 	var startTime = time.Now()
 	tx.root.rebalance()
-	tx.stats.RebalanceTime += time.Since(startTime)
+	if tx.stats.Rebalance > 0 {
+		tx.stats.RebalanceTime += time.Since(startTime)
+	}
 
 	// spill data onto dirty pages.
 	startTime = time.Now()
