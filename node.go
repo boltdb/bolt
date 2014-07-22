@@ -37,13 +37,27 @@ func (n *node) minKeys() int {
 
 // size returns the size of the node after serialization.
 func (n *node) size() int {
-	var elementSize = n.pageElementSize()
-
-	var size = pageHeaderSize
-	for _, item := range n.inodes {
-		size += elementSize + len(item.key) + len(item.value)
+	sz, elsz := pageHeaderSize, n.pageElementSize()
+	for i := 0; i < len(n.inodes); i++ {
+		item := &n.inodes[i]
+		sz += elsz + len(item.key) + len(item.value)
 	}
-	return size
+	return sz
+}
+
+// sizeLessThan returns true if the node is less than a given size.
+// This is an optimization to avoid calculating a large node when we only need
+// to know if it fits inside a certain page size.
+func (n *node) sizeLessThan(v int) bool {
+	sz, elsz := pageHeaderSize, n.pageElementSize()
+	for i := 0; i < len(n.inodes); i++ {
+		item := &n.inodes[i]
+		sz += elsz + len(item.key) + len(item.value)
+		if sz >= v {
+			return false
+		}
+	}
+	return true
 }
 
 // pageElementSize returns the size of each page element based on the type of node.
@@ -233,9 +247,8 @@ func (n *node) split(pageSize int) []*node {
 // This should only be called from the split() function.
 func (n *node) splitTwo(pageSize int) (*node, *node) {
 	// Ignore the split if the page doesn't have at least enough nodes for
-	// two pages or if the data can fit on a single page.
-	sz := n.size()
-	if len(n.inodes) <= (minKeysPerPage*2) || sz < pageSize {
+	// two pages or if the nodes can fit in a single page.
+	if len(n.inodes) <= (minKeysPerPage*2) || n.sizeLessThan(pageSize) {
 		return n, nil
 	}
 
