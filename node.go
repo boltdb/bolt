@@ -188,6 +188,8 @@ func (n *node) write(p *page) {
 	} else {
 		p.flags |= branchPageFlag
 	}
+
+	_assert(len(n.inodes) < 0xFFFF, "inode overflow: %d (pgid=%d)", len(n.inodes), p.id)
 	p.count = uint16(len(n.inodes))
 
 	// Loop over each item and write it to the page.
@@ -367,20 +369,11 @@ func (n *node) spill() error {
 		tx.stats.Spill++
 	}
 
-	// This is a special case where we need to write the parent if it is new
-	// and caused by a split in the root.
-	var parent = n.parent
-	if parent != nil && parent.pgid == 0 {
-		// Allocate contiguous space for the node.
-		p, err := tx.allocate((parent.size() / tx.db.pageSize) + 1)
-		if err != nil {
-			return err
-		}
-
-		// Write the new root.
-		_assert(p.id < tx.meta.pgid, "pgid (%d) above high water mark (%d)", p.id, tx.meta.pgid)
-		parent.pgid = p.id
-		parent.write(p)
+	// If the root node split and created a new root then we need to spill that
+	// as well. We'll clear out the children to make sure it doesn't try to respill.
+	if n.parent != nil && n.parent.pgid == 0 {
+		n.children = nil
+		return n.parent.spill()
 	}
 
 	return nil
