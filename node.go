@@ -9,9 +9,9 @@ import (
 // node represents an in-memory, deserialized page.
 type node struct {
 	bucket     *Bucket
-	dirty      bool
 	isLeaf     bool
 	unbalanced bool
+	spilled    bool
 	key        []byte
 	pgid       pgid
 	parent     *node
@@ -313,6 +313,9 @@ func (n *node) splitIndex(threshold int) (index, sz int) {
 // Returns an error if dirty pages cannot be allocated.
 func (n *node) spill() error {
 	var tx = n.bucket.tx
+	if n.spilled {
+		return nil
+	}
 
 	// Spill child nodes first. Child nodes can materialize sibling nodes in
 	// the case of split-merge so we cannot use a range loop. We have to check
@@ -346,6 +349,7 @@ func (n *node) spill() error {
 		_assert(p.id < tx.meta.pgid, "pgid (%d) above high water mark (%d)", p.id, tx.meta.pgid)
 		node.pgid = p.id
 		node.write(p)
+		node.spilled = true
 
 		// Insert into parent inodes.
 		if node.parent != nil {
