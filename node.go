@@ -255,7 +255,7 @@ func (n *node) splitTwo(pageSize int) (*node, *node) {
 	}
 
 	// Determine the threshold before starting a new node.
-	var fillPercent = n.bucket.tx.db.FillPercent
+	var fillPercent = n.bucket.FillPercent
 	if fillPercent < minFillPercent {
 		fillPercent = minFillPercent
 	} else if fillPercent > maxFillPercent {

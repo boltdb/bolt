@@ -674,8 +674,6 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 	}
 
 	withOpenDB(func(db *DB, path string) {
-		db.FillPercent = 0.9
-
 		// Add a set of values in random order. It will be the same random
 		// order so we can maintain consistency between test runs.
 		var count int
@@ -683,6 +681,7 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 		for _, i := range r.Perm(1000) {
 			db.Update(func(tx *Tx) error {
 				b, _ := tx.CreateBucketIfNotExists([]byte("woojits"))
+				b.FillPercent = 0.9
 				for _, j := range r.Perm(100) {
 					index := (j * 10000) + i
 					b.Put([]byte(fmt.Sprintf("%d000000000000000", index)), []byte("0000000000"))
