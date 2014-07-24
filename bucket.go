@@ -23,6 +23,15 @@ const (
 
 const bucketHeaderSize = int(unsafe.Sizeof(bucket{}))
 
+const (
+	minFillPercent = 0.1
+	maxFillPercent = 1.0
+)
+
+// DefaultFillPercent is the percentage that split pages are filled.
+// This value can be changed by setting Bucket.FillPercent.
+const DefaultFillPercent = 0.5
+
 // Bucket represents a collection of key/value pairs inside the database.
 type Bucket struct {
 	*bucket
@@ -31,6 +40,11 @@ type Bucket struct {
 	page     *page              // inline page reference
 	rootNode *node              // materialized node for the root page.
 	nodes    map[pgid]*node     // node cache
+
+	// Sets the threshold for filling nodes when they split. By default,
+	// the bucket will fill to 50% but it can be useful to increase this
+	// amount if you know that your write workloads are mostly append-only.
+	FillPercent float64
 }
 
 // bucket represents the on-file representation of a bucket.
@@ -44,7 +58,7 @@ type bucket struct {
 
 // newBucket returns a new bucket associated with a transaction.
 func newBucket(tx *Tx) Bucket {
-	var b = Bucket{tx: tx}
+	var b = Bucket{tx: tx, FillPercent: DefaultFillPercent}
 	if tx.writable {
 		b.buckets = make(map[string]*Bucket)
 		b.nodes = make(map[pgid]*node)
@@ -155,7 +169,11 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	}
 
 	// Create empty, inline bucket.
-	var bucket = Bucket{bucket: &bucket{}, rootNode: &node{isLeaf: true}}
+	var bucket = Bucket{
+		bucket:      &bucket{},
+		rootNode:    &node{isLeaf: true},
+		FillPercent: DefaultFillPercent,
+	}
 	var value = bucket.write()
 
 	// Insert into node.

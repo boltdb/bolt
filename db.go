@@ -23,15 +23,6 @@ const version = 2
 // Represents a marker value to indicate that a file is a Bolt DB.
 const magic uint32 = 0xED0CDAED
 
-const (
-	minFillPercent = 0.1
-	maxFillPercent = 1.0
-)
-
-// DefaultFillPercent is the percentage that split pages are filled.
-// This value can be changed by setting DB.FillPercent.
-const DefaultFillPercent = 0.5
-
 // DB represents a collection of buckets persisted to a file on disk.
 // All data access is performed through transactions which can be obtained through the DB.
 // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
@@ -41,11 +32,6 @@ type DB struct {
 	// flag has a large performance impact so it should only be used for
 	// debugging purposes.
 	StrictMode bool
-
-	// Sets the threshold for filling nodes when they split. By default,
-	// the database will fill to 50% but it can be useful to increase this
-	// amount if you know that your write workloads are mostly append-only.
-	FillPercent float64
 
 	// Setting the NoSync flag will cause the database to skip fsync()
 	// calls after each commit. This can be useful when bulk loading data
@@ -99,7 +85,7 @@ func (db *DB) String() string {
 // If the file does not exist then it will be created automatically.
 // Passing in nil options will cause Bolt to open the database with the default options.
 func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
-	var db = &DB{opened: true, FillPercent: DefaultFillPercent}
+	var db = &DB{opened: true}
 
 	// Set default options if no options are provided.
 	if options == nil {

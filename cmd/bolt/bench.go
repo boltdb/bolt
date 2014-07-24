@@ -47,7 +47,6 @@ func Bench(options *BenchOptions) {
 		return
 	}
 	db.NoSync = options.NoSync
-	db.FillPercent = options.FillPercent
 	defer db.Close()
 
 	// Enable streaming stats.
@@ -140,6 +139,7 @@ func benchWriteWithSource(db *bolt.DB, options *BenchOptions, results *BenchResu
 	for i := 0; i < options.Iterations; i += options.BatchSize {
 		err := db.Update(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists(benchBucketName)
+			b.FillPercent = options.FillPercent
 
 			for j := 0; j < options.BatchSize; j++ {
 				var key = make([]byte, options.KeySize)
@@ -165,10 +165,12 @@ func benchWriteNestedWithSource(db *bolt.DB, options *BenchOptions, results *Ben
 	for i := 0; i < options.Iterations; i += options.BatchSize {
 		err := db.Update(func(tx *bolt.Tx) error {
 			top, _ := tx.CreateBucketIfNotExists(benchBucketName)
+			top.FillPercent = options.FillPercent
 
 			var name = make([]byte, options.KeySize)
 			binary.BigEndian.PutUint32(name, keySource())
 			b, _ := top.CreateBucketIfNotExists(name)
+			b.FillPercent = options.FillPercent
 
 			for j := 0; j < options.BatchSize; j++ {
 				var key = make([]byte, options.KeySize)
