@@ -44,6 +44,8 @@ type Bucket struct {
 	// Sets the threshold for filling nodes when they split. By default,
 	// the bucket will fill to 50% but it can be useful to increase this
 	// amount if you know that your write workloads are mostly append-only.
+	//
+	// This is non-persisted across transactions so it must be set in every Tx.
 	FillPercent float64
 }
 
