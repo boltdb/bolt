@@ -1,4 +1,4 @@
-package bolt
+package bolt_test
 
 import (
 	"errors"
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unsafe"
 
+	"github.com/boltdb/bolt"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,7 +21,7 @@ var statsFlag = flag.Bool("stats", false, "show performance stats")
 
 // Ensure that opening a database with a bad path returns an error.
 func TestOpen_BadPath(t *testing.T) {
-	db, err := Open("", 0666, nil)
+	db, err := bolt.Open("", 0666, nil)
 	assert.Error(t, err)
 	assert.Nil(t, db)
 }
@@ -30,7 +30,7 @@ func TestOpen_BadPath(t *testing.T) {
 func TestOpen(t *testing.T) {
 	path := tempfile()
 	defer os.Remove(path)
-	db, err := Open(path, 0666, nil)
+	db, err := bolt.Open(path, 0666, nil)
 	assert.NotNil(t, db)
 	assert.NoError(t, err)
 	assert.Equal(t, db.Path(), path)
@@ -47,15 +47,15 @@ func TestOpen_Timeout(t *testing.T) {
 	defer os.Remove(path)
 
 	// Open a data file.
-	db0, err := Open(path, 0666, nil)
+	db0, err := bolt.Open(path, 0666, nil)
 	assert.NotNil(t, db0)
 	assert.NoError(t, err)
 
 	// Attempt to open the database again.
 	start := time.Now()
-	db1, err := Open(path, 0666, &Options{Timeout: 100 * time.Millisecond})
+	db1, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 100 * time.Millisecond})
 	assert.Nil(t, db1)
-	assert.Equal(t, ErrTimeout, err)
+	assert.Equal(t, bolt.ErrTimeout, err)
 	assert.True(t, time.Since(start) > 100*time.Millisecond)
 
 	db0.Close()
@@ -71,7 +71,7 @@ func TestOpen_Wait(t *testing.T) {
 	defer os.Remove(path)
 
 	// Open a data file.
-	db0, err := Open(path, 0666, nil)
+	db0, err := bolt.Open(path, 0666, nil)
 	assert.NotNil(t, db0)
 	assert.NoError(t, err)
 
@@ -80,7 +80,7 @@ func TestOpen_Wait(t *testing.T) {
 
 	// Attempt to open the database again.
 	start := time.Now()
-	db1, err := Open(path, 0666, &Options{Timeout: 200 * time.Millisecond})
+	db1, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 200 * time.Millisecond})
 	assert.NotNil(t, db1)
 	assert.NoError(t, err)
 	assert.True(t, time.Since(start) > 100*time.Millisecond)
@@ -91,14 +91,14 @@ func TestOpen_Check(t *testing.T) {
 	path := tempfile()
 	defer os.Remove(path)
 
-	db, err := Open(path, 0666, nil)
+	db, err := bolt.Open(path, 0666, nil)
 	assert.NoError(t, err)
-	assert.NoError(t, db.View(func(tx *Tx) error { return <-tx.Check() }))
+	assert.NoError(t, db.View(func(tx *bolt.Tx) error { return <-tx.Check() }))
 	db.Close()
 
-	db, err = Open(path, 0666, nil)
+	db, err = bolt.Open(path, 0666, nil)
 	assert.NoError(t, err)
-	assert.NoError(t, db.View(func(tx *Tx) error { return <-tx.Check() }))
+	assert.NoError(t, db.View(func(tx *bolt.Tx) error { return <-tx.Check() }))
 	db.Close()
 }
 
@@ -107,7 +107,7 @@ func TestDB_Open_FileError(t *testing.T) {
 	path := tempfile()
 	defer os.Remove(path)
 
-	_, err := Open(path+"/youre-not-my-real-parent", 0666, nil)
+	_, err := bolt.Open(path+"/youre-not-my-real-parent", 0666, nil)
 	if err, _ := err.(*os.PathError); assert.Error(t, err) {
 		assert.Equal(t, path+"/youre-not-my-real-parent", err.Path)
 		assert.Equal(t, "open", err.Op)
@@ -124,17 +124,20 @@ func TestDB_Open_FileTooSmall(t *testing.T) {
 	path := tempfile()
 	defer os.Remove(path)
 
-	db, err := Open(path, 0666, nil)
+	db, err := bolt.Open(path, 0666, nil)
 	assert.NoError(t, err)
 	db.Close()
 
 	// corrupt the database
 	assert.NoError(t, os.Truncate(path, int64(os.Getpagesize())))
 
-	db, err = Open(path, 0666, nil)
+	db, err = bolt.Open(path, 0666, nil)
 	assert.Equal(t, errors.New("file size too small"), err)
 }
 
+// TODO(benbjohnson): Test corruption at every byte of the first two pages.
+
+/*
 // Ensure that corrupt meta0 page errors get returned.
 func TestDB_Open_CorruptMeta0(t *testing.T) {
 	var m meta
@@ -156,7 +159,7 @@ func TestDB_Open_CorruptMeta0(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Open the database.
-	_, err = Open(path, 0666, nil)
+	_, err = bolt.Open(path, 0666, nil)
 	assert.Equal(t, err, errors.New("meta0 error: invalid database"))
 }
 
@@ -166,13 +169,13 @@ func TestDB_Open_MetaChecksumError(t *testing.T) {
 		path := tempfile()
 		defer os.Remove(path)
 
-		db, err := Open(path, 0600, nil)
+		db, err := bolt.Open(path, 0600, nil)
 		pageSize := db.pageSize
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			_, err := tx.CreateBucket([]byte("widgets"))
 			return err
 		})
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			_, err := tx.CreateBucket([]byte("woojits"))
 			return err
 		})
@@ -185,7 +188,7 @@ func TestDB_Open_MetaChecksumError(t *testing.T) {
 		f.Close()
 
 		// Reopen the database.
-		_, err = Open(path, 0600, nil)
+		_, err = bolt.Open(path, 0600, nil)
 		if assert.Error(t, err) {
 			if i == 0 {
 				assert.Equal(t, "meta0 error: checksum error", err.Error())
@@ -195,13 +198,14 @@ func TestDB_Open_MetaChecksumError(t *testing.T) {
 		}
 	}
 }
+*/
 
 // Ensure that a database cannot open a transaction when it's not open.
 func TestDB_Begin_DatabaseNotOpen(t *testing.T) {
-	var db DB
+	var db bolt.DB
 	tx, err := db.Begin(false)
 	assert.Nil(t, tx)
-	assert.Equal(t, err, ErrDatabaseNotOpen)
+	assert.Equal(t, err, bolt.ErrDatabaseNotOpen)
 }
 
 // Ensure that a read-write transaction can be retrieved.
@@ -218,9 +222,9 @@ func TestDB_BeginRW(t *testing.T) {
 
 // Ensure that opening a transaction while the DB is closed returns an error.
 func TestDB_BeginRW_Closed(t *testing.T) {
-	var db DB
+	var db bolt.DB
 	tx, err := db.Begin(true)
-	assert.Equal(t, err, ErrDatabaseNotOpen)
+	assert.Equal(t, err, bolt.ErrDatabaseNotOpen)
 	assert.Nil(t, tx)
 }
 
@@ -228,7 +232,7 @@ func TestDB_BeginRW_Closed(t *testing.T) {
 func TestDB_Update(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	err := db.Update(func(tx *Tx) error {
+	err := db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		b := tx.Bucket([]byte("widgets"))
 		b.Put([]byte("foo"), []byte("bar"))
@@ -237,7 +241,7 @@ func TestDB_Update(t *testing.T) {
 		return nil
 	})
 	assert.NoError(t, err)
-	err = db.View(func(tx *Tx) error {
+	err = db.View(func(tx *bolt.Tx) error {
 		assert.Nil(t, tx.Bucket([]byte("widgets")).Get([]byte("foo")))
 		assert.Equal(t, []byte("bat"), tx.Bucket([]byte("widgets")).Get([]byte("baz")))
 		return nil
@@ -247,24 +251,24 @@ func TestDB_Update(t *testing.T) {
 
 // Ensure a closed database returns an error while running a transaction block
 func TestDB_Update_Closed(t *testing.T) {
-	var db DB
-	err := db.Update(func(tx *Tx) error {
+	var db bolt.DB
+	err := db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		return nil
 	})
-	assert.Equal(t, err, ErrDatabaseNotOpen)
+	assert.Equal(t, err, bolt.ErrDatabaseNotOpen)
 }
 
 // Ensure a panic occurs while trying to commit a managed transaction.
 func TestDB_Update_ManualCommitAndRollback(t *testing.T) {
-	var db DB
-	db.Update(func(tx *Tx) error {
+	var db bolt.DB
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		assert.Panics(t, func() { tx.Commit() })
 		assert.Panics(t, func() { tx.Rollback() })
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		assert.Panics(t, func() { tx.Commit() })
 		assert.Panics(t, func() { tx.Rollback() })
 		return nil
@@ -279,24 +283,24 @@ func TestDB_Update_Panic(t *testing.T) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				warn("recover: update", r)
+				t.Log("recover: update", r)
 			}
 		}()
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			tx.CreateBucket([]byte("widgets"))
 			panic("omg")
 		})
 	}()
 
 	// Verify we can update again.
-	err := db.Update(func(tx *Tx) error {
+	err := db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	})
 	assert.NoError(t, err)
 
 	// Verify that our change persisted.
-	err = db.Update(func(tx *Tx) error {
+	err = db.Update(func(tx *bolt.Tx) error {
 		assert.NotNil(t, tx.Bucket([]byte("widgets")))
 		return nil
 	})
@@ -306,7 +310,7 @@ func TestDB_Update_Panic(t *testing.T) {
 func TestDB_View_Error(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	err := db.View(func(tx *Tx) error {
+	err := db.View(func(tx *bolt.Tx) error {
 		return errors.New("xxx")
 	})
 	assert.Equal(t, errors.New("xxx"), err)
@@ -316,7 +320,7 @@ func TestDB_View_Error(t *testing.T) {
 func TestDB_View_Panic(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		return nil
 	})
@@ -324,17 +328,17 @@ func TestDB_View_Panic(t *testing.T) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				warn("recover: view", r)
+				t.Log("recover: view", r)
 			}
 		}()
-		db.View(func(tx *Tx) error {
+		db.View(func(tx *bolt.Tx) error {
 			assert.NotNil(t, tx.Bucket([]byte("widgets")))
 			panic("omg")
 		})
 	}()
 
 	// Verify that we can still use read transactions.
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		assert.NotNil(t, tx.Bucket([]byte("widgets")))
 		return nil
 	})
@@ -349,7 +353,7 @@ func TestDB_Commit_WriteFail(t *testing.T) {
 func TestDB_Stats(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	})
@@ -359,35 +363,22 @@ func TestDB_Stats(t *testing.T) {
 	assert.Equal(t, 2, stats.PendingPageN, "PendingPageN")
 }
 
-// Ensure that the mmap grows appropriately.
-func TestDB_mmapSize(t *testing.T) {
-	db := &DB{pageSize: 4096}
-	assert.Equal(t, db.mmapSize(0), minMmapSize)
-	assert.Equal(t, db.mmapSize(16384), minMmapSize)
-	assert.Equal(t, db.mmapSize(minMmapSize-1), minMmapSize)
-	assert.Equal(t, db.mmapSize(minMmapSize), minMmapSize)
-	assert.Equal(t, db.mmapSize(minMmapSize+1), (minMmapSize*2)+4096)
-	assert.Equal(t, db.mmapSize(10000000), 20000768)
-	assert.Equal(t, db.mmapSize((1<<30)-1), 2147483648)
-	assert.Equal(t, db.mmapSize(1<<30), 1<<31)
-}
-
 // Ensure that database pages are in expected order and type.
 func TestDB_Consistency(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	})
 
 	for i := 0; i < 10; i++ {
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
 			return nil
 		})
 	}
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		if p, _ := tx.Page(0); assert.NotNil(t, p) {
 			assert.Equal(t, "meta", p.Type)
 		}
@@ -412,16 +403,9 @@ func TestDB_Consistency(t *testing.T) {
 	})
 }
 
-// Ensure that a database can return a string representation of itself.
-func TestDB_String(t *testing.T) {
-	db := &DB{path: "/foo/bar"}
-	assert.Equal(t, db.String(), `DB<"/foo/bar">`)
-	assert.Equal(t, db.GoString(), `bolt.DB{path:"/foo/bar"}`)
-}
-
 // Ensure that DB stats can be substracted from one another.
 func TestDBStats_Sub(t *testing.T) {
-	var a, b Stats
+	var a, b bolt.Stats
 	a.TxStats.PageCount = 3
 	a.FreePageN = 4
 	b.TxStats.PageCount = 10
@@ -432,76 +416,14 @@ func TestDBStats_Sub(t *testing.T) {
 	assert.Equal(t, 14, diff.FreePageN)
 }
 
-// Ensure that meta with bad magic is invalid.
-func TestMeta_validate_magic(t *testing.T) {
-	m := &meta{magic: 0x01234567}
-	assert.Equal(t, m.validate(), ErrInvalid)
-}
-
-// Ensure that meta with a bad version is invalid.
-func TestMeta_validate_version(t *testing.T) {
-	m := &meta{magic: magic, version: 200}
-	assert.Equal(t, m.validate(), ErrVersionMismatch)
-}
-
-// Ensure that a DB in strict mode will fail when corrupted.
-func TestDB_StrictMode(t *testing.T) {
-	var msg string
-	func() {
-		defer func() {
-			msg = fmt.Sprintf("%s", recover())
-		}()
-
-		db := NewTestDB()
-		defer db.Close()
-
-		db.StrictMode = true
-		db.Update(func(tx *Tx) error {
-			tx.CreateBucket([]byte("foo"))
-
-			// Corrupt the DB by extending the high water mark.
-			tx.meta.pgid++
-
-			return nil
-		})
-	}()
-
-	assert.Equal(t, "check fail: page 4: unreachable unfreed", msg)
-}
-
-// Ensure that a double freeing a page will result in a panic.
-func TestDB_DoubleFree(t *testing.T) {
-	var msg string
-	func() {
-		defer func() {
-			msg = fmt.Sprintf("%s", recover())
-		}()
-
-		db := NewTestDB()
-		defer os.Remove(db.DB.Path())
-		defer db.DB.Close()
-
-		db.Update(func(tx *Tx) error {
-			tx.CreateBucket([]byte("foo"))
-
-			// Corrupt the DB by adding a page to the freelist.
-			db.freelist.free(0, tx.page(3))
-
-			return nil
-		})
-	}()
-
-	assert.Equal(t, "assertion failed: page 3 already freed", msg)
-}
-
 func ExampleDB_Update() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666, nil)
+	db, _ := bolt.Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
 	// Execute several commands within a write transaction.
-	err := db.Update(func(tx *Tx) error {
+	err := db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
 		if err != nil {
 			return err
@@ -514,7 +436,7 @@ func ExampleDB_Update() {
 
 	// If our transactional block didn't return an error then our data is saved.
 	if err == nil {
-		db.View(func(tx *Tx) error {
+		db.View(func(tx *bolt.Tx) error {
 			value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 			fmt.Printf("The value of 'foo' is: %s\n", value)
 			return nil
@@ -527,12 +449,12 @@ func ExampleDB_Update() {
 
 func ExampleDB_View() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666, nil)
+	db, _ := bolt.Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
 	// Insert data into a bucket.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("people"))
 		b := tx.Bucket([]byte("people"))
 		b.Put([]byte("john"), []byte("doe"))
@@ -541,7 +463,7 @@ func ExampleDB_View() {
 	})
 
 	// Access data from within a read-only transactional block.
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		v := tx.Bucket([]byte("people")).Get([]byte("john"))
 		fmt.Printf("John's last name is %s.\n", v)
 		return nil
@@ -553,12 +475,12 @@ func ExampleDB_View() {
 
 func ExampleDB_Begin_ReadOnly() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666, nil)
+	db, _ := bolt.Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
 	// Create a bucket.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	})
@@ -588,12 +510,12 @@ func ExampleDB_Begin_ReadOnly() {
 // TestDB represents a wrapper around a Bolt DB to handle temporary file
 // creation and automatic cleanup on close.
 type TestDB struct {
-	*DB
+	*bolt.DB
 }
 
 // NewTestDB returns a new instance of TestDB.
 func NewTestDB() *TestDB {
-	db, err := Open(tempfile(), 0666, nil)
+	db, err := bolt.Open(tempfile(), 0666, nil)
 	if err != nil {
 		panic("cannot open db: " + err.Error())
 	}
@@ -632,7 +554,7 @@ func (db *TestDB) PrintStats() {
 
 // MustCheck runs a consistency check on the database and panics if any errors are found.
 func (db *TestDB) MustCheck() {
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		// Collect all the errors.
 		var errors []error
 		for err := range tx.Check() {
@@ -667,7 +589,7 @@ func (db *TestDB) MustCheck() {
 // CopyTempFile copies a database to a temporary file.
 func (db *TestDB) CopyTempFile() {
 	path := tempfile()
-	db.View(func(tx *Tx) error { return tx.CopyFile(path, 0600) })
+	db.View(func(tx *bolt.Tx) error { return tx.CopyFile(path, 0600) })
 	fmt.Println("db copied to: ", path)
 }
 
@@ -680,7 +602,7 @@ func tempfile() string {
 }
 
 // mustContainKeys checks that a bucket contains a given set of keys.
-func mustContainKeys(b *Bucket, m map[string]string) {
+func mustContainKeys(b *bolt.Bucket, m map[string]string) {
 	found := make(map[string]string)
 	b.ForEach(func(k, _ []byte) error {
 		found[string(k)] = ""

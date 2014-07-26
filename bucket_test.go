@@ -1,4 +1,4 @@
-package bolt
+package bolt_test
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/boltdb/bolt"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +20,7 @@ import (
 func TestBucket_Get_NonExistent(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 		assert.Nil(t, value)
@@ -31,7 +32,7 @@ func TestBucket_Get_NonExistent(t *testing.T) {
 func TestBucket_Get_FromNode(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		b := tx.Bucket([]byte("widgets"))
 		b.Put([]byte("foo"), []byte("bar"))
@@ -45,7 +46,7 @@ func TestBucket_Get_FromNode(t *testing.T) {
 func TestBucket_Get_IncompatibleValue(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		_, err := tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
 		assert.NoError(t, err)
@@ -58,7 +59,7 @@ func TestBucket_Get_IncompatibleValue(t *testing.T) {
 func TestBucket_Put(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		err := tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
 		assert.NoError(t, err)
@@ -72,7 +73,7 @@ func TestBucket_Put(t *testing.T) {
 func TestBucket_Put_Repeat(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		b := tx.Bucket([]byte("widgets"))
 		assert.NoError(t, b.Put([]byte("foo"), []byte("bar")))
@@ -89,7 +90,7 @@ func TestBucket_Put_Large(t *testing.T) {
 	defer db.Close()
 
 	count, factor := 100, 200
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		b := tx.Bucket([]byte("widgets"))
 		for i := 1; i < count; i++ {
@@ -97,7 +98,7 @@ func TestBucket_Put_Large(t *testing.T) {
 		}
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		for i := 1; i < count; i++ {
 			value := b.Get([]byte(strings.Repeat("0", i*factor)))
@@ -120,7 +121,7 @@ func TestDB_Put_VeryLarge(t *testing.T) {
 	defer db.Close()
 
 	for i := 0; i < n; i += batchN {
-		err := db.Update(func(tx *Tx) error {
+		err := db.Update(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists([]byte("widgets"))
 			for j := 0; j < batchN; j++ {
 				k, v := make([]byte, ksize), make([]byte, vsize)
@@ -137,11 +138,11 @@ func TestDB_Put_VeryLarge(t *testing.T) {
 func TestBucket_Put_IncompatibleValue(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		_, err := tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
 		assert.NoError(t, err)
-		assert.Equal(t, ErrIncompatibleValue, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
+		assert.Equal(t, bolt.ErrIncompatibleValue, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
 		return nil
 	})
 }
@@ -154,22 +155,22 @@ func TestBucket_Put_Closed(t *testing.T) {
 	tx.CreateBucket([]byte("widgets"))
 	b := tx.Bucket([]byte("widgets"))
 	tx.Rollback()
-	assert.Equal(t, ErrTxClosed, b.Put([]byte("foo"), []byte("bar")))
+	assert.Equal(t, bolt.ErrTxClosed, b.Put([]byte("foo"), []byte("bar")))
 }
 
 // Ensure that setting a value on a read-only bucket returns an error.
 func TestBucket_Put_ReadOnly(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, err)
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		err := b.Put([]byte("foo"), []byte("bar"))
-		assert.Equal(t, err, ErrTxNotWritable)
+		assert.Equal(t, err, bolt.ErrTxNotWritable)
 		return nil
 	})
 }
@@ -178,7 +179,7 @@ func TestBucket_Put_ReadOnly(t *testing.T) {
 func TestBucket_Delete(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar"))
 		err := tx.Bucket([]byte("widgets")).Delete([]byte("foo"))
@@ -193,21 +194,21 @@ func TestBucket_Delete(t *testing.T) {
 func TestBucket_Delete_Large(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		var b, _ = tx.CreateBucket([]byte("widgets"))
 		for i := 0; i < 100; i++ {
 			assert.NoError(t, b.Put([]byte(strconv.Itoa(i)), []byte(strings.Repeat("*", 1024))))
 		}
 		return nil
 	})
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		var b = tx.Bucket([]byte("widgets"))
 		for i := 0; i < 100; i++ {
 			assert.NoError(t, b.Delete([]byte(strconv.Itoa(i))))
 		}
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		var b = tx.Bucket([]byte("widgets"))
 		for i := 0; i < 100; i++ {
 			assert.Nil(t, b.Get([]byte(strconv.Itoa(i))))
@@ -226,7 +227,7 @@ func TestBucket_Delete_FreelistOverflow(t *testing.T) {
 	defer db.Close()
 	k := make([]byte, 16)
 	for i := uint64(0); i < 10000; i++ {
-		err := db.Update(func(tx *Tx) error {
+		err := db.Update(func(tx *bolt.Tx) error {
 			b, err := tx.CreateBucketIfNotExists([]byte("0"))
 			if err != nil {
 				t.Fatalf("bucket error: %s", err)
@@ -249,7 +250,7 @@ func TestBucket_Delete_FreelistOverflow(t *testing.T) {
 	}
 
 	// Delete all of them in one large transaction
-	err := db.Update(func(tx *Tx) error {
+	err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("0"))
 		c := b.Cursor()
 		for k, _ := c.First(); k != nil; k, _ = c.Next() {
@@ -266,7 +267,7 @@ func TestBucket_Delete_FreelistOverflow(t *testing.T) {
 func TestBucket_Nested(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		// Create a widgets bucket.
 		b, err := tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, err)
@@ -283,7 +284,7 @@ func TestBucket_Nested(t *testing.T) {
 	db.MustCheck()
 
 	// Update widgets/bar.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		var b = tx.Bucket([]byte("widgets"))
 		assert.NoError(t, b.Put([]byte("bar"), []byte("xxxx")))
 		return nil
@@ -291,7 +292,7 @@ func TestBucket_Nested(t *testing.T) {
 	db.MustCheck()
 
 	// Cause a split.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		var b = tx.Bucket([]byte("widgets"))
 		for i := 0; i < 10000; i++ {
 			assert.NoError(t, b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i))))
@@ -301,7 +302,7 @@ func TestBucket_Nested(t *testing.T) {
 	db.MustCheck()
 
 	// Insert into widgets/foo/baz.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		var b = tx.Bucket([]byte("widgets"))
 		assert.NoError(t, b.Bucket([]byte("foo")).Put([]byte("baz"), []byte("yyyy")))
 		return nil
@@ -309,7 +310,7 @@ func TestBucket_Nested(t *testing.T) {
 	db.MustCheck()
 
 	// Verify.
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		var b = tx.Bucket([]byte("widgets"))
 		assert.Equal(t, []byte("yyyy"), b.Bucket([]byte("foo")).Get([]byte("baz")))
 		assert.Equal(t, []byte("xxxx"), b.Get([]byte("bar")))
@@ -324,12 +325,12 @@ func TestBucket_Nested(t *testing.T) {
 func TestBucket_Delete_Bucket(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		b := tx.Bucket([]byte("widgets"))
 		_, err := b.CreateBucket([]byte("foo"))
 		assert.NoError(t, err)
-		assert.Equal(t, ErrIncompatibleValue, b.Delete([]byte("foo")))
+		assert.Equal(t, bolt.ErrIncompatibleValue, b.Delete([]byte("foo")))
 		return nil
 	})
 }
@@ -338,14 +339,14 @@ func TestBucket_Delete_Bucket(t *testing.T) {
 func TestBucket_Delete_ReadOnly(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		err := b.Delete([]byte("foo"))
-		assert.Equal(t, err, ErrTxNotWritable)
+		assert.Equal(t, err, bolt.ErrTxNotWritable)
 		return nil
 	})
 }
@@ -358,14 +359,14 @@ func TestBucket_Delete_Closed(t *testing.T) {
 	tx.CreateBucket([]byte("widgets"))
 	b := tx.Bucket([]byte("widgets"))
 	tx.Rollback()
-	assert.Equal(t, ErrTxClosed, b.Delete([]byte("foo")))
+	assert.Equal(t, bolt.ErrTxClosed, b.Delete([]byte("foo")))
 }
 
 // Ensure that deleting a bucket causes nested buckets to be deleted.
 func TestBucket_DeleteBucket_Nested(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		_, err := tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
 		assert.NoError(t, err)
@@ -381,7 +382,7 @@ func TestBucket_DeleteBucket_Nested(t *testing.T) {
 func TestBucket_DeleteBucket_Nested2(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		_, err := tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
 		assert.NoError(t, err)
@@ -390,7 +391,7 @@ func TestBucket_DeleteBucket_Nested2(t *testing.T) {
 		assert.NoError(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).Bucket([]byte("bar")).Put([]byte("baz"), []byte("bat")))
 		return nil
 	})
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		assert.NotNil(t, tx.Bucket([]byte("widgets")))
 		assert.NotNil(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")))
 		assert.NotNil(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")).Bucket([]byte("bar")))
@@ -398,7 +399,7 @@ func TestBucket_DeleteBucket_Nested2(t *testing.T) {
 		assert.NoError(t, tx.DeleteBucket([]byte("widgets")))
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		assert.Nil(t, tx.Bucket([]byte("widgets")))
 		return nil
 	})
@@ -408,7 +409,7 @@ func TestBucket_DeleteBucket_Nested2(t *testing.T) {
 func TestBucket_DeleteBucket_Large(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, err)
 		_, err = tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
@@ -419,7 +420,7 @@ func TestBucket_DeleteBucket_Large(t *testing.T) {
 		}
 		return nil
 	})
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		assert.NoError(t, tx.DeleteBucket([]byte("widgets")))
 		return nil
 	})
@@ -431,7 +432,7 @@ func TestBucket_DeleteBucket_Large(t *testing.T) {
 func TestBucket_Bucket_IncompatibleValue(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
 		assert.Nil(t, tx.Bucket([]byte("widgets")).Bucket([]byte("foo")))
@@ -443,12 +444,12 @@ func TestBucket_Bucket_IncompatibleValue(t *testing.T) {
 func TestBucket_CreateBucket_IncompatibleValue(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, err)
 		assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
 		_, err = tx.Bucket([]byte("widgets")).CreateBucket([]byte("foo"))
-		assert.Equal(t, ErrIncompatibleValue, err)
+		assert.Equal(t, bolt.ErrIncompatibleValue, err)
 		return nil
 	})
 }
@@ -457,11 +458,11 @@ func TestBucket_CreateBucket_IncompatibleValue(t *testing.T) {
 func TestBucket_DeleteBucket_IncompatibleValue(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, err)
 		assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
-		assert.Equal(t, ErrIncompatibleValue, tx.Bucket([]byte("widgets")).DeleteBucket([]byte("foo")))
+		assert.Equal(t, bolt.ErrIncompatibleValue, tx.Bucket([]byte("widgets")).DeleteBucket([]byte("foo")))
 		return nil
 	})
 }
@@ -470,7 +471,7 @@ func TestBucket_DeleteBucket_IncompatibleValue(t *testing.T) {
 func TestBucket_NextSequence(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		tx.CreateBucket([]byte("woojits"))
 
@@ -494,15 +495,15 @@ func TestBucket_NextSequence(t *testing.T) {
 func TestBucket_NextSequence_ReadOnly(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		i, err := b.NextSequence()
 		assert.Equal(t, i, uint64(0))
-		assert.Equal(t, err, ErrTxNotWritable)
+		assert.Equal(t, err, bolt.ErrTxNotWritable)
 		return nil
 	})
 }
@@ -516,14 +517,14 @@ func TestBucket_NextSequence_Closed(t *testing.T) {
 	b := tx.Bucket([]byte("widgets"))
 	tx.Rollback()
 	_, err := b.NextSequence()
-	assert.Equal(t, ErrTxClosed, err)
+	assert.Equal(t, bolt.ErrTxClosed, err)
 }
 
 // Ensure a user can loop over all key/value pairs in a bucket.
 func TestBucket_ForEach(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("0000"))
 		tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("0001"))
@@ -555,7 +556,7 @@ func TestBucket_ForEach(t *testing.T) {
 func TestBucket_ForEach_ShortCircuit(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		tx.Bucket([]byte("widgets")).Put([]byte("bar"), []byte("0000"))
 		tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte("0000"))
@@ -584,19 +585,19 @@ func TestBucket_ForEach_Closed(t *testing.T) {
 	b := tx.Bucket([]byte("widgets"))
 	tx.Rollback()
 	err := b.ForEach(func(k, v []byte) error { return nil })
-	assert.Equal(t, ErrTxClosed, err)
+	assert.Equal(t, bolt.ErrTxClosed, err)
 }
 
 // Ensure that an error is returned when inserting with an empty key.
 func TestBucket_Put_EmptyKey(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		err := tx.Bucket([]byte("widgets")).Put([]byte(""), []byte("bar"))
-		assert.Equal(t, err, ErrKeyRequired)
+		assert.Equal(t, err, bolt.ErrKeyRequired)
 		err = tx.Bucket([]byte("widgets")).Put(nil, []byte("bar"))
-		assert.Equal(t, err, ErrKeyRequired)
+		assert.Equal(t, err, bolt.ErrKeyRequired)
 		return nil
 	})
 }
@@ -605,10 +606,10 @@ func TestBucket_Put_EmptyKey(t *testing.T) {
 func TestBucket_Put_KeyTooLarge(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		err := tx.Bucket([]byte("widgets")).Put(make([]byte, 32769), []byte("bar"))
-		assert.Equal(t, err, ErrKeyTooLarge)
+		assert.Equal(t, err, bolt.ErrKeyTooLarge)
 		return nil
 	})
 }
@@ -621,18 +622,18 @@ func TestBucket_Stats(t *testing.T) {
 	// Add bucket with fewer keys but one big value.
 	big_key := []byte("really-big-value")
 	for i := 0; i < 500; i++ {
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists([]byte("woojits"))
 			return b.Put([]byte(fmt.Sprintf("%03d", i)), []byte(strconv.Itoa(i)))
 		})
 	}
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		b, _ := tx.CreateBucketIfNotExists([]byte("woojits"))
 		return b.Put(big_key, []byte(strings.Repeat("*", 10000)))
 	})
 
 	db.MustCheck()
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("woojits"))
 		stats := b.Stats()
 		assert.Equal(t, 1, stats.BranchPageN, "BranchPageN")
@@ -642,13 +643,13 @@ func TestBucket_Stats(t *testing.T) {
 		assert.Equal(t, 501, stats.KeyN, "KeyN")
 		assert.Equal(t, 2, stats.Depth, "Depth")
 
-		branchInuse := pageHeaderSize            // branch page header
-		branchInuse += 7 * branchPageElementSize // branch elements
-		branchInuse += 7 * 3                     // branch keys (6 3-byte keys)
+		branchInuse := 16     // branch page header
+		branchInuse += 7 * 16 // branch elements
+		branchInuse += 7 * 3  // branch keys (6 3-byte keys)
 		assert.Equal(t, branchInuse, stats.BranchInuse, "BranchInuse")
 
-		leafInuse := 7 * pageHeaderSize          // leaf page header
-		leafInuse += 501 * leafPageElementSize   // leaf elements
+		leafInuse := 7 * 16                      // leaf page header
+		leafInuse += 501 * 16                    // leaf elements
 		leafInuse += 500*3 + len(big_key)        // leaf keys
 		leafInuse += 1*10 + 2*90 + 3*400 + 10000 // leaf values
 		assert.Equal(t, leafInuse, stats.LeafInuse, "LeafInuse")
@@ -682,7 +683,7 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 	var count int
 	r := rand.New(rand.NewSource(42))
 	for _, i := range r.Perm(1000) {
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists([]byte("woojits"))
 			b.FillPercent = 0.9
 			for _, j := range r.Perm(100) {
@@ -695,7 +696,7 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 	}
 	db.MustCheck()
 
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		s := tx.Bucket([]byte("woojits")).Stats()
 		assert.Equal(t, 100000, s.KeyN, "KeyN")
 
@@ -716,7 +717,7 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 func TestBucket_Stats_Small(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		// Add a bucket that fits on a single root leaf.
 		b, err := tx.CreateBucket([]byte("whozawhats"))
 		assert.NoError(t, err)
@@ -725,7 +726,7 @@ func TestBucket_Stats_Small(t *testing.T) {
 		return nil
 	})
 	db.MustCheck()
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("whozawhats"))
 		stats := b.Stats()
 		assert.Equal(t, 0, stats.BranchPageN, "BranchPageN")
@@ -743,7 +744,7 @@ func TestBucket_Stats_Small(t *testing.T) {
 		}
 		assert.Equal(t, 1, stats.BucketN, "BucketN")
 		assert.Equal(t, 1, stats.InlineBucketN, "InlineBucketN")
-		assert.Equal(t, pageHeaderSize+leafPageElementSize+6, stats.InlineBucketInuse, "InlineBucketInuse")
+		assert.Equal(t, 16+16+6, stats.InlineBucketInuse, "InlineBucketInuse")
 		return nil
 	})
 }
@@ -752,14 +753,14 @@ func TestBucket_Stats_EmptyBucket(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		// Add a bucket that fits on a single root leaf.
 		_, err := tx.CreateBucket([]byte("whozawhats"))
 		assert.NoError(t, err)
 		return nil
 	})
 	db.MustCheck()
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("whozawhats"))
 		stats := b.Stats()
 		assert.Equal(t, 0, stats.BranchPageN, "BranchPageN")
@@ -777,7 +778,7 @@ func TestBucket_Stats_EmptyBucket(t *testing.T) {
 		}
 		assert.Equal(t, 1, stats.BucketN, "BucketN")
 		assert.Equal(t, 1, stats.InlineBucketN, "InlineBucketN")
-		assert.Equal(t, pageHeaderSize, stats.InlineBucketInuse, "InlineBucketInuse")
+		assert.Equal(t, 16, stats.InlineBucketInuse, "InlineBucketInuse")
 		return nil
 	})
 }
@@ -787,7 +788,7 @@ func TestBucket_Stats_Nested(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("foo"))
 		assert.NoError(t, err)
 		for i := 0; i < 100; i++ {
@@ -808,7 +809,7 @@ func TestBucket_Stats_Nested(t *testing.T) {
 
 	db.MustCheck()
 
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("foo"))
 		stats := b.Stats()
 		assert.Equal(t, 0, stats.BranchPageN, "BranchPageN")
@@ -819,19 +820,19 @@ func TestBucket_Stats_Nested(t *testing.T) {
 		assert.Equal(t, 3, stats.Depth, "Depth")
 		assert.Equal(t, 0, stats.BranchInuse, "BranchInuse")
 
-		foo := pageHeaderSize            // foo
-		foo += 101 * leafPageElementSize // foo leaf elements
-		foo += 100*2 + 100*2             // foo leaf key/values
-		foo += 3 + bucketHeaderSize      // foo -> bar key/value
+		foo := 16            // foo (pghdr)
+		foo += 101 * 16      // foo leaf elements
+		foo += 100*2 + 100*2 // foo leaf key/values
+		foo += 3 + 16        // foo -> bar key/value
 
-		bar := pageHeaderSize           // bar
-		bar += 11 * leafPageElementSize // bar leaf elements
-		bar += 10 + 10                  // bar leaf key/values
-		bar += 3 + bucketHeaderSize     // bar -> baz key/value
+		bar := 16      // bar (pghdr)
+		bar += 11 * 16 // bar leaf elements
+		bar += 10 + 10 // bar leaf key/values
+		bar += 3 + 16  // bar -> baz key/value
 
-		baz := pageHeaderSize           // baz (inline)
-		baz += 10 * leafPageElementSize // baz leaf elements
-		baz += 10 + 10                  // baz leaf key/values
+		baz := 16      // baz (inline) (pghdr)
+		baz += 10 * 16 // baz leaf elements
+		baz += 10 + 10 // baz leaf key/values
 
 		assert.Equal(t, foo+bar+baz, stats.LeafInuse, "LeafInuse")
 		if os.Getpagesize() == 4096 {
@@ -857,7 +858,7 @@ func TestBucket_Stats_Large(t *testing.T) {
 
 	var index int
 	for i := 0; i < 100; i++ {
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			// Add bucket with lots of keys.
 			b, _ := tx.CreateBucketIfNotExists([]byte("widgets"))
 			for i := 0; i < 1000; i++ {
@@ -869,7 +870,7 @@ func TestBucket_Stats_Large(t *testing.T) {
 	}
 	db.MustCheck()
 
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		stats := b.Stats()
 		assert.Equal(t, 13, stats.BranchPageN, "BranchPageN")
@@ -905,12 +906,12 @@ func TestBucket_Put_Single(t *testing.T) {
 
 		m := make(map[string][]byte)
 
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			_, err := tx.CreateBucket([]byte("widgets"))
 			return err
 		})
 		for _, item := range items {
-			db.Update(func(tx *Tx) error {
+			db.Update(func(tx *bolt.Tx) error {
 				if err := tx.Bucket([]byte("widgets")).Put(item.Key, item.Value); err != nil {
 					panic("put error: " + err.Error())
 				}
@@ -919,7 +920,7 @@ func TestBucket_Put_Single(t *testing.T) {
 			})
 
 			// Verify all key/values so far.
-			db.View(func(tx *Tx) error {
+			db.View(func(tx *bolt.Tx) error {
 				i := 0
 				for k, v := range m {
 					value := tx.Bucket([]byte("widgets")).Get([]byte(k))
@@ -952,11 +953,11 @@ func TestBucket_Put_Multiple(t *testing.T) {
 		db := NewTestDB()
 		defer db.Close()
 		// Bulk insert all values.
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			_, err := tx.CreateBucket([]byte("widgets"))
 			return err
 		})
-		err := db.Update(func(tx *Tx) error {
+		err := db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("widgets"))
 			for _, item := range items {
 				assert.NoError(t, b.Put(item.Key, item.Value))
@@ -966,7 +967,7 @@ func TestBucket_Put_Multiple(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Verify all items exist.
-		db.View(func(tx *Tx) error {
+		db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("widgets"))
 			for _, item := range items {
 				value := b.Get(item.Key)
@@ -994,11 +995,11 @@ func TestBucket_Delete_Quick(t *testing.T) {
 		db := NewTestDB()
 		defer db.Close()
 		// Bulk insert all values.
-		db.Update(func(tx *Tx) error {
+		db.Update(func(tx *bolt.Tx) error {
 			_, err := tx.CreateBucket([]byte("widgets"))
 			return err
 		})
-		err := db.Update(func(tx *Tx) error {
+		err := db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte("widgets"))
 			for _, item := range items {
 				assert.NoError(t, b.Put(item.Key, item.Value))
@@ -1009,14 +1010,14 @@ func TestBucket_Delete_Quick(t *testing.T) {
 
 		// Remove items one at a time and check consistency.
 		for _, item := range items {
-			err := db.Update(func(tx *Tx) error {
+			err := db.Update(func(tx *bolt.Tx) error {
 				return tx.Bucket([]byte("widgets")).Delete(item.Key)
 			})
 			assert.NoError(t, err)
 		}
 
 		// Anything before our deletion index should be nil.
-		db.View(func(tx *Tx) error {
+		db.View(func(tx *bolt.Tx) error {
 			tx.Bucket([]byte("widgets")).ForEach(func(k, v []byte) error {
 				t.Fatalf("bucket should be empty; found: %06x", trunc(k, 3))
 				return nil
@@ -1032,12 +1033,12 @@ func TestBucket_Delete_Quick(t *testing.T) {
 
 func ExampleBucket_Put() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666, nil)
+	db, _ := bolt.Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
 	// Start a write transaction.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		// Create a bucket.
 		tx.CreateBucket([]byte("widgets"))
 
@@ -1047,7 +1048,7 @@ func ExampleBucket_Put() {
 	})
 
 	// Read value back in a different read-only transaction.
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 		fmt.Printf("The value of 'foo' is: %s\n", value)
 		return nil
@@ -1059,12 +1060,12 @@ func ExampleBucket_Put() {
 
 func ExampleBucket_Delete() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666, nil)
+	db, _ := bolt.Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
 	// Start a write transaction.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		// Create a bucket.
 		tx.CreateBucket([]byte("widgets"))
 		b := tx.Bucket([]byte("widgets"))
@@ -1079,12 +1080,12 @@ func ExampleBucket_Delete() {
 	})
 
 	// Delete the key in a different write transaction.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		return tx.Bucket([]byte("widgets")).Delete([]byte("foo"))
 	})
 
 	// Retrieve the key again.
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		value := tx.Bucket([]byte("widgets")).Get([]byte("foo"))
 		if value == nil {
 			fmt.Printf("The value of 'foo' is now: nil\n")
@@ -1099,12 +1100,12 @@ func ExampleBucket_Delete() {
 
 func ExampleBucket_ForEach() {
 	// Open the database.
-	db, _ := Open(tempfile(), 0666, nil)
+	db, _ := bolt.Open(tempfile(), 0666, nil)
 	defer os.Remove(db.Path())
 	defer db.Close()
 
 	// Insert data into a bucket.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("animals"))
 		b := tx.Bucket([]byte("animals"))
 		b.Put([]byte("dog"), []byte("fun"))

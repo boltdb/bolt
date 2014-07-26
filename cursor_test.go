@@ -1,4 +1,4 @@
-package bolt
+package bolt_test
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/boltdb/bolt"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,7 +15,7 @@ import (
 func TestCursor_Bucket(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		b, _ := tx.CreateBucket([]byte("widgets"))
 		c := b.Cursor()
 		assert.Equal(t, b, c.Bucket())
@@ -26,7 +27,7 @@ func TestCursor_Bucket(t *testing.T) {
 func TestCursor_Seek(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, err)
 		assert.NoError(t, b.Put([]byte("foo"), []byte("0001")))
@@ -36,7 +37,7 @@ func TestCursor_Seek(t *testing.T) {
 		assert.NoError(t, err)
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 
 		// Exact match should go to the key.
@@ -75,7 +76,7 @@ func TestCursor_Delete(t *testing.T) {
 	var count = 1000
 
 	// Insert every other key between 0 and $count.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		b, _ := tx.CreateBucket([]byte("widgets"))
 		for i := 0; i < count; i += 1 {
 			k := make([]byte, 8)
@@ -86,7 +87,7 @@ func TestCursor_Delete(t *testing.T) {
 		return nil
 	})
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		bound := make([]byte, 8)
 		binary.BigEndian.PutUint64(bound, uint64(count/2))
@@ -97,11 +98,11 @@ func TestCursor_Delete(t *testing.T) {
 		}
 		c.Seek([]byte("sub"))
 		err := c.Delete()
-		assert.Equal(t, err, ErrIncompatibleValue)
+		assert.Equal(t, err, bolt.ErrIncompatibleValue)
 		return nil
 	})
 
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		assert.Equal(t, b.Stats().KeyN, count/2+1)
 		return nil
@@ -120,7 +121,7 @@ func TestCursor_Seek_Large(t *testing.T) {
 	var count = 10000
 
 	// Insert every other key between 0 and $count.
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		b, _ := tx.CreateBucket([]byte("widgets"))
 		for i := 0; i < count; i += 100 {
 			for j := i; j < i+100; j += 2 {
@@ -132,7 +133,7 @@ func TestCursor_Seek_Large(t *testing.T) {
 		return nil
 	})
 
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for i := 0; i < count; i++ {
 			seek := make([]byte, 8)
@@ -164,11 +165,11 @@ func TestCursor_Seek_Large(t *testing.T) {
 func TestCursor_EmptyBucket(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		k, v := c.First()
 		assert.Nil(t, k)
@@ -182,11 +183,11 @@ func TestCursor_EmptyBucketReverse(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		k, v := c.Last()
 		assert.Nil(t, k)
@@ -200,7 +201,7 @@ func TestCursor_Iterate_Leaf(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte{})
 		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte{0})
@@ -238,7 +239,7 @@ func TestCursor_LeafRootReverse(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte{})
 		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte{0})
@@ -276,7 +277,7 @@ func TestCursor_Restart(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucket([]byte("widgets"))
 		tx.Bucket([]byte("widgets")).Put([]byte("bar"), []byte{})
 		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte{})
@@ -380,7 +381,7 @@ func TestCursor_QuickCheck_BucketsOnly(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, err)
 		_, err = b.CreateBucket([]byte("foo"))
@@ -391,7 +392,7 @@ func TestCursor_QuickCheck_BucketsOnly(t *testing.T) {
 		assert.NoError(t, err)
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		var names []string
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
@@ -408,7 +409,7 @@ func TestCursor_QuickCheck_BucketsOnly_Reverse(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 
-	db.Update(func(tx *Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
 		assert.NoError(t, err)
 		_, err = b.CreateBucket([]byte("foo"))
@@ -419,7 +420,7 @@ func TestCursor_QuickCheck_BucketsOnly_Reverse(t *testing.T) {
 		assert.NoError(t, err)
 		return nil
 	})
-	db.View(func(tx *Tx) error {
+	db.View(func(tx *bolt.Tx) error {
 		var names []string
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.Last(); k != nil; k, v = c.Prev() {
