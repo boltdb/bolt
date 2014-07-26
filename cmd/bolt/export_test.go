@@ -5,7 +5,6 @@ import (
 
 	"github.com/boltdb/bolt"
 	. "github.com/boltdb/bolt/cmd/bolt"
-	"github.com/stretchr/testify/assert"
 )
 
 // Ensure that a database can be exported.
@@ -32,7 +31,7 @@ func TestExport(t *testing.T) {
 		})
 		db.Close()
 		output := run("export", path)
-		assert.Equal(t, `[{"type":"bucket","key":"ZW1wdHk=","value":[]},{"type":"bucket","key":"d2lkZ2V0cw==","value":[{"key":"YmFy","value":""},{"key":"Zm9v","value":"MDAwMA=="}]},{"type":"bucket","key":"d29vaml0cw==","value":[{"key":"YmF6","value":"WFhYWA=="},{"type":"bucket","key":"d29vaml0cy9zdWJidWNrZXQ=","value":[{"key":"YmF0","value":"QQ=="}]}]}]`, output)
+		equals(t, `[{"type":"bucket","key":"ZW1wdHk=","value":[]},{"type":"bucket","key":"d2lkZ2V0cw==","value":[{"key":"YmFy","value":""},{"key":"Zm9v","value":"MDAwMA=="}]},{"type":"bucket","key":"d29vaml0cw==","value":[{"key":"YmF6","value":"WFhYWA=="},{"type":"bucket","key":"d29vaml0cy9zdWJidWNrZXQ=","value":[{"key":"YmF0","value":"QQ=="}]}]}]`, output)
 	})
 }
 
@@ -40,5 +39,5 @@ func TestExport(t *testing.T) {
 func TestExport_NotFound(t *testing.T) {
 	SetTestMode(true)
 	output := run("export", "no/such/db")
-	assert.Equal(t, "stat no/such/db: no such file or directory", output)
+	equals(t, "stat no/such/db: no such file or directory", output)
 }

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-	"github.com/stretchr/testify/assert"
 )
 
 var statsFlag = flag.Bool("stats", false, "show performance stats")
@@ -22,8 +21,8 @@ var statsFlag = flag.Bool("stats", false, "show performance stats")
 // Ensure that opening a database with a bad path returns an error.
 func TestOpen_BadPath(t *testing.T) {
 	db, err := bolt.Open("", 0666, nil)
-	assert.Error(t, err)
-	assert.Nil(t, db)
+	assert(t, err != nil, "err: %s", err)
+	assert(t, db == nil, "")
 }
 
 // Ensure that a database can be opened without error.
@@ -31,10 +30,10 @@ func TestOpen(t *testing.T) {
 	path := tempfile()
 	defer os.Remove(path)
 	db, err := bolt.Open(path, 0666, nil)
-	assert.NotNil(t, db)
-	assert.NoError(t, err)
-	assert.Equal(t, db.Path(), path)
-	assert.NoError(t, db.Close())
+	assert(t, db != nil, "")
+	ok(t, err)
+	equals(t, db.Path(), path)
+	ok(t, db.Close())
 }
 
 // Ensure that opening an already open database file will timeout.
@@ -48,15 +47,15 @@ func TestOpen_Timeout(t *testing.T) {
 
 	// Open a data file.
 	db0, err := bolt.Open(path, 0666, nil)
-	assert.NotNil(t, db0)
-	assert.NoError(t, err)
+	assert(t, db0 != nil, "")
+	ok(t, err)
 
 	// Attempt to open the database again.
 	start := time.Now()
 	db1, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 100 * time.Millisecond})
-	assert.Nil(t, db1)
-	assert.Equal(t, bolt.ErrTimeout, err)
-	assert.True(t, time.Since(start) > 100*time.Millisecond)
+	assert(t, db1 == nil, "")
+	equals(t, bolt.ErrTimeout, err)
+	assert(t, time.Since(start) > 100*time.Millisecond, "")
 
 	db0.Close()
 }
@@ -72,8 +71,8 @@ func TestOpen_Wait(t *testing.T) {
 
 	// Open a data file.
 	db0, err := bolt.Open(path, 0666, nil)
-	assert.NotNil(t, db0)
-	assert.NoError(t, err)
+	assert(t, db0 != nil, "")
+	ok(t, err)
 
 	// Close it in just a bit.
 	time.AfterFunc(100*time.Millisecond, func() { db0.Close() })
@@ -81,9 +80,9 @@ func TestOpen_Wait(t *testing.T) {
 	// Attempt to open the database again.
 	start := time.Now()
 	db1, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 200 * time.Millisecond})
-	assert.NotNil(t, db1)
-	assert.NoError(t, err)
-	assert.True(t, time.Since(start) > 100*time.Millisecond)
+	assert(t, db1 != nil, "")
+	ok(t, err)
+	assert(t, time.Since(start) > 100*time.Millisecond, "")
 }
 
 // Ensure that a re-opened database is consistent.
@@ -92,13 +91,13 @@ func TestOpen_Check(t *testing.T) {
 	defer os.Remove(path)
 
 	db, err := bolt.Open(path, 0666, nil)
-	assert.NoError(t, err)
-	assert.NoError(t, db.View(func(tx *bolt.Tx) error { return <-tx.Check() }))
+	ok(t, err)
+	ok(t, db.View(func(tx *bolt.Tx) error { return <-tx.Check() }))
 	db.Close()
 
 	db, err = bolt.Open(path, 0666, nil)
-	assert.NoError(t, err)
-	assert.NoError(t, db.View(func(tx *bolt.Tx) error { return <-tx.Check() }))
+	ok(t, err)
+	ok(t, db.View(func(tx *bolt.Tx) error { return <-tx.Check() }))
 	db.Close()
 }
 
@@ -108,10 +107,9 @@ func TestDB_Open_FileError(t *testing.T) {
 	defer os.Remove(path)
 
 	_, err := bolt.Open(path+"/youre-not-my-real-parent", 0666, nil)
-	if err, _ := err.(*os.PathError); assert.Error(t, err) {
-		assert.Equal(t, path+"/youre-not-my-real-parent", err.Path)
-		assert.Equal(t, "open", err.Op)
-	}
+	assert(t, err.(*os.PathError) != nil, "")
+	equals(t, path+"/youre-not-my-real-parent", err.(*os.PathError).Path)
+	equals(t, "open", err.(*os.PathError).Op)
 }
 
 // Ensure that write errors to the meta file handler during initialization are returned.
@@ -125,87 +123,24 @@ func TestDB_Open_FileTooSmall(t *testing.T) {
 	defer os.Remove(path)
 
 	db, err := bolt.Open(path, 0666, nil)
-	assert.NoError(t, err)
+	ok(t, err)
 	db.Close()
 
 	// corrupt the database
-	assert.NoError(t, os.Truncate(path, int64(os.Getpagesize())))
+	ok(t, os.Truncate(path, int64(os.Getpagesize())))
 
 	db, err = bolt.Open(path, 0666, nil)
-	assert.Equal(t, errors.New("file size too small"), err)
+	equals(t, errors.New("file size too small"), err)
 }
 
 // TODO(benbjohnson): Test corruption at every byte of the first two pages.
-
-/*
-// Ensure that corrupt meta0 page errors get returned.
-func TestDB_Open_CorruptMeta0(t *testing.T) {
-	var m meta
-	m.magic = magic
-	m.version = version
-	m.pageSize = 0x8000
-
-	path := tempfile()
-	defer os.Remove(path)
-
-	// Create a file with bad magic.
-	b := make([]byte, 0x10000)
-	p0, p1 := (*page)(unsafe.Pointer(&b[0x0000])), (*page)(unsafe.Pointer(&b[0x8000]))
-	p0.meta().magic = 0
-	p0.meta().version = version
-	p1.meta().magic = magic
-	p1.meta().version = version
-	err := ioutil.WriteFile(path, b, 0666)
-	assert.NoError(t, err)
-
-	// Open the database.
-	_, err = bolt.Open(path, 0666, nil)
-	assert.Equal(t, err, errors.New("meta0 error: invalid database"))
-}
-
-// Ensure that a corrupt meta page checksum causes the open to fail.
-func TestDB_Open_MetaChecksumError(t *testing.T) {
-	for i := 0; i < 2; i++ {
-		path := tempfile()
-		defer os.Remove(path)
-
-		db, err := bolt.Open(path, 0600, nil)
-		pageSize := db.pageSize
-		db.Update(func(tx *bolt.Tx) error {
-			_, err := tx.CreateBucket([]byte("widgets"))
-			return err
-		})
-		db.Update(func(tx *bolt.Tx) error {
-			_, err := tx.CreateBucket([]byte("woojits"))
-			return err
-		})
-		db.Close()
-
-		// Change a single byte in the meta page.
-		f, _ := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
-		f.WriteAt([]byte{1}, int64((i*pageSize)+(pageHeaderSize+12)))
-		f.Sync()
-		f.Close()
-
-		// Reopen the database.
-		_, err = bolt.Open(path, 0600, nil)
-		if assert.Error(t, err) {
-			if i == 0 {
-				assert.Equal(t, "meta0 error: checksum error", err.Error())
-			} else {
-				assert.Equal(t, "meta1 error: checksum error", err.Error())
-			}
-		}
-	}
-}
-*/
 
 // Ensure that a database cannot open a transaction when it's not open.
 func TestDB_Begin_DatabaseNotOpen(t *testing.T) {
 	var db bolt.DB
 	tx, err := db.Begin(false)
-	assert.Nil(t, tx)
-	assert.Equal(t, err, bolt.ErrDatabaseNotOpen)
+	assert(t, tx == nil, "")
+	equals(t, err, bolt.ErrDatabaseNotOpen)
 }
 
 // Ensure that a read-write transaction can be retrieved.
@@ -213,19 +148,19 @@ func TestDB_BeginRW(t *testing.T) {
 	db := NewTestDB()
 	defer db.Close()
 	tx, err := db.Begin(true)
-	assert.NotNil(t, tx)
-	assert.NoError(t, err)
-	assert.Equal(t, tx.DB(), db)
-	assert.Equal(t, tx.Writable(), true)
-	assert.NoError(t, tx.Commit())
+	assert(t, tx != nil, "")
+	ok(t, err)
+	assert(t, tx.DB() == db.DB, "")
+	equals(t, tx.Writable(), true)
+	ok(t, tx.Commit())
 }
 
 // Ensure that opening a transaction while the DB is closed returns an error.
 func TestDB_BeginRW_Closed(t *testing.T) {
 	var db bolt.DB
 	tx, err := db.Begin(true)
-	assert.Equal(t, err, bolt.ErrDatabaseNotOpen)
-	assert.Nil(t, tx)
+	equals(t, err, bolt.ErrDatabaseNotOpen)
+	assert(t, tx == nil, "")
 }
 
 // Ensure a database can provide a transactional block.
@@ -240,13 +175,13 @@ func TestDB_Update(t *testing.T) {
 		b.Delete([]byte("foo"))
 		return nil
 	})
-	assert.NoError(t, err)
+	ok(t, err)
 	err = db.View(func(tx *bolt.Tx) error {
-		assert.Nil(t, tx.Bucket([]byte("widgets")).Get([]byte("foo")))
-		assert.Equal(t, []byte("bat"), tx.Bucket([]byte("widgets")).Get([]byte("baz")))
+		assert(t, tx.Bucket([]byte("widgets")).Get([]byte("foo")) == nil, "")
+		equals(t, []byte("bat"), tx.Bucket([]byte("widgets")).Get([]byte("baz")))
 		return nil
 	})
-	assert.NoError(t, err)
+	ok(t, err)
 }
 
 // Ensure a closed database returns an error while running a transaction block
@@ -256,23 +191,87 @@ func TestDB_Update_Closed(t *testing.T) {
 		tx.CreateBucket([]byte("widgets"))
 		return nil
 	})
-	assert.Equal(t, err, bolt.ErrDatabaseNotOpen)
+	equals(t, err, bolt.ErrDatabaseNotOpen)
 }
 
 // Ensure a panic occurs while trying to commit a managed transaction.
-func TestDB_Update_ManualCommitAndRollback(t *testing.T) {
-	var db bolt.DB
+func TestDB_Update_ManualCommit(t *testing.T) {
+	db := NewTestDB()
+	defer db.Close()
+
+	var ok bool
 	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucket([]byte("widgets"))
-		assert.Panics(t, func() { tx.Commit() })
-		assert.Panics(t, func() { tx.Rollback() })
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					ok = true
+				}
+			}()
+			tx.Commit()
+		}()
 		return nil
 	})
-	db.View(func(tx *bolt.Tx) error {
-		assert.Panics(t, func() { tx.Commit() })
-		assert.Panics(t, func() { tx.Rollback() })
+	assert(t, ok, "expected panic")
+}
+
+// Ensure a panic occurs while trying to rollback a managed transaction.
+func TestDB_Update_ManualRollback(t *testing.T) {
+	db := NewTestDB()
+	defer db.Close()
+
+	var ok bool
+	db.Update(func(tx *bolt.Tx) error {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					ok = true
+				}
+			}()
+			tx.Rollback()
+		}()
 		return nil
 	})
+	assert(t, ok, "expected panic")
+}
+
+// Ensure a panic occurs while trying to commit a managed transaction.
+func TestDB_View_ManualCommit(t *testing.T) {
+	db := NewTestDB()
+	defer db.Close()
+
+	var ok bool
+	db.Update(func(tx *bolt.Tx) error {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					ok = true
+				}
+			}()
+			tx.Commit()
+		}()
+		return nil
+	})
+	assert(t, ok, "expected panic")
+}
+
+// Ensure a panic occurs while trying to rollback a managed transaction.
+func TestDB_View_ManualRollback(t *testing.T) {
+	db := NewTestDB()
+	defer db.Close()
+
+	var ok bool
+	db.Update(func(tx *bolt.Tx) error {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					ok = true
+				}
+			}()
+			tx.Rollback()
+		}()
+		return nil
+	})
+	assert(t, ok, "expected panic")
 }
 
 // Ensure a write transaction that panics does not hold open locks.
@@ -297,11 +296,11 @@ func TestDB_Update_Panic(t *testing.T) {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
 	})
-	assert.NoError(t, err)
+	ok(t, err)
 
 	// Verify that our change persisted.
 	err = db.Update(func(tx *bolt.Tx) error {
-		assert.NotNil(t, tx.Bucket([]byte("widgets")))
+		assert(t, tx.Bucket([]byte("widgets")) != nil, "")
 		return nil
 	})
 }
@@ -313,7 +312,7 @@ func TestDB_View_Error(t *testing.T) {
 	err := db.View(func(tx *bolt.Tx) error {
 		return errors.New("xxx")
 	})
-	assert.Equal(t, errors.New("xxx"), err)
+	equals(t, errors.New("xxx"), err)
 }
 
 // Ensure a read transaction that panics does not hold open locks.
@@ -332,14 +331,14 @@ func TestDB_View_Panic(t *testing.T) {
 			}
 		}()
 		db.View(func(tx *bolt.Tx) error {
-			assert.NotNil(t, tx.Bucket([]byte("widgets")))
+			assert(t, tx.Bucket([]byte("widgets")) != nil, "")
 			panic("omg")
 		})
 	}()
 
 	// Verify that we can still use read transactions.
 	db.View(func(tx *bolt.Tx) error {
-		assert.NotNil(t, tx.Bucket([]byte("widgets")))
+		assert(t, tx.Bucket([]byte("widgets")) != nil, "")
 		return nil
 	})
 }
@@ -358,9 +357,9 @@ func TestDB_Stats(t *testing.T) {
 		return err
 	})
 	stats := db.Stats()
-	assert.Equal(t, 2, stats.TxStats.PageCount, "PageCount")
-	assert.Equal(t, 0, stats.FreePageN, "FreePageN")
-	assert.Equal(t, 2, stats.PendingPageN, "PendingPageN")
+	equals(t, 2, stats.TxStats.PageCount)
+	equals(t, 0, stats.FreePageN)
+	equals(t, 2, stats.PendingPageN)
 }
 
 // Ensure that database pages are in expected order and type.
@@ -374,31 +373,37 @@ func TestDB_Consistency(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		db.Update(func(tx *bolt.Tx) error {
-			assert.NoError(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
+			ok(t, tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte("bar")))
 			return nil
 		})
 	}
 	db.Update(func(tx *bolt.Tx) error {
-		if p, _ := tx.Page(0); assert.NotNil(t, p) {
-			assert.Equal(t, "meta", p.Type)
-		}
-		if p, _ := tx.Page(1); assert.NotNil(t, p) {
-			assert.Equal(t, "meta", p.Type)
-		}
-		if p, _ := tx.Page(2); assert.NotNil(t, p) {
-			assert.Equal(t, "free", p.Type)
-		}
-		if p, _ := tx.Page(3); assert.NotNil(t, p) {
-			assert.Equal(t, "free", p.Type)
-		}
-		if p, _ := tx.Page(4); assert.NotNil(t, p) {
-			assert.Equal(t, "leaf", p.Type) // root leaf
-		}
-		if p, _ := tx.Page(5); assert.NotNil(t, p) {
-			assert.Equal(t, "freelist", p.Type)
-		}
-		p, _ := tx.Page(6)
-		assert.Nil(t, p)
+		p, _ := tx.Page(0)
+		assert(t, p != nil, "")
+		equals(t, "meta", p.Type)
+
+		p, _ = tx.Page(1)
+		assert(t, p != nil, "")
+		equals(t, "meta", p.Type)
+
+		p, _ = tx.Page(2)
+		assert(t, p != nil, "")
+		equals(t, "free", p.Type)
+
+		p, _ = tx.Page(3)
+		assert(t, p != nil, "")
+		equals(t, "free", p.Type)
+
+		p, _ = tx.Page(4)
+		assert(t, p != nil, "")
+		equals(t, "leaf", p.Type)
+
+		p, _ = tx.Page(5)
+		assert(t, p != nil, "")
+		equals(t, "freelist", p.Type)
+
+		p, _ = tx.Page(6)
+		assert(t, p == nil, "")
 		return nil
 	})
 }
@@ -411,9 +416,9 @@ func TestDBStats_Sub(t *testing.T) {
 	b.TxStats.PageCount = 10
 	b.FreePageN = 14
 	diff := b.Sub(&a)
-	assert.Equal(t, 7, diff.TxStats.PageCount)
+	equals(t, 7, diff.TxStats.PageCount)
 	// free page stats are copied from the receiver and not subtracted
-	assert.Equal(t, 14, diff.FreePageN)
+	equals(t, 14, diff.FreePageN)
 }
 
 func ExampleDB_Update() {

@@ -8,7 +8,6 @@ import (
 	"testing/quick"
 
 	"github.com/boltdb/bolt"
-	"github.com/stretchr/testify/assert"
 )
 
 // Ensure that a cursor can return a reference to the bucket that created it.
@@ -18,7 +17,7 @@ func TestCursor_Bucket(t *testing.T) {
 	db.Update(func(tx *bolt.Tx) error {
 		b, _ := tx.CreateBucket([]byte("widgets"))
 		c := b.Cursor()
-		assert.Equal(t, b, c.Bucket())
+		equals(t, b, c.Bucket())
 		return nil
 	})
 }
@@ -29,12 +28,12 @@ func TestCursor_Seek(t *testing.T) {
 	defer db.Close()
 	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
-		assert.NoError(t, err)
-		assert.NoError(t, b.Put([]byte("foo"), []byte("0001")))
-		assert.NoError(t, b.Put([]byte("bar"), []byte("0002")))
-		assert.NoError(t, b.Put([]byte("baz"), []byte("0003")))
+		ok(t, err)
+		ok(t, b.Put([]byte("foo"), []byte("0001")))
+		ok(t, b.Put([]byte("bar"), []byte("0002")))
+		ok(t, b.Put([]byte("baz"), []byte("0003")))
 		_, err = b.CreateBucket([]byte("bkt"))
-		assert.NoError(t, err)
+		ok(t, err)
 		return nil
 	})
 	db.View(func(tx *bolt.Tx) error {
@@ -42,28 +41,28 @@ func TestCursor_Seek(t *testing.T) {
 
 		// Exact match should go to the key.
 		k, v := c.Seek([]byte("bar"))
-		assert.Equal(t, []byte("bar"), k)
-		assert.Equal(t, []byte("0002"), v)
+		equals(t, []byte("bar"), k)
+		equals(t, []byte("0002"), v)
 
 		// Inexact match should go to the next key.
 		k, v = c.Seek([]byte("bas"))
-		assert.Equal(t, []byte("baz"), k)
-		assert.Equal(t, []byte("0003"), v)
+		equals(t, []byte("baz"), k)
+		equals(t, []byte("0003"), v)
 
 		// Low key should go to the first key.
 		k, v = c.Seek([]byte(""))
-		assert.Equal(t, []byte("bar"), k)
-		assert.Equal(t, []byte("0002"), v)
+		equals(t, []byte("bar"), k)
+		equals(t, []byte("0002"), v)
 
 		// High key should return no key.
 		k, v = c.Seek([]byte("zzz"))
-		assert.Nil(t, k)
-		assert.Nil(t, v)
+		assert(t, k == nil, "")
+		assert(t, v == nil, "")
 
 		// Buckets should return their key but no value.
 		k, v = c.Seek([]byte("bkt"))
-		assert.Equal(t, []byte("bkt"), k)
-		assert.Nil(t, v)
+		equals(t, []byte("bkt"), k)
+		assert(t, v == nil, "")
 
 		return nil
 	})
@@ -98,13 +97,13 @@ func TestCursor_Delete(t *testing.T) {
 		}
 		c.Seek([]byte("sub"))
 		err := c.Delete()
-		assert.Equal(t, err, bolt.ErrIncompatibleValue)
+		equals(t, err, bolt.ErrIncompatibleValue)
 		return nil
 	})
 
 	db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
-		assert.Equal(t, b.Stats().KeyN, count/2+1)
+		equals(t, b.Stats().KeyN, count/2+1)
 		return nil
 	})
 }
@@ -144,16 +143,16 @@ func TestCursor_Seek_Large(t *testing.T) {
 			// The last seek is beyond the end of the the range so
 			// it should return nil.
 			if i == count-1 {
-				assert.Nil(t, k)
+				assert(t, k == nil, "")
 				continue
 			}
 
 			// Otherwise we should seek to the exact key or the next key.
 			num := binary.BigEndian.Uint64(k)
 			if i%2 == 0 {
-				assert.Equal(t, uint64(i), num)
+				equals(t, uint64(i), num)
 			} else {
-				assert.Equal(t, uint64(i+1), num)
+				equals(t, uint64(i+1), num)
 			}
 		}
 
@@ -172,8 +171,8 @@ func TestCursor_EmptyBucket(t *testing.T) {
 	db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		k, v := c.First()
-		assert.Nil(t, k)
-		assert.Nil(t, v)
+		assert(t, k == nil, "")
+		assert(t, v == nil, "")
 		return nil
 	})
 }
@@ -190,8 +189,8 @@ func TestCursor_EmptyBucketReverse(t *testing.T) {
 	db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		k, v := c.Last()
-		assert.Nil(t, k)
-		assert.Nil(t, v)
+		assert(t, k == nil, "")
+		assert(t, v == nil, "")
 		return nil
 	})
 }
@@ -212,24 +211,24 @@ func TestCursor_Iterate_Leaf(t *testing.T) {
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
 	k, v := c.First()
-	assert.Equal(t, string(k), "bar")
-	assert.Equal(t, v, []byte{1})
+	equals(t, string(k), "bar")
+	equals(t, v, []byte{1})
 
 	k, v = c.Next()
-	assert.Equal(t, string(k), "baz")
-	assert.Equal(t, v, []byte{})
+	equals(t, string(k), "baz")
+	equals(t, v, []byte{})
 
 	k, v = c.Next()
-	assert.Equal(t, string(k), "foo")
-	assert.Equal(t, v, []byte{0})
+	equals(t, string(k), "foo")
+	equals(t, v, []byte{0})
 
 	k, v = c.Next()
-	assert.Nil(t, k)
-	assert.Nil(t, v)
+	assert(t, k == nil, "")
+	assert(t, v == nil, "")
 
 	k, v = c.Next()
-	assert.Nil(t, k)
-	assert.Nil(t, v)
+	assert(t, k == nil, "")
+	assert(t, v == nil, "")
 
 	tx.Rollback()
 }
@@ -250,24 +249,24 @@ func TestCursor_LeafRootReverse(t *testing.T) {
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
 	k, v := c.Last()
-	assert.Equal(t, string(k), "foo")
-	assert.Equal(t, v, []byte{0})
+	equals(t, string(k), "foo")
+	equals(t, v, []byte{0})
 
 	k, v = c.Prev()
-	assert.Equal(t, string(k), "baz")
-	assert.Equal(t, v, []byte{})
+	equals(t, string(k), "baz")
+	equals(t, v, []byte{})
 
 	k, v = c.Prev()
-	assert.Equal(t, string(k), "bar")
-	assert.Equal(t, v, []byte{1})
+	equals(t, string(k), "bar")
+	equals(t, v, []byte{1})
 
 	k, v = c.Prev()
-	assert.Nil(t, k)
-	assert.Nil(t, v)
+	assert(t, k == nil, "")
+	assert(t, v == nil, "")
 
 	k, v = c.Prev()
-	assert.Nil(t, k)
-	assert.Nil(t, v)
+	assert(t, k == nil, "")
+	assert(t, v == nil, "")
 
 	tx.Rollback()
 }
@@ -288,16 +287,16 @@ func TestCursor_Restart(t *testing.T) {
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
 	k, _ := c.First()
-	assert.Equal(t, string(k), "bar")
+	equals(t, string(k), "bar")
 
 	k, _ = c.Next()
-	assert.Equal(t, string(k), "foo")
+	equals(t, string(k), "foo")
 
 	k, _ = c.First()
-	assert.Equal(t, string(k), "bar")
+	equals(t, string(k), "bar")
 
 	k, _ = c.Next()
-	assert.Equal(t, string(k), "foo")
+	equals(t, string(k), "foo")
 
 	tx.Rollback()
 }
@@ -313,9 +312,9 @@ func TestCursor_QuickCheck(t *testing.T) {
 		tx.CreateBucket([]byte("widgets"))
 		b := tx.Bucket([]byte("widgets"))
 		for _, item := range items {
-			assert.NoError(t, b.Put(item.Key, item.Value))
+			ok(t, b.Put(item.Key, item.Value))
 		}
-		assert.NoError(t, tx.Commit())
+		ok(t, tx.Commit())
 
 		// Sort test data.
 		sort.Sort(items)
@@ -325,11 +324,11 @@ func TestCursor_QuickCheck(t *testing.T) {
 		tx, _ = db.Begin(false)
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.First(); k != nil && index < len(items); k, v = c.Next() {
-			assert.Equal(t, k, items[index].Key)
-			assert.Equal(t, v, items[index].Value)
+			equals(t, k, items[index].Key)
+			equals(t, v, items[index].Value)
 			index++
 		}
-		assert.Equal(t, len(items), index)
+		equals(t, len(items), index)
 		tx.Rollback()
 
 		return true
@@ -350,9 +349,9 @@ func TestCursor_QuickCheck_Reverse(t *testing.T) {
 		tx.CreateBucket([]byte("widgets"))
 		b := tx.Bucket([]byte("widgets"))
 		for _, item := range items {
-			assert.NoError(t, b.Put(item.Key, item.Value))
+			ok(t, b.Put(item.Key, item.Value))
 		}
-		assert.NoError(t, tx.Commit())
+		ok(t, tx.Commit())
 
 		// Sort test data.
 		sort.Sort(revtestdata(items))
@@ -362,11 +361,11 @@ func TestCursor_QuickCheck_Reverse(t *testing.T) {
 		tx, _ = db.Begin(false)
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.Last(); k != nil && index < len(items); k, v = c.Prev() {
-			assert.Equal(t, k, items[index].Key)
-			assert.Equal(t, v, items[index].Value)
+			equals(t, k, items[index].Key)
+			equals(t, v, items[index].Value)
 			index++
 		}
-		assert.Equal(t, len(items), index)
+		equals(t, len(items), index)
 		tx.Rollback()
 
 		return true
@@ -383,13 +382,13 @@ func TestCursor_QuickCheck_BucketsOnly(t *testing.T) {
 
 	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
-		assert.NoError(t, err)
+		ok(t, err)
 		_, err = b.CreateBucket([]byte("foo"))
-		assert.NoError(t, err)
+		ok(t, err)
 		_, err = b.CreateBucket([]byte("bar"))
-		assert.NoError(t, err)
+		ok(t, err)
 		_, err = b.CreateBucket([]byte("baz"))
-		assert.NoError(t, err)
+		ok(t, err)
 		return nil
 	})
 	db.View(func(tx *bolt.Tx) error {
@@ -397,9 +396,9 @@ func TestCursor_QuickCheck_BucketsOnly(t *testing.T) {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
 			names = append(names, string(k))
-			assert.Nil(t, v)
+			assert(t, v == nil, "")
 		}
-		assert.Equal(t, names, []string{"bar", "baz", "foo"})
+		equals(t, names, []string{"bar", "baz", "foo"})
 		return nil
 	})
 }
@@ -411,13 +410,13 @@ func TestCursor_QuickCheck_BucketsOnly_Reverse(t *testing.T) {
 
 	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
-		assert.NoError(t, err)
+		ok(t, err)
 		_, err = b.CreateBucket([]byte("foo"))
-		assert.NoError(t, err)
+		ok(t, err)
 		_, err = b.CreateBucket([]byte("bar"))
-		assert.NoError(t, err)
+		ok(t, err)
 		_, err = b.CreateBucket([]byte("baz"))
-		assert.NoError(t, err)
+		ok(t, err)
 		return nil
 	})
 	db.View(func(tx *bolt.Tx) error {
@@ -425,9 +424,9 @@ func TestCursor_QuickCheck_BucketsOnly_Reverse(t *testing.T) {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.Last(); k != nil; k, v = c.Prev() {
 			names = append(names, string(k))
-			assert.Nil(t, v)
+			assert(t, v == nil, "")
 		}
-		assert.Equal(t, names, []string{"foo", "baz", "bar"})
+		equals(t, names, []string{"foo", "baz", "bar"})
 		return nil
 	})
 }

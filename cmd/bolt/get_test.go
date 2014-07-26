@@ -5,7 +5,6 @@ import (
 
 	"github.com/boltdb/bolt"
 	. "github.com/boltdb/bolt/cmd/bolt"
-	"github.com/stretchr/testify/assert"
 )
 
 // Ensure that a value can be retrieved from the CLI.
@@ -19,7 +18,7 @@ func TestGet(t *testing.T) {
 		})
 		db.Close()
 		output := run("get", path, "widgets", "foo")
-		assert.Equal(t, "bar", output)
+		equals(t, "bar", output)
 	})
 }
 
@@ -27,7 +26,7 @@ func TestGet(t *testing.T) {
 func TestGetDBNotFound(t *testing.T) {
 	SetTestMode(true)
 	output := run("get", "no/such/db", "widgets", "foo")
-	assert.Equal(t, "stat no/such/db: no such file or directory", output)
+	equals(t, "stat no/such/db: no such file or directory", output)
 }
 
 // Ensure that an error is reported if the bucket is not found.
@@ -36,7 +35,7 @@ func TestGetBucketNotFound(t *testing.T) {
 	open(func(db *bolt.DB, path string) {
 		db.Close()
 		output := run("get", path, "widgets", "foo")
-		assert.Equal(t, "bucket not found: widgets", output)
+		equals(t, "bucket not found: widgets", output)
 	})
 }
 
@@ -50,6 +49,6 @@ func TestGetKeyNotFound(t *testing.T) {
 		})
 		db.Close()
 		output := run("get", path, "widgets", "foo")
-		assert.Equal(t, "key not found: foo", output)
+		equals(t, "key not found: foo", output)
 	})
 }

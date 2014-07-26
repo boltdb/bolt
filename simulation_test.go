@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/boltdb/bolt"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestSimulate_1op_1p(t *testing.T)     { testSimulate(t, 100, 1) }
@@ -90,7 +89,7 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 					versions[tx.ID()] = qdb
 					mutex.Unlock()
 
-					assert.NoError(t, tx.Commit())
+					ok(t, tx.Commit())
 				}()
 			} else {
 				defer tx.Rollback()

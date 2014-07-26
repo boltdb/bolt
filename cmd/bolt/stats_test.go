@@ -7,7 +7,6 @@ import (
 
 	"github.com/boltdb/bolt"
 	. "github.com/boltdb/bolt/cmd/bolt"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestStats(t *testing.T) {
@@ -40,7 +39,7 @@ func TestStats(t *testing.T) {
 		})
 		db.Close()
 		output := run("stats", path, "b")
-		assert.Equal(t, "Aggregate statistics for 2 buckets\n\n"+
+		equals(t, "Aggregate statistics for 2 buckets\n\n"+
 			"Page count statistics\n"+
 			"\tNumber of logical branch pages: 0\n"+
 			"\tNumber of physical branch overflow pages: 0\n"+
