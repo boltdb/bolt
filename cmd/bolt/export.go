@@ -42,7 +42,7 @@ func Export(path string) {
 		// Encode all buckets into JSON.
 		output, err := json.Marshal(root)
 		if err != nil {
-			return fmt.Errorf("encode: ", err)
+			return fmt.Errorf("encode: %s", err)
 		}
 		print(string(output))
 		return nil

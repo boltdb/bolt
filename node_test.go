@@ -54,7 +54,7 @@ func TestNode_read_LeafPage(t *testing.T) {
 
 	// Check that there are two inodes with correct data.
 	if !n.isLeaf {
-		t.Fatalf("expected leaf", n.isLeaf)
+		t.Fatal("expected leaf")
 	}
 	if len(n.inodes) != 2 {
 		t.Fatalf("exp=2; got=%d", len(n.inodes))

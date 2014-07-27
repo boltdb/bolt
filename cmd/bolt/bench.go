@@ -283,7 +283,7 @@ func benchStartProfiling(options *BenchOptions) {
 	if options.CPUProfile != "" {
 		cpuprofile, err = os.Create(options.CPUProfile)
 		if err != nil {
-			fatal("bench: could not create cpu profile %q: %v", options.CPUProfile, err)
+			fatalf("bench: could not create cpu profile %q: %v", options.CPUProfile, err)
 		}
 		pprof.StartCPUProfile(cpuprofile)
 	}
@@ -292,7 +292,7 @@ func benchStartProfiling(options *BenchOptions) {
 	if options.MemProfile != "" {
 		memprofile, err = os.Create(options.MemProfile)
 		if err != nil {
-			fatal("bench: could not create memory profile %q: %v", options.MemProfile, err)
+			fatalf("bench: could not create memory profile %q: %v", options.MemProfile, err)
 		}
 		runtime.MemProfileRate = 4096
 	}
@@ -301,7 +301,7 @@ func benchStartProfiling(options *BenchOptions) {
 	if options.BlockProfile != "" {
 		blockprofile, err = os.Create(options.BlockProfile)
 		if err != nil {
-			fatal("bench: could not create block profile %q: %v", options.BlockProfile, err)
+			fatalf("bench: could not create block profile %q: %v", options.BlockProfile, err)
 		}
 		runtime.SetBlockProfileRate(1)
 	}
