@@ -101,7 +101,7 @@ a transaction at a time. Creating transaction from the `DB` is thread safe.
 
 To start a read-write transaction, you can use the `DB.Update()` function:
 
-```
+```go
 err := db.Update(func(tx *bolt.Tx) error {
 	...
 	return nil
@@ -122,7 +122,7 @@ it will be passed through.
 
 To start a read-only transaction, you can use the `DB.View()` function:
 
-```
+```go
 err := db.View(func(tx *bolt.Tx) error {
 	...
 	return nil
@@ -294,7 +294,7 @@ db.View(func(tx *bolt.Tx) error {
 You can also store a bucket in a key to create nested buckets. The API is the
 same as the bucket management API on the `DB` object:
 
-```
+```go
 func (*Bucket) CreateBucket(key []byte) (*Bucket, error)
 func (*Bucket) CreateBucketIfNotExists(key []byte) (*Bucket, error)
 func (*Bucket) DeleteBucket(key []byte) error
@@ -348,7 +348,7 @@ in that time range.
 
 For example, we could start a goroutine to log stats every 10 seconds:
 
-```
+```go
 go func() {
 	// Grab the initial stats.
 	prev := db.Stats()
