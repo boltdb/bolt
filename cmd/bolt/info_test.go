@@ -5,7 +5,6 @@ import (
 
 	"github.com/boltdb/bolt"
 	. "github.com/boltdb/bolt/cmd/bolt"
-	"github.com/stretchr/testify/assert"
 )
 
 // Ensure that a database info can be printed.
@@ -20,7 +19,7 @@ func TestInfo(t *testing.T) {
 		})
 		db.Close()
 		output := run("info", path)
-		assert.Equal(t, `Page Size: 4096`, output)
+		equals(t, `Page Size: 4096`, output)
 	})
 }
 
@@ -28,5 +27,5 @@ func TestInfo(t *testing.T) {
 func TestInfo_NotFound(t *testing.T) {
 	SetTestMode(true)
 	output := run("info", "no/such/db")
-	assert.Equal(t, "stat no/such/db: no such file or directory", output)
+	equals(t, "stat no/such/db: no such file or directory", output)
 }

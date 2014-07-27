@@ -384,8 +384,8 @@ func (db *DB) beginRWTx() (*Tx, error) {
 	// Free any pages associated with closed read-only transactions.
 	var minid txid = 0xFFFFFFFFFFFFFFFF
 	for _, t := range db.txs {
-		if t.id() < minid {
-			minid = t.id()
+		if t.meta.txid < minid {
+			minid = t.meta.txid
 		}
 	}
 	if minid > 0 {

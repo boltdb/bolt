@@ -5,7 +5,6 @@ import (
 
 	"github.com/boltdb/bolt"
 	. "github.com/boltdb/bolt/cmd/bolt"
-	"github.com/stretchr/testify/assert"
 )
 
 // Ensure that a list of keys can be retrieved for a given bucket.
@@ -21,7 +20,7 @@ func TestKeys(t *testing.T) {
 		})
 		db.Close()
 		output := run("keys", path, "widgets")
-		assert.Equal(t, "0001\n0002\n0003", output)
+		equals(t, "0001\n0002\n0003", output)
 	})
 }
 
@@ -29,7 +28,7 @@ func TestKeys(t *testing.T) {
 func TestKeysDBNotFound(t *testing.T) {
 	SetTestMode(true)
 	output := run("keys", "no/such/db", "widgets")
-	assert.Equal(t, "stat no/such/db: no such file or directory", output)
+	equals(t, "stat no/such/db: no such file or directory", output)
 }
 
 // Ensure that an error is reported if the bucket is not found.
@@ -38,6 +37,6 @@ func TestKeysBucketNotFound(t *testing.T) {
 	open(func(db *bolt.DB, path string) {
 		db.Close()
 		output := run("keys", path, "widgets")
-		assert.Equal(t, "bucket not found: widgets", output)
+		equals(t, "bucket not found: widgets", output)
 	})
 }

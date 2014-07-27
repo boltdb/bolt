@@ -1,24 +1,27 @@
 package bolt
 
 import (
+	"reflect"
 	"testing"
 	"unsafe"
-
-	"github.com/stretchr/testify/assert"
 )
 
 // Ensure that a page is added to a transaction's freelist.
 func TestFreelist_free(t *testing.T) {
 	f := newFreelist()
 	f.free(100, &page{id: 12})
-	assert.Equal(t, f.pending[100], []pgid{12})
+	if !reflect.DeepEqual([]pgid{12}, f.pending[100]) {
+		t.Fatalf("exp=%v; got=%v", []pgid{12}, f.pending[100])
+	}
 }
 
 // Ensure that a page and its overflow is added to a transaction's freelist.
 func TestFreelist_free_overflow(t *testing.T) {
 	f := newFreelist()
 	f.free(100, &page{id: 12, overflow: 3})
-	assert.Equal(t, f.pending[100], []pgid{12, 13, 14, 15})
+	if exp := []pgid{12, 13, 14, 15}; !reflect.DeepEqual(exp, f.pending[100]) {
+		t.Fatalf("exp=%v; got=%v", exp, f.pending[100])
+	}
 }
 
 // Ensure that a transaction's free pages can be released.
@@ -29,25 +32,56 @@ func TestFreelist_release(t *testing.T) {
 	f.free(102, &page{id: 39})
 	f.release(100)
 	f.release(101)
-	assert.Equal(t, []pgid{9, 12, 13}, f.ids)
+	if exp := []pgid{9, 12, 13}; !reflect.DeepEqual(exp, f.ids) {
+		t.Fatalf("exp=%v; got=%v", exp, f.ids)
+	}
+
 	f.release(102)
-	assert.Equal(t, []pgid{9, 12, 13, 39}, f.ids)
+	if exp := []pgid{9, 12, 13, 39}; !reflect.DeepEqual(exp, f.ids) {
+		t.Fatalf("exp=%v; got=%v", exp, f.ids)
+	}
 }
 
 // Ensure that a freelist can find contiguous blocks of pages.
 func TestFreelist_allocate(t *testing.T) {
 	f := &freelist{ids: []pgid{3, 4, 5, 6, 7, 9, 12, 13, 18}}
-	assert.Equal(t, 3, int(f.allocate(3)))
-	assert.Equal(t, 6, int(f.allocate(1)))
-	assert.Equal(t, 0, int(f.allocate(3)))
-	assert.Equal(t, 12, int(f.allocate(2)))
-	assert.Equal(t, 7, int(f.allocate(1)))
-	assert.Equal(t, 0, int(f.allocate(0)))
-	assert.Equal(t, []pgid{9, 18}, f.ids)
-	assert.Equal(t, 9, int(f.allocate(1)))
-	assert.Equal(t, 18, int(f.allocate(1)))
-	assert.Equal(t, 0, int(f.allocate(1)))
-	assert.Equal(t, []pgid{}, f.ids)
+	if id := int(f.allocate(3)); id != 3 {
+		t.Fatalf("exp=3; got=%v", id)
+	}
+	if id := int(f.allocate(1)); id != 6 {
+		t.Fatalf("exp=6; got=%v", id)
+	}
+	if id := int(f.allocate(3)); id != 0 {
+		t.Fatalf("exp=0; got=%v", id)
+	}
+	if id := int(f.allocate(2)); id != 12 {
+		t.Fatalf("exp=12; got=%v", id)
+	}
+	if id := int(f.allocate(1)); id != 7 {
+		t.Fatalf("exp=7; got=%v", id)
+	}
+	if id := int(f.allocate(0)); id != 0 {
+		t.Fatalf("exp=0; got=%v", id)
+	}
+	if id := int(f.allocate(0)); id != 0 {
+		t.Fatalf("exp=0; got=%v", id)
+	}
+	if exp := []pgid{9, 18}; !reflect.DeepEqual(exp, f.ids) {
+		t.Fatalf("exp=%v; got=%v", exp, f.ids)
+	}
+
+	if id := int(f.allocate(1)); id != 9 {
+		t.Fatalf("exp=9; got=%v", id)
+	}
+	if id := int(f.allocate(1)); id != 18 {
+		t.Fatalf("exp=18; got=%v", id)
+	}
+	if id := int(f.allocate(1)); id != 0 {
+		t.Fatalf("exp=0; got=%v", id)
+	}
+	if exp := []pgid{}; !reflect.DeepEqual(exp, f.ids) {
+		t.Fatalf("exp=%v; got=%v", exp, f.ids)
+	}
 }
 
 // Ensure that a freelist can deserialize from a freelist page.
@@ -68,9 +102,9 @@ func TestFreelist_read(t *testing.T) {
 	f.read(page)
 
 	// Ensure that there are two page ids in the freelist.
-	assert.Equal(t, len(f.ids), 2)
-	assert.Equal(t, f.ids[0], pgid(23))
-	assert.Equal(t, f.ids[1], pgid(50))
+	if exp := []pgid{23, 50}; !reflect.DeepEqual(exp, f.ids) {
+		t.Fatalf("exp=%v; got=%v", exp, f.ids)
+	}
 }
 
 // Ensure that a freelist can serialize into a freelist page.
@@ -89,10 +123,7 @@ func TestFreelist_write(t *testing.T) {
 
 	// Ensure that the freelist is correct.
 	// All pages should be present and in reverse order.
-	assert.Equal(t, len(f2.ids), 5)
-	assert.Equal(t, f2.ids[0], pgid(3))
-	assert.Equal(t, f2.ids[1], pgid(11))
-	assert.Equal(t, f2.ids[2], pgid(12))
-	assert.Equal(t, f2.ids[3], pgid(28))
-	assert.Equal(t, f2.ids[4], pgid(39))
+	if exp := []pgid{3, 11, 12, 28, 39}; !reflect.DeepEqual(exp, f2.ids) {
+		t.Fatalf("exp=%v; got=%v", exp, f2.ids)
+	}
 }

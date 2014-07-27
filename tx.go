@@ -52,9 +52,9 @@ func (tx *Tx) init(db *DB) {
 	}
 }
 
-// id returns the transaction id.
-func (tx *Tx) id() txid {
-	return tx.meta.txid
+// ID returns the transaction id.
+func (tx *Tx) ID() int {
+	return int(tx.meta.txid)
 }
 
 // DB returns a reference to the database that created the transaction.
@@ -158,7 +158,7 @@ func (tx *Tx) Commit() error {
 
 	// Free the freelist and allocate new pages for it. This will overestimate
 	// the size of the freelist but not underestimate the size (which would be bad).
-	tx.db.freelist.free(tx.id(), tx.db.page(tx.meta.freelist))
+	tx.db.freelist.free(tx.meta.txid, tx.db.page(tx.meta.freelist))
 	p, err := tx.allocate((tx.db.freelist.size() / tx.db.pageSize) + 1)
 	if err != nil {
 		tx.rollback()
@@ -218,7 +218,7 @@ func (tx *Tx) rollback() {
 		return
 	}
 	if tx.writable {
-		tx.db.freelist.rollback(tx.id())
+		tx.db.freelist.rollback(tx.meta.txid)
 		tx.db.freelist.reload(tx.db.page(tx.db.meta().freelist))
 	}
 	tx.close()

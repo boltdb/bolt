@@ -1,4 +1,4 @@
-package bolt
+package bolt_test
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/boltdb/bolt"
 )
 
 func TestSimulate_1op_1p(t *testing.T)     { testSimulate(t, 100, 1) }
@@ -39,86 +39,88 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 	var readerHandlers = []simulateHandler{simulateGetHandler}
 	var writerHandlers = []simulateHandler{simulateGetHandler, simulatePutHandler}
 
-	var versions = make(map[txid]*QuickDB)
+	var versions = make(map[int]*QuickDB)
 	versions[1] = NewQuickDB()
-	withOpenDB(func(db *DB, path string) {
-		var mutex sync.Mutex
 
-		// Run n threads in parallel, each with their own operation.
-		var wg sync.WaitGroup
-		var threads = make(chan bool, parallelism)
-		var i int
-		for {
-			threads <- true
-			wg.Add(1)
-			writable := ((rand.Int() % 100) < 20) // 20% writers
+	db := NewTestDB()
+	defer db.Close()
 
-			// Choose an operation to execute.
-			var handler simulateHandler
-			if writable {
-				handler = writerHandlers[rand.Intn(len(writerHandlers))]
-			} else {
-				handler = readerHandlers[rand.Intn(len(readerHandlers))]
-			}
+	var mutex sync.Mutex
 
-			// Execute a thread for the given operation.
-			go func(writable bool, handler simulateHandler) {
-				defer wg.Done()
+	// Run n threads in parallel, each with their own operation.
+	var wg sync.WaitGroup
+	var threads = make(chan bool, parallelism)
+	var i int
+	for {
+		threads <- true
+		wg.Add(1)
+		writable := ((rand.Int() % 100) < 20) // 20% writers
 
-				// Start transaction.
-				tx, err := db.Begin(writable)
-				if err != nil {
-					t.Fatal("tx begin: ", err)
-				}
-
-				// Obtain current state of the dataset.
-				mutex.Lock()
-				var qdb = versions[tx.id()]
-				if writable {
-					qdb = versions[tx.id()-1].Copy()
-				}
-				mutex.Unlock()
-
-				// Make sure we commit/rollback the tx at the end and update the state.
-				if writable {
-					defer func() {
-						mutex.Lock()
-						versions[tx.id()] = qdb
-						mutex.Unlock()
-
-						assert.NoError(t, tx.Commit())
-					}()
-				} else {
-					defer tx.Rollback()
-				}
-
-				// Ignore operation if we don't have data yet.
-				if qdb == nil {
-					return
-				}
-
-				// Execute handler.
-				handler(tx, qdb)
-
-				// Release a thread back to the scheduling loop.
-				<-threads
-			}(writable, handler)
-
-			i++
-			if i > threadCount {
-				break
-			}
+		// Choose an operation to execute.
+		var handler simulateHandler
+		if writable {
+			handler = writerHandlers[rand.Intn(len(writerHandlers))]
+		} else {
+			handler = readerHandlers[rand.Intn(len(readerHandlers))]
 		}
 
-		// Wait until all threads are done.
-		wg.Wait()
-	})
+		// Execute a thread for the given operation.
+		go func(writable bool, handler simulateHandler) {
+			defer wg.Done()
+
+			// Start transaction.
+			tx, err := db.Begin(writable)
+			if err != nil {
+				t.Fatal("tx begin: ", err)
+			}
+
+			// Obtain current state of the dataset.
+			mutex.Lock()
+			var qdb = versions[tx.ID()]
+			if writable {
+				qdb = versions[tx.ID()-1].Copy()
+			}
+			mutex.Unlock()
+
+			// Make sure we commit/rollback the tx at the end and update the state.
+			if writable {
+				defer func() {
+					mutex.Lock()
+					versions[tx.ID()] = qdb
+					mutex.Unlock()
+
+					ok(t, tx.Commit())
+				}()
+			} else {
+				defer tx.Rollback()
+			}
+
+			// Ignore operation if we don't have data yet.
+			if qdb == nil {
+				return
+			}
+
+			// Execute handler.
+			handler(tx, qdb)
+
+			// Release a thread back to the scheduling loop.
+			<-threads
+		}(writable, handler)
+
+		i++
+		if i > threadCount {
+			break
+		}
+	}
+
+	// Wait until all threads are done.
+	wg.Wait()
 }
 
-type simulateHandler func(tx *Tx, qdb *QuickDB)
+type simulateHandler func(tx *bolt.Tx, qdb *QuickDB)
 
 // Retrieves a key from the database and verifies that it is what is expected.
-func simulateGetHandler(tx *Tx, qdb *QuickDB) {
+func simulateGetHandler(tx *bolt.Tx, qdb *QuickDB) {
 	// Randomly retrieve an existing exist.
 	keys := qdb.Rand()
 	if len(keys) == 0 {
@@ -153,7 +155,7 @@ func simulateGetHandler(tx *Tx, qdb *QuickDB) {
 }
 
 // Inserts a key into the database.
-func simulatePutHandler(tx *Tx, qdb *QuickDB) {
+func simulatePutHandler(tx *bolt.Tx, qdb *QuickDB) {
 	var err error
 	keys, value := randKeys(), randValue()
 

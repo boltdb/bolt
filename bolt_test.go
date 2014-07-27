@@ -1,45 +1,12 @@
-package main_test
+package bolt_test
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strings"
 	"testing"
-
-	"github.com/boltdb/bolt"
-	. "github.com/boltdb/bolt/cmd/bolt"
 )
-
-// open creates and opens a Bolt database in the temp directory.
-func open(fn func(*bolt.DB, string)) {
-	path := tempfile()
-	defer os.RemoveAll(path)
-
-	db, err := bolt.Open(path, 0600, nil)
-	if err != nil {
-		panic("db open error: " + err.Error())
-	}
-	fn(db, path)
-}
-
-// run executes a command against the CLI and returns the output.
-func run(args ...string) string {
-	args = append([]string{"bolt"}, args...)
-	NewApp().Run(args)
-	return strings.TrimSpace(LogBuffer())
-}
-
-// tempfile returns a temporary file path.
-func tempfile() string {
-	f, _ := ioutil.TempFile("", "bolt-")
-	f.Close()
-	os.Remove(f.Name())
-	return f.Name()
-}
 
 // assert fails the test if the condition is false.
 func assert(tb testing.TB, condition bool, msg string, v ...interface{}) {
