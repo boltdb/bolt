@@ -396,6 +396,35 @@ performance. Bolt opts to disallow actions which can leave the database in a
 corrupted state. The only exception to this in Bolt is `DB.NoSync`.
 
 
+## Caveats & Limitations
+
+It's important to pick the right tool for the job and Bolt is no exception.
+Here are a few things to note when evaluating and using Bolt:
+
+* Bolt is good for read intensive workloads. Sequential write performance is
+  also fast but random writes can be slow. You can add a write-ahead log or
+  [transaction coalescer](https://github.com/boltdb/coalescer) in front of Bolt
+  to mitigate this issue.
+
+* Bolt uses a B+tree internally so there can be a lot of random page access.
+  SSDs provide a significant performance boost over spinning disks.
+
+* Try to avoid long running read transactions. Bolt uses copy-on-write so
+  old pages cannot be reclaimed while an old transaction is using them.
+
+* Byte slices returned from Bolt are only valid during a transaction. Once the
+  transaction has been committed or rolled back then the memory they point to
+  can be reused by a new page or can be unmapped from virtual memory and you'll
+  see an `unexpected fault address` panic when accessing it.
+
+* Be careful when using `Bucket.FillPercent`. Setting a high fill percent for
+  buckets that have random inserts will cause your database to have very poor
+  page utilization.
+
+* Use larger buckets in general. Smaller buckets causes poor page utilization
+  once they become larger than the page size (typically 4KB).
+
+
 ## Other Projects Using Bolt
 
 Below is a list of public, open source projects that use Bolt:
