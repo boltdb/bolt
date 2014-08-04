@@ -442,6 +442,7 @@ Below is a list of public, open source projects that use Bolt:
 * [ipxed](https://github.com/kelseyhightower/ipxed) - Web interface and api for ipxed.
 * [BoltStore](https://github.com/yosssi/boltstore) - Session store using Bolt.
 * [photosite/session](http://godoc.org/bitbucket.org/kardianos/photosite/session) - Sessions for a photo viewing site.
+* [LedisDB](https://github.com/siddontang/ledisdb) - A high performance NoSQL, using Bolt as optional storage.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
 
