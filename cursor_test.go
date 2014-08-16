@@ -3,6 +3,8 @@ package bolt_test
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
+	"os"
 	"sort"
 	"testing"
 	"testing/quick"
@@ -429,4 +431,81 @@ func TestCursor_QuickCheck_BucketsOnly_Reverse(t *testing.T) {
 		equals(t, names, []string{"foo", "baz", "bar"})
 		return nil
 	})
+}
+
+func ExampleCursor() {
+	// Open the database.
+	db, _ := bolt.Open(tempfile(), 0666, nil)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Start a read-write transaction.
+	db.Update(func(tx *bolt.Tx) error {
+		// Create a new bucket.
+		tx.CreateBucket([]byte("animals"))
+
+		// Insert data into a bucket.
+		b := tx.Bucket([]byte("animals"))
+		b.Put([]byte("dog"), []byte("fun"))
+		b.Put([]byte("cat"), []byte("lame"))
+		b.Put([]byte("liger"), []byte("awesome"))
+
+		// Create a cursor for iteration.
+		c := b.Cursor()
+
+		// Iterate over items in sorted key order. This starts from the
+		// first key/value pair and updates the k/v variables to the
+		// next key/value on each iteration.
+		//
+		// The loop finishes at the end of the cursor when a nil key is returned.
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			fmt.Printf("A %s is %s.\n", k, v)
+		}
+
+		return nil
+	})
+
+	// Output:
+	// A cat is lame.
+	// A dog is fun.
+	// A liger is awesome.
+}
+
+func ExampleCursor_reverse() {
+	// Open the database.
+	db, _ := bolt.Open(tempfile(), 0666, nil)
+	defer os.Remove(db.Path())
+	defer db.Close()
+
+	// Start a read-write transaction.
+	db.Update(func(tx *bolt.Tx) error {
+		// Create a new bucket.
+		tx.CreateBucket([]byte("animals"))
+
+		// Insert data into a bucket.
+		b := tx.Bucket([]byte("animals"))
+		b.Put([]byte("dog"), []byte("fun"))
+		b.Put([]byte("cat"), []byte("lame"))
+		b.Put([]byte("liger"), []byte("awesome"))
+
+		// Create a cursor for iteration.
+		c := b.Cursor()
+
+		// Iterate over items in reverse sorted key order. This starts
+		// from the last key/value pair and updates the k/v variables to
+		// the previous key/value on each iteration.
+		//
+		// The loop finishes at the beginning of the cursor when a nil key
+		// is returned.
+		for k, v := c.Last(); k != nil; k, v = c.Prev() {
+			fmt.Printf("A %s is %s.\n", k, v)
+		}
+
+		return nil
+	})
+
+	// Output:
+	// A liger is awesome.
+	// A dog is fun.
+	// A cat is lame.
 }
