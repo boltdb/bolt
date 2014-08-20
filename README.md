@@ -154,7 +154,7 @@ db.Update(func(tx *bolt.Tx) error {
 You can also create a bucket only if it doesn't exist by using the
 `Tx.CreateBucketIfNotExists()` function. It's a common pattern to call this
 function for all your top-level buckets after you open your database so you can
-guarentee that they exist for future transactions.
+guarantee that they exist for future transactions.
 
 To delete a bucket, simply call the `Tx.DeleteBucket()` function.
 
