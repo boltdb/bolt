@@ -424,6 +424,11 @@ Here are a few things to note when evaluating and using Bolt:
 * Use larger buckets in general. Smaller buckets causes poor page utilization
   once they become larger than the page size (typically 4KB).
 
+* Bulk loading a lot of random writes into a new bucket can be slow as the
+  page will not split until the transaction is committed. Randomly inserting
+  more than 100,000 key/value pairs into a single new bucket in a single
+  tranaction is not advised.
+
 
 ## Other Projects Using Bolt
 
