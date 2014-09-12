@@ -427,7 +427,7 @@ Here are a few things to note when evaluating and using Bolt:
 * Bulk loading a lot of random writes into a new bucket can be slow as the
   page will not split until the transaction is committed. Randomly inserting
   more than 100,000 key/value pairs into a single new bucket in a single
-  tranaction is not advised.
+  transaction is not advised.
 
 
 ## Other Projects Using Bolt
