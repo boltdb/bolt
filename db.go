@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -23,6 +24,12 @@ const version = 2
 // Represents a marker value to indicate that a file is a Bolt DB.
 const magic uint32 = 0xED0CDAED
 
+// IgnoreNoSync specifies whether the NoSync field of a DB is ignored when
+// syncing changes to a file.  This is required as some operating systems,
+// such as OpenBSD, do not have a unified buffer cache (UBC) and writes
+// must be synchronzied using the msync(2) syscall.
+const IgnoreNoSync = runtime.GOOS == "openbsd"
+
 // DB represents a collection of buckets persisted to a file on disk.
 // All data access is performed through transactions which can be obtained through the DB.
 // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
@@ -38,6 +45,9 @@ type DB struct {
 	// into a database and you can restart the bulk load in the event of
 	// a system failure or database corruption. Do not set this flag for
 	// normal use.
+	//
+	// If the package global IgnoreNoSync constant is true, this value is
+	// ignored.  See the comment on that constant for more details.
 	//
 	// THIS IS UNSAFE. PLEASE USE WITH CAUTION.
 	NoSync bool
@@ -263,7 +273,7 @@ func (db *DB) init() error {
 	if _, err := db.ops.writeAt(buf, 0); err != nil {
 		return err
 	}
-	if err := fdatasync(db.file); err != nil {
+	if err := fdatasync(db); err != nil {
 		return err
 	}
 
