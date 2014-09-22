@@ -1,4 +1,4 @@
-// +build linux darwin
+// +build !windows,!plan9
 
 package bolt
 
