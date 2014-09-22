@@ -1,14 +1,10 @@
-// +build !windows,!plan9,!linux
+// +build !windows,!plan9,!linux,!openbsd
 
 package bolt
-
-import (
-	"os"
-)
 
 var odirect int
 
 // fdatasync flushes written data to a file descriptor.
-func fdatasync(f *os.File) error {
-	return f.Sync()
+func fdatasync(db *DB) error {
+	return db.file.Sync()
 }
