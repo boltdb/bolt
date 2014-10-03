@@ -538,6 +538,9 @@ func (db *DB) meta() *meta {
 func (db *DB) allocate(count int) (*page, error) {
 	// Allocate a temporary buffer for the page.
 	buf := make([]byte, count*db.pageSize)
+	defer func() {
+		buf = nil
+	}()
 	p := (*page)(unsafe.Pointer(&buf[0]))
 	p.overflow = uint32(count - 1)
 

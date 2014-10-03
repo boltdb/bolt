@@ -441,6 +441,9 @@ func (tx *Tx) write() error {
 func (tx *Tx) writeMeta() error {
 	// Create a temporary buffer for the meta page.
 	buf := make([]byte, tx.db.pageSize)
+	defer func() {
+		buf = nil
+	}()
 	p := tx.db.pageInBuffer(buf, 0)
 	tx.meta.write(p)
 
