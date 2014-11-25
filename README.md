@@ -379,7 +379,7 @@ or to provide an HTTP endpoint that will perform a fixed-length sample.
 
 For more information on getting started with Bolt, check out the following articles:
 
-* [Intro to BoltDB: Painless Performant Persistence](http://blog.natefinch.com/2014/07/intro-to-boltdb-painless-performant.html) by [Nate Finch](https://github.com/natefinch).
+* [Intro to BoltDB: Painless Performant Persistence](http://npf.io/2014/07/intro-to-boltdb-painless-performant-persistence/) by [Nate Finch](https://github.com/natefinch).
 
 
 
