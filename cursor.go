@@ -8,6 +8,10 @@ import (
 // Cursor represents an iterator that can traverse over all key/value pairs in a bucket in sorted order.
 // Cursors see nested buckets with value == nil.
 // Cursors can be obtained from a transaction and are valid as long as the transaction is open.
+//
+// Changing data while traversing with a cursor may cause it to be invalidated
+// and return unexpected keys and/or values. You must reposition your cursor
+// after mutating data.
 type Cursor struct {
 	bucket *Bucket
 	stack  []elemRef
