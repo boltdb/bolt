@@ -412,7 +412,7 @@ but it will not give you the ability to do a compare-and-swap operation safely.
 Bolt supports fully serializable ACID transactions.
 
 
-### LDMB
+### LMDB
 
 Bolt was originally a port of LMDB so it is architecturally similar. Both use
 a B+tree, have ACID semanetics with fully serializable transactions, and support
