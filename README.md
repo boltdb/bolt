@@ -374,7 +374,45 @@ For more information on getting started with Bolt, check out the following artic
 
 
 
-## Comparing Bolt to LMDB
+## Comparison with other databases
+
+### Postgres, MySQL, & other relational databases
+
+Relational databases structure data into rows and are only accessible through
+the use of SQL. This approach provides flexibility in how you store and query
+your data but also incurs overhead in parsing and planning SQL statements. Bolt
+accesses all data by a byte slice key. This makes Bolt fast to read and write
+data by key but provides no built-in support for joining values together.
+
+Most relational databases (with the exception of SQLite) are standalone servers
+that run separately from your application. This gives your systems
+flexibility to connect multiple application servers to a single database
+server but also adds overhead in serializing and transporting data over the
+network. Bolt runs as a library included in your application so all data access
+has to go through your application's process. This brings data closer to your
+application but limits multi-process access to the data.
+
+
+### LevelDB, RocksDB
+
+LevelDB and it's derivatives (RocksDB, HyperLevelDB) are similar to Bolt in that
+they are libraries bundled into the application, however, their underlying
+structure is a log-structured merge-tree (LSM tree). An LSM tree optimizes
+random writes by using a write ahead log and multi-tiered, sorted files called
+SSTables. Bolt uses a B+tree internally and only a single file. Both approaches
+have trade offs.
+
+If you require a high random write throughput (>10,000 w/sec) or you need to use
+spinning disks then LevelDB could be a good choice. If your application is
+read-heavy or does a lot of range scans then Bolt could be a good choice.
+
+One other important consideration is that LevelDB does not have transactions.
+It supports batch writing of key/values pairs and it supports read snapshots
+but it will not give you the ability to do a compare-and-swap operation safely.
+Bolt supports fully serializable ACID transactions.
+
+
+### LDMB
 
 Bolt was originally a port of LMDB so it is architecturally similar. Both use
 a B+tree, have ACID semanetics with fully serializable transactions, and support
@@ -385,6 +423,11 @@ while Bolt has focused on simplicity and ease of use. For example, LMDB allows
 several unsafe actions such as direct writes and append writes for the sake of
 performance. Bolt opts to disallow actions which can leave the database in a 
 corrupted state. The only exception to this in Bolt is `DB.NoSync`.
+
+There are also a few differences in API. LMDB requires a maximum mmap size when
+opening an `mdb_env` whereas Bolt will handle incremental mmap resizing
+automatically. LMDB overloads the getter and setter functions with multiple
+flags whereas Bolt splits these specialized cases into their own functions.
 
 
 ## Caveats & Limitations
