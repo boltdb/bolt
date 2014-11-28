@@ -1,19 +1,10 @@
-Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https://drone.io/github.com/boltdb/bolt/latest) [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.png?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.png)](https://godoc.org/github.com/boltdb/bolt) ![Project status](http://img.shields.io/status/beta.png?color=blue)
+Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https://drone.io/github.com/boltdb/bolt/latest) [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.png?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.png)](https://godoc.org/github.com/boltdb/bolt) ![Version](http://img.shields.io/badge/version-1.0-green.png)
 ====
-
-> Simple is the new beautiful.
->
-> — [Tobias Lütke](https://twitter.com/tobi)
-
-
-## Overview
 
 Bolt is a pure Go key/value store inspired by [Howard Chu's][hyc_symas] and
 the [LMDB project][lmdb]. The goal of the project is to provide a simple,
 fast, and reliable database for projects that don't require a full database
-server such as Postgres or MySQL. It is also meant to be educational. Most of
-us use tools without understanding how the underlying data really works. Bolt
-is written so that it's easy to dig in and see what's going on.
+server such as Postgres or MySQL.
 
 Since Bolt is meant to be used as such a low-level piece of functionality,
 simplicity is key. The API will be small and only focus on getting values
@@ -25,11 +16,11 @@ and setting values. That's it.
 
 ## Project Status
 
-Bolt is functionally complete and has nearly full unit test coverage. The
-library test suite also includes randomized black box testing to ensure
-database consistency and thread safety. Bolt is currently in use in many
-projects, however, it is still at a beta stage so please use with caution
-and report any bugs found.
+Bolt is stable and the API is fixed. Full unit test coverage and randomized 
+black box testing are used to ensure database consistency and thread safety.
+Bolt is currently in high-load production environments serving databases as
+large as 1TB. Many companies such as Shopify and Heroku use Bolt-backed
+services every day.
 
 
 ## Getting Started
@@ -449,7 +440,6 @@ Below is a list of public, open source projects that use Bolt:
 * [ChainStore](https://github.com/nulayer/chainstore) - Simple key-value interface to a variety of storage engines organized as a chain of operations.
 * [MetricBase](https://github.com/msiebuhr/MetricBase) - Single-binary version of Graphite.
 * [Gitchain](https://github.com/gitchain/gitchain) - Decentralized, peer-to-peer Git repositories aka "Git meets Bitcoin".
-* [SkyDB](https://github.com/skydb/sky) - Behavioral analytics database.
 * [event-shuttle](https://github.com/sclasen/event-shuttle) - A Unix system service to collect and reliably deliver messages to Kafka.
 * [ipxed](https://github.com/kelseyhightower/ipxed) - Web interface and api for ipxed.
 * [BoltStore](https://github.com/yosssi/boltstore) - Session store using Bolt.
@@ -459,6 +449,7 @@ Below is a list of public, open source projects that use Bolt:
 * [cayley](https://github.com/google/cayley) - Cayley is an open-source graph database using Bolt as optional backend.
 * [bleve](http://www.blevesearch.com/) - A pure Go search engine similar to ElasticSearch that uses Bolt as the default storage backend.
 * [tentacool](https://github.com/optiflows/tentacool) - REST api server to manage system stuff (IP, DNS, Gateway...) on a linux server.
+* [SkyDB](https://github.com/skydb/sky) - Behavioral analytics database.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
 
