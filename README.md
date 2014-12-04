@@ -395,7 +395,7 @@ application but limits multi-process access to the data.
 
 ### LevelDB, RocksDB
 
-LevelDB and it's derivatives (RocksDB, HyperLevelDB) are similar to Bolt in that
+LevelDB and its derivatives (RocksDB, HyperLevelDB) are similar to Bolt in that
 they are libraries bundled into the application, however, their underlying
 structure is a log-structured merge-tree (LSM tree). An LSM tree optimizes
 random writes by using a write ahead log and multi-tiered, sorted files called
@@ -415,7 +415,7 @@ Bolt supports fully serializable ACID transactions.
 ### LMDB
 
 Bolt was originally a port of LMDB so it is architecturally similar. Both use
-a B+tree, have ACID semanetics with fully serializable transactions, and support
+a B+tree, have ACID semantics with fully serializable transactions, and support
 lock-free MVCC using a single writer and multiple readers.
 
 The two projects have somewhat diverged. LMDB heavily focuses on raw performance
