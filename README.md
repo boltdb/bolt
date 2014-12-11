@@ -125,6 +125,40 @@ no mutating operations are allowed within a read-only transaction. You can only
 retrieve buckets, retrieve values, and copy the database within a read-only
 transaction.
 
+#### Managing transactions manually
+
+The `DB.View()` and `DB.Update()` functions are wrappers around the `DB.Begin()`
+function. These helper functions will start the transaction, execute a function,
+and then safely close your transaction if an error is returned. This is the
+recommended way to use Bolt transactions.
+
+However, sometimes you may want to manually start and end your transactions.
+You can use the `Tx.Begin()` function directly but _please_ be sure to close the
+transaction.
+
+```go
+// Start a writable transaction.
+tx, err := db.Begin(true)
+if err != nil {
+    return err
+}
+defer tx.Rollback()
+
+// Use the transaction...
+_, err := tx.CreateBucket([]byte("MyBucket")
+if err != nil {
+    return err
+}
+
+// Commit the transaction and check for error.
+if err := tx.Commit(); err != nil {
+    return err
+}
+```
+
+The first argument to `DB.Begin()` is a boolean stating if the transaction
+should be writable.
+
 
 ### Using buckets
 
