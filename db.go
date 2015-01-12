@@ -162,16 +162,6 @@ func (db *DB) mmap(minsz int) error {
 	db.mmaplock.Lock()
 	defer db.mmaplock.Unlock()
 
-	// Dereference all mmap references before unmapping.
-	if db.rwtx != nil {
-		db.rwtx.root.dereference()
-	}
-
-	// Unmap existing data before continuing.
-	if err := db.munmap(); err != nil {
-		return err
-	}
-
 	info, err := db.file.Stat()
 	if err != nil {
 		return fmt.Errorf("mmap stat error: %s", err)
@@ -185,6 +175,21 @@ func (db *DB) mmap(minsz int) error {
 		size = minsz
 	}
 	size = db.mmapSize(size)
+
+	// Verify the map size is not above the maximum allowed.
+	if size > maxMapSize {
+		return fmt.Errorf("mmap too large")
+	}
+
+	// Dereference all mmap references before unmapping.
+	if db.rwtx != nil {
+		db.rwtx.root.dereference()
+	}
+
+	// Unmap existing data before continuing.
+	if err := db.munmap(); err != nil {
+		return err
+	}
 
 	// Memory-map the data file as a byte slice.
 	if err := mmap(db, size); err != nil {
