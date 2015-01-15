@@ -392,7 +392,6 @@ go func() {
 		// Save stats for the next loop.
 		prev = stats
 	}
-}
 }()
 ```
 
