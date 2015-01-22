@@ -255,7 +255,6 @@ func (db *DB) init() error {
 		m.magic = magic
 		m.version = version
 		m.pageSize = uint32(db.pageSize)
-		m.version = version
 		m.freelist = 2
 		m.root = bucket{root: 3}
 		m.pgid = 4
