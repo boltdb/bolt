@@ -85,6 +85,39 @@ func TestOpen_Wait(t *testing.T) {
 	assert(t, time.Since(start) > 100*time.Millisecond, "")
 }
 
+// Ensure that opening a database does not increase its size.
+// https://github.com/boltdb/bolt/issues/291
+func TestOpen_Size(t *testing.T) {
+	// Open a data file.
+	db := NewTestDB()
+	path := db.Path()
+	defer db.Close()
+
+	// Insert until we get above the minimum 4MB size.
+	db.Update(func(tx *bolt.Tx) error {
+		b, _ := tx.CreateBucketIfNotExists([]byte("data"))
+		for i := 0; i < 10000; i++ {
+			_ = b.Put([]byte(fmt.Sprintf("%04d", i)), make([]byte, 1000))
+		}
+		return nil
+	})
+
+	// Close database and grab the size.
+	db.DB.Close()
+	sz := fileSize(path)
+
+	// Reopen database, update, and check size again.
+	db0, _ := bolt.Open(path, 0666, nil)
+	db0.Update(func(tx *bolt.Tx) error { return tx.Bucket([]byte("data")).Put([]byte{0}, []byte{0}) })
+	db0.Close()
+	newSz := fileSize(path)
+
+	// Compare the original size with the new size.
+	if sz != newSz {
+		t.Fatalf("unexpected file growth: %d => %d", sz, newSz)
+	}
+}
+
 // Ensure that a re-opened database is consistent.
 func TestOpen_Check(t *testing.T) {
 	path := tempfile()
@@ -647,4 +680,12 @@ func trunc(b []byte, length int) []byte {
 
 func truncDuration(d time.Duration) string {
 	return regexp.MustCompile(`^(\d+)(\.\d+)`).ReplaceAllString(d.String(), "$1")
+}
+
+func fileSize(path string) int64 {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
 }

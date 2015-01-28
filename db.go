@@ -12,9 +12,6 @@ import (
 	"unsafe"
 )
 
-// The smallest size that the mmap can be.
-const minMmapSize = 1 << 22 // 4MB
-
 // The largest step that can be taken when remapping the mmap.
 const maxMmapStep = 1 << 30 // 1GB
 
@@ -222,15 +219,21 @@ func (db *DB) munmap() error {
 // mmapSize determines the appropriate size for the mmap given the current size
 // of the database. The minimum size is 4MB and doubles until it reaches 1GB.
 func (db *DB) mmapSize(size int) int {
-	if size <= minMmapSize {
-		return minMmapSize
-	} else if size < maxMmapStep {
-		size *= 2
-	} else {
-		size += maxMmapStep
+	// Double the size from 1MB until 1GB.
+	for i := uint(20); i < 30; i++ {
+		if size <= 1<<i {
+			return 1 << i
+		}
+	}
+
+	// If larger than 1GB then grow by 1GB at a time.
+	size += maxMmapStep
+	if remainder := size % maxMmapStep; remainder > 0 {
+		size -= remainder
 	}
 
 	// Ensure that the mmap size is a multiple of the page size.
+	// This should always be true since we're incrementing in MBs.
 	if (size % db.pageSize) != 0 {
 		size = ((size / db.pageSize) + 1) * db.pageSize
 	}
