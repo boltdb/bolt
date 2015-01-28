@@ -225,24 +225,30 @@ func (db *DB) mmapSize(size int) (int, error) {
 		}
 	}
 
-	// Verify the map size is not above the maximum allowed.
-	if size > maxMapSize-maxMmapStep {
+	// Verify the requested size is not above the maximum allowed.
+	if size > maxMapSize {
 		return 0, fmt.Errorf("mmap too large")
 	}
 
 	// If larger than 1GB then grow by 1GB at a time.
-	size += maxMmapStep
-	if remainder := size % maxMmapStep; remainder > 0 {
-		size -= remainder
+	sz := int64(size) + int64(maxMmapStep)
+	if remainder := sz % int64(maxMmapStep); remainder > 0 {
+		sz -= remainder
 	}
 
 	// Ensure that the mmap size is a multiple of the page size.
 	// This should always be true since we're incrementing in MBs.
-	if (size % db.pageSize) != 0 {
-		size = ((size / db.pageSize) + 1) * db.pageSize
+	pageSize := int64(db.pageSize)
+	if (sz % pageSize) != 0 {
+		sz = ((sz / pageSize) + 1) * pageSize
 	}
 
-	return size, nil
+	// If we've exceeded the max size then only grow up to the max size.
+	if sz > maxMapSize {
+		sz = maxMapSize
+	}
+
+	return int(sz), nil
 }
 
 // init creates a new database file and initializes its meta pages.
