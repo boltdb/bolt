@@ -2,6 +2,7 @@ package bolt
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 )
 
@@ -228,8 +229,8 @@ func (c *Cursor) next() (key []byte, value []byte, flags uint32) {
 // search recursively performs a binary search against a given page/node until it finds a given key.
 func (c *Cursor) search(key []byte, pgid pgid) {
 	p, n := c.bucket.pageNode(pgid)
-	if p != nil {
-		_assert((p.flags&(branchPageFlag|leafPageFlag)) != 0, "invalid page type: %d: %x", p.id, p.flags)
+	if p != nil && (p.flags&(branchPageFlag|leafPageFlag)) == 0 {
+		panic(fmt.Sprintf("invalid page type: %d: %x", p.id, p.flags))
 	}
 	e := elemRef{page: p, node: n}
 	c.stack = append(c.stack, e)

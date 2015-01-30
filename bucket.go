@@ -511,8 +511,12 @@ func (b *Bucket) spill() error {
 		// Update parent node.
 		var c = b.Cursor()
 		k, _, flags := c.seek([]byte(name))
-		_assert(bytes.Equal([]byte(name), k), "misplaced bucket header: %x -> %x", []byte(name), k)
-		_assert(flags&bucketLeafFlag != 0, "unexpected bucket header flag: %x", flags)
+		if !bytes.Equal([]byte(name), k) {
+			panic(fmt.Sprintf("misplaced bucket header: %x -> %x", []byte(name), k))
+		}
+		if flags&bucketLeafFlag == 0 {
+			panic(fmt.Sprintf("unexpected bucket header flag: %x", flags))
+		}
 		c.node().put([]byte(name), []byte(name), value, 0, bucketLeafFlag)
 	}
 
@@ -528,7 +532,9 @@ func (b *Bucket) spill() error {
 	b.rootNode = b.rootNode.root()
 
 	// Update the root node for this bucket.
-	_assert(b.rootNode.pgid < b.tx.meta.pgid, "pgid (%d) above high water mark (%d)", b.rootNode.pgid, b.tx.meta.pgid)
+	if b.rootNode.pgid >= b.tx.meta.pgid {
+		panic(fmt.Sprintf("pgid (%d) above high water mark (%d)", b.rootNode.pgid, b.tx.meta.pgid))
+	}
 	b.root = b.rootNode.pgid
 
 	return nil
@@ -659,7 +665,9 @@ func (b *Bucket) pageNode(id pgid) (*page, *node) {
 	// Inline buckets have a fake page embedded in their value so treat them
 	// differently. We'll return the rootNode (if available) or the fake page.
 	if b.root == 0 {
-		_assert(id == 0, "inline bucket non-zero page access(2): %d != 0", id)
+		if id != 0 {
+			panic(fmt.Sprintf("inline bucket non-zero page access(2): %d != 0", id))
+		}
 		if b.rootNode != nil {
 			return nil, b.rootNode
 		}

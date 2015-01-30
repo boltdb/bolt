@@ -2,6 +2,7 @@ package bolt
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 	"unsafe"
 )
@@ -70,7 +71,9 @@ func (n *node) pageElementSize() int {
 
 // childAt returns the child node at a given index.
 func (n *node) childAt(index int) *node {
-	_assert(!n.isLeaf, "invalid childAt(%d) on a leaf node", index)
+	if n.isLeaf {
+		panic(fmt.Sprintf("invalid childAt(%d) on a leaf node", index))
+	}
 	return n.bucket.node(n.inodes[index].pgid, n)
 }
 
@@ -111,9 +114,13 @@ func (n *node) prevSibling() *node {
 
 // put inserts a key/value.
 func (n *node) put(oldKey, newKey, value []byte, pgid pgid, flags uint32) {
-	_assert(pgid < n.bucket.tx.meta.pgid, "pgid (%d) above high water mark (%d)", pgid, n.bucket.tx.meta.pgid)
-	_assert(len(oldKey) > 0, "put: zero-length old key")
-	_assert(len(newKey) > 0, "put: zero-length new key")
+	if pgid >= n.bucket.tx.meta.pgid {
+		panic(fmt.Sprintf("pgid (%d) above high water mark (%d)", pgid, n.bucket.tx.meta.pgid))
+	} else if len(oldKey) <= 0 {
+		panic("put: zero-length old key")
+	} else if len(newKey) <= 0 {
+		panic("put: zero-length new key")
+	}
 
 	// Find insertion index.
 	index := sort.Search(len(n.inodes), func(i int) bool { return bytes.Compare(n.inodes[i].key, oldKey) != -1 })
@@ -189,7 +196,9 @@ func (n *node) write(p *page) {
 		p.flags |= branchPageFlag
 	}
 
-	_assert(len(n.inodes) < 0xFFFF, "inode overflow: %d (pgid=%d)", len(n.inodes), p.id)
+	if len(n.inodes) >= 0xFFFF {
+		panic(fmt.Sprintf("inode overflow: %d (pgid=%d)", len(n.inodes), p.id))
+	}
 	p.count = uint16(len(n.inodes))
 
 	// Loop over each item and write it to the page.
@@ -348,7 +357,9 @@ func (n *node) spill() error {
 		}
 
 		// Write the node.
-		_assert(p.id < tx.meta.pgid, "pgid (%d) above high water mark (%d)", p.id, tx.meta.pgid)
+		if p.id >= tx.meta.pgid {
+			panic(fmt.Sprintf("pgid (%d) above high water mark (%d)", p.id, tx.meta.pgid))
+		}
 		node.pgid = p.id
 		node.write(p)
 		node.spilled = true
