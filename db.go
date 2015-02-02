@@ -694,13 +694,8 @@ func _assert(condition bool, msg string, v ...interface{}) {
 	}
 }
 
-func warn(v ...interface{}) {
-	fmt.Fprintln(os.Stderr, v...)
-}
-
-func warnf(msg string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, msg+"\n", v...)
-}
+func warn(v ...interface{})              { fmt.Fprintln(os.Stderr, v...) }
+func warnf(msg string, v ...interface{}) { fmt.Fprintf(os.Stderr, msg+"\n", v...) }
 
 func printstack() {
 	stack := strings.Join(strings.Split(string(debug.Stack()), "\n")[2:], "\n")
