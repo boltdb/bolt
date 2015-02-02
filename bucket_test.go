@@ -490,6 +490,33 @@ func TestBucket_NextSequence(t *testing.T) {
 	})
 }
 
+// Ensure that a bucket will persist an autoincrementing sequence even if its
+// the only thing updated on the bucket.
+// https://github.com/boltdb/bolt/issues/296
+func TestBucket_NextSequence_Persist(t *testing.T) {
+	db := NewTestDB()
+	defer db.Close()
+	db.Update(func(tx *bolt.Tx) error {
+		_, _ = tx.CreateBucket([]byte("widgets"))
+		return nil
+	})
+
+	db.Update(func(tx *bolt.Tx) error {
+		_, _ = tx.Bucket([]byte("widgets")).NextSequence()
+		return nil
+	})
+
+	db.Update(func(tx *bolt.Tx) error {
+		seq, err := tx.Bucket([]byte("widgets")).NextSequence()
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		} else if seq != 2 {
+			t.Fatalf("unexpected sequence: %d", seq)
+		}
+		return nil
+	})
+}
+
 // Ensure that retrieving the next sequence on a read-only bucket returns an error.
 func TestBucket_NextSequence_ReadOnly(t *testing.T) {
 	db := NewTestDB()
