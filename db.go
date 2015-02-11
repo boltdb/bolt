@@ -350,6 +350,11 @@ func (db *DB) Begin(writable bool) (*Tx, error) {
 }
 
 func (db *DB) beginTx() (*Tx, error) {
+	// Exit if the database is not open yet.
+	if !db.opened {
+		return nil, ErrDatabaseNotOpen
+	}
+	
 	// Lock the meta pages while we initialize the transaction. We obtain
 	// the meta lock before the mmap lock because that's the order that the
 	// write transaction will obtain them.
@@ -359,13 +364,6 @@ func (db *DB) beginTx() (*Tx, error) {
 	// obtain a write lock so all transactions must finish before it can be
 	// remapped.
 	db.mmaplock.RLock()
-
-	// Exit if the database is not open yet.
-	if !db.opened {
-		db.mmaplock.RUnlock()
-		db.metalock.Unlock()
-		return nil, ErrDatabaseNotOpen
-	}
 
 	// Create a transaction associated with the database.
 	t := &Tx{}
