@@ -453,9 +453,9 @@ lock-free MVCC using a single writer and multiple readers.
 
 The two projects have somewhat diverged. LMDB heavily focuses on raw performance
 while Bolt has focused on simplicity and ease of use. For example, LMDB allows
-several unsafe actions such as direct writes and append writes for the sake of
-performance. Bolt opts to disallow actions which can leave the database in a 
-corrupted state. The only exception to this in Bolt is `DB.NoSync`.
+several unsafe actions such as direct writes for the sake of performance. Bolt
+opts to disallow actions which can leave the database in a corrupted state. The
+only exception to this in Bolt is `DB.NoSync`.
 
 There are also a few differences in API. LMDB requires a maximum mmap size when
 opening an `mdb_env` whereas Bolt will handle incremental mmap resizing
