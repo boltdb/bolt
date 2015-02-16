@@ -231,9 +231,9 @@ func (db *DB) mmapSize(size int) (int, error) {
 	}
 
 	// If larger than 1GB then grow by 1GB at a time.
-	sz := int64(size) + int64(maxMmapStep)
+	sz := int64(size)
 	if remainder := sz % int64(maxMmapStep); remainder > 0 {
-		sz -= remainder
+		sz += int64(maxMmapStep) - remainder
 	}
 
 	// Ensure that the mmap size is a multiple of the page size.
