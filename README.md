@@ -16,7 +16,7 @@ and setting values. That's it.
 
 ## Project Status
 
-Bolt is stable and the API is fixed. Full unit test coverage and randomized 
+Bolt is stable and the API is fixed. Full unit test coverage and randomized
 black box testing are used to ensure database consistency and thread safety.
 Bolt is currently in high-load production environments serving databases as
 large as 1TB. Many companies such as Shopify and Heroku use Bolt-backed
@@ -120,7 +120,7 @@ err := db.View(func(tx *bolt.Tx) error {
 })
 ```
 
-You also get a consistent view of the database within this closure, however, 
+You also get a consistent view of the database within this closure, however,
 no mutating operations are allowed within a read-only transaction. You can only
 retrieve buckets, retrieve values, and copy the database within a read-only
 transaction.
@@ -385,7 +385,7 @@ go func() {
 		// Grab the current stats and diff them.
 		stats := db.Stats()
 		diff := stats.Sub(&prev)
-		
+
 		// Encode stats to JSON and print to STDERR.
 		json.NewEncoder(os.Stderr).Encode(diff)
 
@@ -508,6 +508,7 @@ Here are a few things to note when evaluating and using Bolt:
 
 Below is a list of public, open source projects that use Bolt:
 
+* [Operation Go: A Routine Mission](http://gocode.io) - An online programming game for Golang using Bolt for user accounts and a leaderboard.
 * [Bazil](https://github.com/bazillion/bazil) - A file system that lets your data reside where it is most convenient for it to reside.
 * [DVID](https://github.com/janelia-flyem/dvid) - Added Bolt as optional storage engine and testing it against Basho-tuned leveldb.
 * [Skybox Analytics](https://github.com/skybox/skybox) - A standalone funnel analysis tool for web analytics.
@@ -528,4 +529,3 @@ Below is a list of public, open source projects that use Bolt:
 * [SkyDB](https://github.com/skydb/sky) - Behavioral analytics database.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
-
