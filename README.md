@@ -145,7 +145,7 @@ if err != nil {
 defer tx.Rollback()
 
 // Use the transaction...
-_, err := tx.CreateBucket([]byte("MyBucket")
+_, err := tx.CreateBucket([]byte("MyBucket"))
 if err != nil {
     return err
 }
