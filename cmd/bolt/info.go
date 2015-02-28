@@ -22,5 +22,5 @@ func Info(path string) {
 
 	// Print basic database info.
 	var info = db.Info()
-	printf("Page Size: %d", info.PageSize)
+	printf("Page Size: %d\n", info.PageSize)
 }
