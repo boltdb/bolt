@@ -404,7 +404,7 @@ or to provide an HTTP endpoint that will perform a fixed-length sample.
 For more information on getting started with Bolt, check out the following articles:
 
 * [Intro to BoltDB: Painless Performant Persistence](http://npf.io/2014/07/intro-to-boltdb-painless-performant-persistence/) by [Nate Finch](https://github.com/natefinch).
-
+* [Bolt -- an embedded key/value database for Go](https://www.progville.com/go/bolt-embedded-db-golang/) by Progville
 
 
 ## Comparison with other databases
