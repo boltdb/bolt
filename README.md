@@ -328,7 +328,7 @@ func (*Bucket) DeleteBucket(key []byte) error
 
 ### Database backups
 
-Bolt is a single file so it's easy to backup. You can use the `Tx.Copy()`
+Bolt is a single file so it's easy to backup. You can use the `Tx.WriteTo()`
 function to write a consistent view of the database to a writer. If you call
 this from a read-only transaction, it will perform a hot backup and not block
 your other database reads and writes. It will also use `O_DIRECT` when available
@@ -343,7 +343,8 @@ func BackupHandleFunc(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", `attachment; filename="my.db"`)
 		w.Header().Set("Content-Length", strconv.Itoa(int(tx.Size())))
-		return tx.Copy(w)
+		_, err := tx.WriteTo(w)
+		return err
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
