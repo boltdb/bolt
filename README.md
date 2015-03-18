@@ -125,6 +125,48 @@ no mutating operations are allowed within a read-only transaction. You can only
 retrieve buckets, retrieve values, and copy the database within a read-only
 transaction.
 
+
+#### Batch read-write transactions
+
+Each `DB.Update()` waits for disk to commit the writes. This overhead
+can be minimized by combining multiple updates with the `DB.Batch()`
+function:
+
+```go
+err := db.Batch(func(tx *bolt.Tx) error {
+	...
+	return nil
+})
+```
+
+Concurrent Batch calls are opportunistically combined into larger
+transactions. Batch is only useful when there are multiple goroutines
+calling it.
+
+The trade-off is that `Batch` can call the given
+function multiple times, if parts of the transaction fail. The
+function must be idempotent and side effects must take effect only
+after a successful return from `DB.Batch()`.
+
+For example: don't display messages from inside the function, instead
+set variables in the enclosing scope:
+
+```go
+var id uint64
+err := db.Batch(func(tx *bolt.Tx) error {
+	// Find last key in bucket, decode as bigendian uint64, increment
+	// by one, encode back to []byte, and add new key.
+	...
+	id = newValue
+	return nil
+})
+if err != nil {
+	return ...
+}
+fmt.Println("Allocated ID %d", id)
+```
+
+
 #### Managing transactions manually
 
 The `DB.View()` and `DB.Update()` functions are wrappers around the `DB.Begin()`

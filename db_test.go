@@ -618,6 +618,34 @@ func NewTestDB() *TestDB {
 	return &TestDB{db}
 }
 
+// MustView executes a read-only function. Panic on error.
+func (db *TestDB) MustView(fn func(tx *bolt.Tx) error) {
+	if err := db.DB.View(func(tx *bolt.Tx) error {
+		return fn(tx)
+	}); err != nil {
+		panic(err.Error())
+	}
+}
+
+// MustUpdate executes a read-write function. Panic on error.
+func (db *TestDB) MustUpdate(fn func(tx *bolt.Tx) error) {
+	if err := db.DB.View(func(tx *bolt.Tx) error {
+		return fn(tx)
+	}); err != nil {
+		panic(err.Error())
+	}
+}
+
+// MustCreateBucket creates a new bucket. Panic on error.
+func (db *TestDB) MustCreateBucket(name []byte) {
+	if err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucket([]byte(name))
+		return err
+	}); err != nil {
+		panic(err.Error())
+	}
+}
+
 // Close closes the database and deletes the underlying file.
 func (db *TestDB) Close() {
 	// Log statistics.
