@@ -10,6 +10,8 @@ import (
 // Cursors see nested buckets with value == nil.
 // Cursors can be obtained from a transaction and are valid as long as the transaction is open.
 //
+// Keys and values returned from the cursor are only valid for the life of the transaction.
+//
 // Changing data while traversing with a cursor may cause it to be invalidated
 // and return unexpected keys and/or values. You must reposition your cursor
 // after mutating data.
@@ -25,6 +27,7 @@ func (c *Cursor) Bucket() *Bucket {
 
 // First moves the cursor to the first item in the bucket and returns its key and value.
 // If the bucket is empty then a nil key and value are returned.
+// The returned key and value are only valid for the life of the transaction.
 func (c *Cursor) First() (key []byte, value []byte) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
 	c.stack = c.stack[:0]
@@ -41,6 +44,7 @@ func (c *Cursor) First() (key []byte, value []byte) {
 
 // Last moves the cursor to the last item in the bucket and returns its key and value.
 // If the bucket is empty then a nil key and value are returned.
+// The returned key and value are only valid for the life of the transaction.
 func (c *Cursor) Last() (key []byte, value []byte) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
 	c.stack = c.stack[:0]
@@ -58,6 +62,7 @@ func (c *Cursor) Last() (key []byte, value []byte) {
 
 // Next moves the cursor to the next item in the bucket and returns its key and value.
 // If the cursor is at the end of the bucket then a nil key and value are returned.
+// The returned key and value are only valid for the life of the transaction.
 func (c *Cursor) Next() (key []byte, value []byte) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
 	k, v, flags := c.next()
@@ -69,6 +74,7 @@ func (c *Cursor) Next() (key []byte, value []byte) {
 
 // Prev moves the cursor to the previous item in the bucket and returns its key and value.
 // If the cursor is at the beginning of the bucket then a nil key and value are returned.
+// The returned key and value are only valid for the life of the transaction.
 func (c *Cursor) Prev() (key []byte, value []byte) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
 
@@ -100,6 +106,7 @@ func (c *Cursor) Prev() (key []byte, value []byte) {
 // Seek moves the cursor to a given key and returns it.
 // If the key does not exist then the next key is used. If no keys
 // follow, a nil key is returned.
+// The returned key and value are only valid for the life of the transaction.
 func (c *Cursor) Seek(seek []byte) (key []byte, value []byte) {
 	k, v, flags := c.seek(seek)
 
