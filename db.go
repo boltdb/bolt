@@ -73,7 +73,7 @@ type DB struct {
 
 	path     string
 	file     *os.File
-	dataref  []byte
+	dataref  []byte // mmap'ed readonly, write throws SEGV
 	data     *[maxMapSize]byte
 	datasz   int
 	meta0    *meta
