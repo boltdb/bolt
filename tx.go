@@ -421,14 +421,26 @@ func (tx *Tx) write() error {
 	// Write pages to disk in order.
 	for _, p := range pages {
 		size := (int(p.overflow) + 1) * tx.db.pageSize
-		buf := (*[maxAllocSize]byte)(unsafe.Pointer(p))[:size]
 		offset := int64(p.id) * int64(tx.db.pageSize)
-		if _, err := tx.db.ops.writeAt(buf, offset); err != nil {
-			return err
+		ptr := (*[maxAllocSize]byte)(unsafe.Pointer(p))
+		for {
+			sz := size
+			if sz > maxAllocSize-1 {
+				sz = maxAllocSize - 1
+			}
+			buf := ptr[:sz]
+			if _, err := tx.db.ops.writeAt(buf, offset); err != nil {
+				return err
+			}
+			// Update statistics.
+			tx.stats.Write++
+			size -= sz
+			if size == 0 {
+				break
+			}
+			offset += int64(sz)
+			ptr = (*[maxAllocSize]byte)(unsafe.Pointer(&ptr[sz]))
 		}
-
-		// Update statistics.
-		tx.stats.Write++
 	}
 	if !tx.db.NoSync || IgnoreNoSync {
 		if err := fdatasync(tx.db); err != nil {

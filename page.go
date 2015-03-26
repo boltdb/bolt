@@ -96,7 +96,7 @@ type branchPageElement struct {
 // key returns a byte slice of the node key.
 func (n *branchPageElement) key() []byte {
 	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
-	return buf[n.pos : n.pos+n.ksize]
+	return (*[maxAllocSize]byte)(unsafe.Pointer(&buf[n.pos]))[:n.ksize]
 }
 
 // leafPageElement represents a node on a leaf page.
@@ -110,13 +110,13 @@ type leafPageElement struct {
 // key returns a byte slice of the node key.
 func (n *leafPageElement) key() []byte {
 	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
-	return buf[n.pos : n.pos+n.ksize]
+	return (*[maxAllocSize]byte)(unsafe.Pointer(&buf[n.pos]))[:n.ksize]
 }
 
 // value returns a byte slice of the node value.
 func (n *leafPageElement) value() []byte {
 	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
-	return buf[n.pos+n.ksize : n.pos+n.ksize+n.vsize]
+	return (*[maxAllocSize]byte)(unsafe.Pointer(&buf[n.pos+n.ksize]))[:n.vsize]
 }
 
 // PageInfo represents human readable information about a page.
