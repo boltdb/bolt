@@ -550,6 +550,12 @@ Here are a few things to note when evaluating and using Bolt:
   However, this is expected and the OS will release memory as needed. Bolt can
   handle databases much larger than the available physical RAM.
 
+* Because of the way pages are laid out on disk, Bolt cannot truncate data files
+  and return free pages back to the disk. Instead, Bolt maintains a free list
+  of unused pages within its data file. These free pages can be reused by later
+  transactions. This works well for many use cases as databases generally tend
+  to grow. However, it's important to note that deleting large chunks of data
+  will not allow you to reclaim that space on disk.
 
 ## Other Projects Using Bolt
 
