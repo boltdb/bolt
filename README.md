@@ -557,6 +557,11 @@ Here are a few things to note when evaluating and using Bolt:
   to grow. However, it's important to note that deleting large chunks of data
   will not allow you to reclaim that space on disk.
 
+  For more information on page allocation, [see this comment][page-allocation].
+
+[page-allocation]: https://github.com/boltdb/bolt/issues/308#issuecomment-74811638
+
+
 ## Other Projects Using Bolt
 
 Below is a list of public, open source projects that use Bolt:
