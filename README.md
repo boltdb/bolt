@@ -385,7 +385,7 @@ do database backups:
 
 ```go
 func BackupHandleFunc(w http.ResponseWriter, req *http.Request) {
-	err := db.View(func(tx bolt.Tx) error {
+	err := db.View(func(tx *bolt.Tx) error {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", `attachment; filename="my.db"`)
 		w.Header().Set("Content-Length", strconv.Itoa(int(tx.Size())))
