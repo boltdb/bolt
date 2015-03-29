@@ -585,6 +585,6 @@ Below is a list of public, open source projects that use Bolt:
 * [bleve](http://www.blevesearch.com/) - A pure Go search engine similar to ElasticSearch that uses Bolt as the default storage backend.
 * [tentacool](https://github.com/optiflows/tentacool) - REST api server to manage system stuff (IP, DNS, Gateway...) on a linux server.
 * [SkyDB](https://github.com/skydb/sky) - Behavioral analytics database.
-* [SeaweedFS](https://github.com/chrislusf/weed-fs) - Highly scalable distributed key~file system with O(1) disk read.
+* [Seaweed File System](https://github.com/chrislusf/weed-fs) - Highly scalable distributed key~file system with O(1) disk read.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
