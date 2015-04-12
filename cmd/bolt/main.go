@@ -99,6 +99,7 @@ func NewApp() *cli.App {
 				&cli.Float64Flag{Name: "fill-percent", Value: bolt.DefaultFillPercent, Usage: "Fill percentage"},
 				&cli.BoolFlag{Name: "no-sync", Usage: "Skip fsync on every commit"},
 				&cli.BoolFlag{Name: "work", Usage: "Print the temp db and do not delete on exit"},
+				&cli.StringFlag{Name: "path", Usage: "Path to database to use"},
 			},
 			Action: func(c *cli.Context) {
 				statsInterval, err := time.ParseDuration(c.String("stats-interval"))
@@ -121,6 +122,7 @@ func NewApp() *cli.App {
 					FillPercent:   c.Float64("fill-percent"),
 					NoSync:        c.Bool("no-sync"),
 					Clean:         !c.Bool("work"),
+					Path:          c.String("path"),
 				})
 			},
 		}}

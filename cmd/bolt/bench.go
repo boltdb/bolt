@@ -31,8 +31,11 @@ func Bench(options *BenchOptions) {
 		fatal("number of iterations must be divisible by the batch size")
 	}
 
-	// Find temporary location.
-	path := tempfile()
+	// Generate temp path if one is not passed in.
+	path := options.Path
+	if path == "" {
+		path = tempfile()
+	}
 
 	if options.Clean {
 		defer os.Remove(path)
@@ -368,6 +371,7 @@ type BenchOptions struct {
 	FillPercent   float64
 	NoSync        bool
 	Clean         bool
+	Path          string
 }
 
 // BenchResults represents the performance results of the benchmark.
