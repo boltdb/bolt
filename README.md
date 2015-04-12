@@ -586,5 +586,6 @@ Below is a list of public, open source projects that use Bolt:
 * [tentacool](https://github.com/optiflows/tentacool) - REST api server to manage system stuff (IP, DNS, Gateway...) on a linux server.
 * [SkyDB](https://github.com/skydb/sky) - Behavioral analytics database.
 * [Seaweed File System](https://github.com/chrislusf/weed-fs) - Highly scalable distributed key~file system with O(1) disk read.
+* [InfluxDB](http://influxdb.com) - Scalable datastore for metrics, events, and real-time analytics.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
