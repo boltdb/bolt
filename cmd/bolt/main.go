@@ -20,8 +20,9 @@ import (
 )
 
 var (
-	// ErrCommandRequired is returned when a CLI command is not specified.
-	ErrCommandRequired = errors.New("command required")
+	// ErrUsage is returned when a usage message was printed and the process
+	// should simply exit with an error.
+	ErrUsage = errors.New("usage")
 
 	// ErrUnknownCommand is returned when a CLI command is not specified.
 	ErrUnknownCommand = errors.New("unknown command")
@@ -45,7 +46,9 @@ var (
 
 func main() {
 	m := NewMain()
-	if err := m.Run(os.Args[1:]...); err != nil {
+	if err := m.Run(os.Args[1:]...); err == ErrUsage {
+		os.Exit(2)
+	} else if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
@@ -71,11 +74,15 @@ func NewMain() *Main {
 func (m *Main) Run(args ...string) error {
 	// Require a command at the beginning.
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return ErrCommandRequired
+		fmt.Fprintln(m.Stderr, m.Usage())
+		return ErrUsage
 	}
 
 	// Execute command.
 	switch args[0] {
+	case "help":
+		fmt.Fprintln(m.Stderr, m.Usage())
+		return ErrUsage
 	case "bench":
 		return newBenchCommand(m).Run(args[1:]...)
 	case "check":
@@ -89,6 +96,28 @@ func (m *Main) Run(args ...string) error {
 	default:
 		return ErrUnknownCommand
 	}
+}
+
+// Usage returns the help message.
+func (m *Main) Usage() string {
+	return strings.TrimLeft(`
+Bolt is a tool for inspecting bolt databases.
+
+Usage:
+
+	bolt command [arguments]
+
+The commands are:
+
+    bench       run synthetic benchmark against bolt
+    check       verifies integrity of bolt database
+    info        print basic info
+    help        print this screen
+    pages       print list of pages with their types
+    stats       iterate over all pages and generate usage stats
+
+Use "bolt [command] -h" for more information about a command.
+`, "\n")
 }
 
 // CheckCommand represents the "check" command execution.
@@ -111,8 +140,12 @@ func newCheckCommand(m *Main) *CheckCommand {
 func (cmd *CheckCommand) Run(args ...string) error {
 	// Parse flags.
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	help := fs.Bool("h", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
+	} else if *help {
+		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		return ErrUsage
 	}
 
 	// Require database path.
@@ -158,6 +191,20 @@ func (cmd *CheckCommand) Run(args ...string) error {
 	})
 }
 
+// Usage returns the help message.
+func (cmd *CheckCommand) Usage() string {
+	return strings.TrimLeft(`
+usage: bolt check PATH
+
+Check opens a database at PATH and runs an exhaustive check to verify that
+all pages are accessible or are marked as freed. It also verifies that no
+pages are double referenced.
+
+Verification errors will stream out as they are found and the process will
+return after all pages have been checked.
+`, "\n")
+}
+
 // InfoCommand represents the "info" command execution.
 type InfoCommand struct {
 	Stdin  io.Reader
@@ -178,8 +225,12 @@ func newInfoCommand(m *Main) *InfoCommand {
 func (cmd *InfoCommand) Run(args ...string) error {
 	// Parse flags.
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	help := fs.Bool("h", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
+	} else if *help {
+		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		return ErrUsage
 	}
 
 	// Require database path.
@@ -204,6 +255,15 @@ func (cmd *InfoCommand) Run(args ...string) error {
 	return nil
 }
 
+// Usage returns the help message.
+func (cmd *InfoCommand) Usage() string {
+	return strings.TrimLeft(`
+usage: bolt info PATH
+
+Info prints basic information about the Bolt database at PATH.
+`, "\n")
+}
+
 // PagesCommand represents the "pages" command execution.
 type PagesCommand struct {
 	Stdin  io.Reader
@@ -224,8 +284,12 @@ func newPagesCommand(m *Main) *PagesCommand {
 func (cmd *PagesCommand) Run(args ...string) error {
 	// Parse flags.
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	help := fs.Bool("h", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
+	} else if *help {
+		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		return ErrUsage
 	}
 
 	// Require database path.
@@ -279,6 +343,21 @@ func (cmd *PagesCommand) Run(args ...string) error {
 	})
 }
 
+// Usage returns the help message.
+func (cmd *PagesCommand) Usage() string {
+	return strings.TrimLeft(`
+usage: bolt pages PATH
+
+Pages prints a table of pages with their type (meta, leaf, branch, freelist).
+Leaf and branch pages will show a key count in the "items" column while the
+freelist will show the number of free pages in the "items" column.
+
+The "overflow" column shows the number of blocks that the page spills over
+into. Normally there is no overflow but large keys and values can cause
+a single page to take up multiple blocks.
+`, "\n")
+}
+
 // StatsCommand represents the "stats" command execution.
 type StatsCommand struct {
 	Stdin  io.Reader
@@ -299,8 +378,12 @@ func newStatsCommand(m *Main) *StatsCommand {
 func (cmd *StatsCommand) Run(args ...string) error {
 	// Parse flags.
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	help := fs.Bool("h", false, "")
 	if err := fs.Parse(args); err != nil {
 		return err
+	} else if *help {
+		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		return ErrUsage
 	}
 
 	// Require database path.
@@ -369,6 +452,42 @@ func (cmd *StatsCommand) Run(args ...string) error {
 
 		return nil
 	})
+}
+
+// Usage returns the help message.
+func (cmd *StatsCommand) Usage() string {
+	return strings.TrimLeft(`
+usage: bolt stats PATH
+
+Stats performs an extensive search of the database to track every page
+reference. It starts at the current meta page and recursively iterates
+through every accessible bucket.
+
+The following errors can be reported:
+
+    already freed
+        The page is referenced more than once in the freelist.
+
+    unreachable unfreed
+        The page is not referenced by a bucket or in the freelist.
+
+    reachable freed
+        The page is referenced by a bucket but is also in the freelist.
+
+    out of bounds
+        A page is referenced that is above the high water mark.
+
+    multiple references
+        A page is referenced by more than one other page.
+
+    invalid type
+        The page type is not "meta", "leaf", "branch", or "freelist".
+
+No errors should occur in your database. However, if for some reason you
+experience corruption, please submit a ticket to the Bolt project page:
+
+  https://github.com/boltdb/bolt/issues
+`, "\n")
 }
 
 var benchBucketName = []byte("bench")
