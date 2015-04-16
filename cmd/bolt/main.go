@@ -42,6 +42,9 @@ var (
 	// ErrNonDivisibleBatchSize is returned when the batch size can't be evenly
 	// divided by the iteration count.
 	ErrNonDivisibleBatchSize = errors.New("number of iterations must be divisible by the batch size")
+
+	// ErrPageIDRequired is returned when a required page id is not specified.
+	ErrPageIDRequired = errors.New("page id required")
 )
 
 func main() {
@@ -87,6 +90,8 @@ func (m *Main) Run(args ...string) error {
 		return newBenchCommand(m).Run(args[1:]...)
 	case "check":
 		return newCheckCommand(m).Run(args[1:]...)
+	case "dump":
+		return newDumpCommand(m).Run(args[1:]...)
 	case "info":
 		return newInfoCommand(m).Run(args[1:]...)
 	case "pages":
@@ -261,6 +266,118 @@ func (cmd *InfoCommand) Usage() string {
 usage: bolt info PATH
 
 Info prints basic information about the Bolt database at PATH.
+`, "\n")
+}
+
+// DumpCommand represents the "dump" command execution.
+type DumpCommand struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// newDumpCommand returns a DumpCommand.
+func newDumpCommand(m *Main) *DumpCommand {
+	return &DumpCommand{
+		Stdin:  m.Stdin,
+		Stdout: m.Stdout,
+		Stderr: m.Stderr,
+	}
+}
+
+// Run executes the command.
+func (cmd *DumpCommand) Run(args ...string) error {
+	// Parse flags.
+	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	help := fs.Bool("h", false, "")
+	pageID := fs.Int("page", -1, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	} else if *help {
+		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		return ErrUsage
+	}
+
+	// Require database path and page id.
+	path := fs.Arg(0)
+	if path == "" {
+		return ErrPathRequired
+	} else if _, err := os.Stat(path); os.IsNotExist(err) {
+		return ErrFileNotFound
+	} else if *pageID == -1 {
+		return ErrPageIDRequired
+	}
+
+	// Open database to retrieve page size.
+	db, err := bolt.Open(path, 0666, nil)
+	if err != nil {
+		return err
+	}
+	pageSize := db.Info().PageSize
+	_ = db.Close()
+
+	// Open database file handler.
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	// Print page to stdout.
+	return cmd.PrintPage(cmd.Stdout, f, *pageID, pageSize)
+}
+
+// PrintPage prints a given page as hexidecimal.
+func (cmd *DumpCommand) PrintPage(w io.Writer, r io.ReaderAt, pageID int, pageSize int) error {
+	const bytesPerLineN = 16
+
+	// Read page into buffer.
+	buf := make([]byte, pageSize)
+	addr := pageID * pageSize
+	if n, err := r.ReadAt(buf, int64(addr)); err != nil {
+		return err
+	} else if n != pageSize {
+		return io.ErrUnexpectedEOF
+	}
+
+	// Write out to writer in 16-byte lines.
+	var prev []byte
+	var skipped bool
+	for offset := 0; offset < pageSize; offset += bytesPerLineN {
+		// Retrieve current 16-byte line.
+		line := buf[offset : offset+bytesPerLineN]
+		isLastLine := (offset == (pageSize - bytesPerLineN))
+
+		// If it's the same as the previous line then print a skip.
+		if bytes.Equal(line, prev) && !isLastLine {
+			if !skipped {
+				fmt.Fprintf(w, "%07x *\n", addr+offset)
+				skipped = true
+			}
+		} else {
+			// Print line as hexadecimal in 2-byte groups.
+			fmt.Fprintf(w, "%07x %04x %04x %04x %04x %04x %04x %04x %04x\n", addr+offset,
+				line[0:2], line[2:4], line[4:6], line[6:8],
+				line[8:10], line[10:12], line[12:14], line[14:16],
+			)
+
+			skipped = false
+		}
+
+		// Save the previous line.
+		prev = line
+	}
+	fmt.Fprint(w, "\n")
+
+	return nil
+}
+
+// Usage returns the help message.
+func (cmd *DumpCommand) Usage() string {
+	return strings.TrimLeft(`
+usage: bolt dump -page PAGEID PATH
+
+Dump prints a hexidecimal dump of a single page.
 `, "\n")
 }
 
