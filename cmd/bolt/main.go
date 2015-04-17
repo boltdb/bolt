@@ -15,6 +15,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/boltdb/bolt"
 )
@@ -45,7 +48,16 @@ var (
 
 	// ErrPageIDRequired is returned when a required page id is not specified.
 	ErrPageIDRequired = errors.New("page id required")
+
+	// ErrPageNotFound is returned when specifying a page above the high water mark.
+	ErrPageNotFound = errors.New("page not found")
+
+	// ErrPageFreed is returned when reading a page that has already been freed.
+	ErrPageFreed = errors.New("page freed")
 )
+
+// PageHeaderSize represents the size of the bolt.page header.
+const PageHeaderSize = 16
 
 func main() {
 	m := NewMain()
@@ -94,6 +106,8 @@ func (m *Main) Run(args ...string) error {
 		return newDumpCommand(m).Run(args[1:]...)
 	case "info":
 		return newInfoCommand(m).Run(args[1:]...)
+	case "page":
+		return newPageCommand(m).Run(args[1:]...)
 	case "pages":
 		return newPagesCommand(m).Run(args[1:]...)
 	case "stats":
@@ -290,7 +304,6 @@ func (cmd *DumpCommand) Run(args ...string) error {
 	// Parse flags.
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
 	help := fs.Bool("h", false, "")
-	pageID := fs.Int("page", -1, "")
 	if err := fs.Parse(args); err != nil {
 		return err
 	} else if *help {
@@ -304,17 +317,21 @@ func (cmd *DumpCommand) Run(args ...string) error {
 		return ErrPathRequired
 	} else if _, err := os.Stat(path); os.IsNotExist(err) {
 		return ErrFileNotFound
-	} else if *pageID == -1 {
+	}
+
+	// Read page ids.
+	pageIDs, err := atois(fs.Args()[1:])
+	if err != nil {
+		return err
+	} else if len(pageIDs) == 0 {
 		return ErrPageIDRequired
 	}
 
 	// Open database to retrieve page size.
-	db, err := bolt.Open(path, 0666, nil)
+	pageSize, err := ReadPageSize(path)
 	if err != nil {
 		return err
 	}
-	pageSize := db.Info().PageSize
-	_ = db.Close()
 
 	// Open database file handler.
 	f, err := os.Open(path)
@@ -323,8 +340,20 @@ func (cmd *DumpCommand) Run(args ...string) error {
 	}
 	defer func() { _ = f.Close() }()
 
-	// Print page to stdout.
-	return cmd.PrintPage(cmd.Stdout, f, *pageID, pageSize)
+	// Print each page listed.
+	for i, pageID := range pageIDs {
+		// Print a separator.
+		if i > 0 {
+			fmt.Fprintln(cmd.Stdout, "===============================================\n")
+		}
+
+		// Print page to stdout.
+		if err := cmd.PrintPage(cmd.Stdout, f, pageID, pageSize); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // PrintPage prints a given page as hexidecimal.
@@ -378,6 +407,243 @@ func (cmd *DumpCommand) Usage() string {
 usage: bolt dump -page PAGEID PATH
 
 Dump prints a hexidecimal dump of a single page.
+`, "\n")
+}
+
+// PageCommand represents the "page" command execution.
+type PageCommand struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// newPageCommand returns a PageCommand.
+func newPageCommand(m *Main) *PageCommand {
+	return &PageCommand{
+		Stdin:  m.Stdin,
+		Stdout: m.Stdout,
+		Stderr: m.Stderr,
+	}
+}
+
+// Run executes the command.
+func (cmd *PageCommand) Run(args ...string) error {
+	// Parse flags.
+	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	help := fs.Bool("h", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	} else if *help {
+		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		return ErrUsage
+	}
+
+	// Require database path and page id.
+	path := fs.Arg(0)
+	if path == "" {
+		return ErrPathRequired
+	} else if _, err := os.Stat(path); os.IsNotExist(err) {
+		return ErrFileNotFound
+	}
+
+	// Read page ids.
+	pageIDs, err := atois(fs.Args()[1:])
+	if err != nil {
+		return err
+	} else if len(pageIDs) == 0 {
+		return ErrPageIDRequired
+	}
+
+	// Open database file handler.
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	// Print each page listed.
+	for i, pageID := range pageIDs {
+		// Print a separator.
+		if i > 0 {
+			fmt.Fprintln(cmd.Stdout, "===============================================\n")
+		}
+
+		// Retrieve page info and page size.
+		p, buf, err := ReadPage(path, pageID)
+		if err != nil {
+			return err
+		}
+
+		// Print basic page info.
+		fmt.Fprintf(cmd.Stdout, "Page ID:    %d\n", p.id)
+		fmt.Fprintf(cmd.Stdout, "Page Type:  %s\n", p.Type())
+		fmt.Fprintf(cmd.Stdout, "Total Size: %d bytes\n", len(buf))
+
+		// Print type-specific data.
+		switch p.Type() {
+		case "meta":
+			err = cmd.PrintMeta(cmd.Stdout, buf)
+		case "leaf":
+			err = cmd.PrintLeaf(cmd.Stdout, buf)
+		case "branch":
+			err = cmd.PrintBranch(cmd.Stdout, buf)
+		case "freelist":
+			err = cmd.PrintFreelist(cmd.Stdout, buf)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// PrintMeta prints the data from the meta page.
+func (cmd *PageCommand) PrintMeta(w io.Writer, buf []byte) error {
+	m := (*meta)(unsafe.Pointer(&buf[PageHeaderSize]))
+	fmt.Fprintf(w, "Version:    %d\n", m.version)
+	fmt.Fprintf(w, "Page Size:  %d bytes\n", m.pageSize)
+	fmt.Fprintf(w, "Flags:      %08x\n", m.flags)
+	fmt.Fprintf(w, "Root:       <pgid=%d>\n", m.root.root)
+	fmt.Fprintf(w, "Freelist:   <pgid=%d>\n", m.freelist)
+	fmt.Fprintf(w, "HWM:        <pgid=%d>\n", m.pgid)
+	fmt.Fprintf(w, "Txn ID:     %d\n", m.txid)
+	fmt.Fprintf(w, "Checksum:   %016x\n", m.checksum)
+	fmt.Fprintf(w, "\n")
+	return nil
+}
+
+// PrintLeaf prints the data for a leaf page.
+func (cmd *PageCommand) PrintLeaf(w io.Writer, buf []byte) error {
+	p := (*page)(unsafe.Pointer(&buf[0]))
+
+	// Print number of items.
+	fmt.Fprintf(w, "Item Count: %d\n", p.count)
+	fmt.Fprintf(w, "\n")
+
+	// Print each key/value.
+	for i := uint16(0); i < p.count; i++ {
+		e := p.leafPageElement(i)
+
+		// Format key as string.
+		var k string
+		if isPrintable(string(e.key())) {
+			k = fmt.Sprintf("%q", string(e.key()))
+		} else {
+			k = fmt.Sprintf("%x", string(e.key()))
+		}
+
+		// Format value as string.
+		var v string
+		if (e.flags & uint32(bucketLeafFlag)) != 0 {
+			b := (*bucket)(unsafe.Pointer(&e.value()[0]))
+			v = fmt.Sprintf("<pgid=%d,seq=%d>", b.root, b.sequence)
+		} else if isPrintable(string(e.value())) {
+			k = fmt.Sprintf("%q", string(e.value()))
+		} else {
+			k = fmt.Sprintf("%x", string(e.value()))
+		}
+
+		fmt.Fprintf(w, "%s: %s\n", k, v)
+	}
+	fmt.Fprintf(w, "\n")
+	return nil
+}
+
+// PrintBranch prints the data for a leaf page.
+func (cmd *PageCommand) PrintBranch(w io.Writer, buf []byte) error {
+	p := (*page)(unsafe.Pointer(&buf[0]))
+
+	// Print number of items.
+	fmt.Fprintf(w, "Item Count: %d\n", p.count)
+	fmt.Fprintf(w, "\n")
+
+	// Print each key/value.
+	for i := uint16(0); i < p.count; i++ {
+		e := p.branchPageElement(i)
+
+		// Format key as string.
+		var k string
+		if isPrintable(string(e.key())) {
+			k = fmt.Sprintf("%q", string(e.key()))
+		} else {
+			k = fmt.Sprintf("%x", string(e.key()))
+		}
+
+		fmt.Fprintf(w, "%s: <pgid=%d>\n", k, e.pgid)
+	}
+	fmt.Fprintf(w, "\n")
+	return nil
+}
+
+// PrintFreelist prints the data for a freelist page.
+func (cmd *PageCommand) PrintFreelist(w io.Writer, buf []byte) error {
+	p := (*page)(unsafe.Pointer(&buf[0]))
+
+	// Print number of items.
+	fmt.Fprintf(w, "Item Count: %d\n", p.count)
+	fmt.Fprintf(w, "\n")
+
+	// Print each page in the freelist.
+	ids := (*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr))
+	for i := uint16(0); i < p.count; i++ {
+		fmt.Fprintf(w, "%d\n", ids[i])
+	}
+	fmt.Fprintf(w, "\n")
+	return nil
+}
+
+// PrintPage prints a given page as hexidecimal.
+func (cmd *PageCommand) PrintPage(w io.Writer, r io.ReaderAt, pageID int, pageSize int) error {
+	const bytesPerLineN = 16
+
+	// Read page into buffer.
+	buf := make([]byte, pageSize)
+	addr := pageID * pageSize
+	if n, err := r.ReadAt(buf, int64(addr)); err != nil {
+		return err
+	} else if n != pageSize {
+		return io.ErrUnexpectedEOF
+	}
+
+	// Write out to writer in 16-byte lines.
+	var prev []byte
+	var skipped bool
+	for offset := 0; offset < pageSize; offset += bytesPerLineN {
+		// Retrieve current 16-byte line.
+		line := buf[offset : offset+bytesPerLineN]
+		isLastLine := (offset == (pageSize - bytesPerLineN))
+
+		// If it's the same as the previous line then print a skip.
+		if bytes.Equal(line, prev) && !isLastLine {
+			if !skipped {
+				fmt.Fprintf(w, "%07x *\n", addr+offset)
+				skipped = true
+			}
+		} else {
+			// Print line as hexadecimal in 2-byte groups.
+			fmt.Fprintf(w, "%07x %04x %04x %04x %04x %04x %04x %04x %04x\n", addr+offset,
+				line[0:2], line[2:4], line[4:6], line[6:8],
+				line[8:10], line[10:12], line[12:14], line[14:16],
+			)
+
+			skipped = false
+		}
+
+		// Save the previous line.
+		prev = line
+	}
+	fmt.Fprint(w, "\n")
+
+	return nil
+}
+
+// Usage returns the help message.
+func (cmd *PageCommand) Usage() string {
+	return strings.TrimLeft(`
+usage: bolt page -page PATH pageid [pageid...]
+
+Page prints one or more pages in human readable format.
 `, "\n")
 }
 
@@ -1068,4 +1334,197 @@ type PageError struct {
 
 func (e *PageError) Error() string {
 	return fmt.Sprintf("page error: id=%d, err=%s", e.ID, e.Err)
+}
+
+// isPrintable returns true if the string is valid unicode and contains only printable runes.
+func isPrintable(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, ch := range s {
+		if !unicode.IsPrint(ch) {
+			return false
+		}
+	}
+	return true
+}
+
+// ReadPage reads page info & full page data from a path.
+// This is not transactionally safe.
+func ReadPage(path string, pageID int) (*page, []byte, error) {
+	// Find page size.
+	pageSize, err := ReadPageSize(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read page size: %s", err)
+	}
+
+	// Open database file.
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+
+	// Read one block into buffer.
+	buf := make([]byte, pageSize)
+	if n, err := f.ReadAt(buf, int64(pageID*pageSize)); err != nil {
+		return nil, nil, err
+	} else if n != len(buf) {
+		return nil, nil, io.ErrUnexpectedEOF
+	}
+
+	// Determine total number of blocks.
+	p := (*page)(unsafe.Pointer(&buf[0]))
+	overflowN := p.overflow
+
+	// Re-read entire page (with overflow) into buffer.
+	buf = make([]byte, (int(overflowN)+1)*pageSize)
+	if n, err := f.ReadAt(buf, int64(pageID*pageSize)); err != nil {
+		return nil, nil, err
+	} else if n != len(buf) {
+		return nil, nil, io.ErrUnexpectedEOF
+	}
+	p = (*page)(unsafe.Pointer(&buf[0]))
+
+	return p, buf, nil
+}
+
+// ReadPageSize reads page size a path.
+// This is not transactionally safe.
+func ReadPageSize(path string) (int, error) {
+	// Open database file.
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	// Read 4KB chunk.
+	buf := make([]byte, 4096)
+	if _, err := io.ReadFull(f, buf); err != nil {
+		return 0, err
+	}
+
+	// Read page size from metadata.
+	m := (*meta)(unsafe.Pointer(&buf[PageHeaderSize]))
+	return int(m.pageSize), nil
+}
+
+// atois parses a slice of strings into integers.
+func atois(strs []string) ([]int, error) {
+	var a []int
+	for _, str := range strs {
+		i, err := strconv.Atoi(str)
+		if err != nil {
+			return nil, err
+		}
+		a = append(a, i)
+	}
+	return a, nil
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+const maxAllocSize = 0xFFFFFFF
+
+// DO NOT EDIT. Copied from the "bolt" package.
+const (
+	branchPageFlag   = 0x01
+	leafPageFlag     = 0x02
+	metaPageFlag     = 0x04
+	freelistPageFlag = 0x10
+)
+
+// DO NOT EDIT. Copied from the "bolt" package.
+const bucketLeafFlag = 0x01
+
+// DO NOT EDIT. Copied from the "bolt" package.
+type pgid uint64
+
+// DO NOT EDIT. Copied from the "bolt" package.
+type txid uint64
+
+// DO NOT EDIT. Copied from the "bolt" package.
+type meta struct {
+	magic    uint32
+	version  uint32
+	pageSize uint32
+	flags    uint32
+	root     bucket
+	freelist pgid
+	pgid     pgid
+	txid     txid
+	checksum uint64
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+type bucket struct {
+	root     pgid
+	sequence uint64
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+type page struct {
+	id       pgid
+	flags    uint16
+	count    uint16
+	overflow uint32
+	ptr      uintptr
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+func (p *page) Type() string {
+	if (p.flags & branchPageFlag) != 0 {
+		return "branch"
+	} else if (p.flags & leafPageFlag) != 0 {
+		return "leaf"
+	} else if (p.flags & metaPageFlag) != 0 {
+		return "meta"
+	} else if (p.flags & freelistPageFlag) != 0 {
+		return "freelist"
+	}
+	return fmt.Sprintf("unknown<%02x>", p.flags)
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+func (p *page) leafPageElement(index uint16) *leafPageElement {
+	n := &((*[0x7FFFFFF]leafPageElement)(unsafe.Pointer(&p.ptr)))[index]
+	return n
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+func (p *page) branchPageElement(index uint16) *branchPageElement {
+	return &((*[0x7FFFFFF]branchPageElement)(unsafe.Pointer(&p.ptr)))[index]
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+type branchPageElement struct {
+	pos   uint32
+	ksize uint32
+	pgid  pgid
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+func (n *branchPageElement) key() []byte {
+	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
+	return buf[n.pos : n.pos+n.ksize]
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+type leafPageElement struct {
+	flags uint32
+	pos   uint32
+	ksize uint32
+	vsize uint32
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+func (n *leafPageElement) key() []byte {
+	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
+	return buf[n.pos : n.pos+n.ksize]
+}
+
+// DO NOT EDIT. Copied from the "bolt" package.
+func (n *leafPageElement) value() []byte {
+	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
+	return buf[n.pos+n.ksize : n.pos+n.ksize+n.vsize]
 }
