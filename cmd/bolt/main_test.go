@@ -1,69 +1,145 @@
 package main_test
 
 import (
-	"fmt"
+	"bytes"
 	"io/ioutil"
 	"os"
-	"path/filepath"
-	"reflect"
-	"runtime"
-	"strings"
+	"strconv"
 	"testing"
 
 	"github.com/boltdb/bolt"
-	. "github.com/boltdb/bolt/cmd/bolt"
+	"github.com/boltdb/bolt/cmd/bolt"
 )
 
-// open creates and opens a Bolt database in the temp directory.
-func open(fn func(*bolt.DB, string)) {
-	path := tempfile()
-	defer os.RemoveAll(path)
+// Ensure the "info" command can print information about a database.
+func TestInfoCommand_Run(t *testing.T) {
+	db := MustOpen(0666, nil)
+	db.DB.Close()
+	defer db.Close()
 
-	db, err := bolt.Open(path, 0600, nil)
-	if err != nil {
-		panic("db open error: " + err.Error())
+	// Run the info command.
+	m := NewMain()
+	if err := m.Run("info", db.Path); err != nil {
+		t.Fatal(err)
 	}
-	fn(db, path)
 }
 
-// run executes a command against the CLI and returns the output.
-func run(args ...string) string {
-	args = append([]string{"bolt"}, args...)
-	NewApp().Run(args)
-	return strings.TrimSpace(LogBuffer())
+// Ensure the "stats" command can execute correctly.
+func TestStatsCommand_Run(t *testing.T) {
+	// Ignore
+	if os.Getpagesize() != 4096 {
+		t.Skip("system does not use 4KB page size")
+	}
+
+	db := MustOpen(0666, nil)
+	defer db.Close()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		// Create "foo" bucket.
+		b, err := tx.CreateBucket([]byte("foo"))
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 10; i++ {
+			if err := b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i))); err != nil {
+				return err
+			}
+		}
+
+		// Create "bar" bucket.
+		b, err = tx.CreateBucket([]byte("bar"))
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 100; i++ {
+			if err := b.Put([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i))); err != nil {
+				return err
+			}
+		}
+
+		// Create "baz" bucket.
+		b, err = tx.CreateBucket([]byte("baz"))
+		if err != nil {
+			return err
+		}
+		if err := b.Put([]byte("key"), []byte("value")); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	db.DB.Close()
+
+	// Generate expected result.
+	exp := "Aggregate statistics for 3 buckets\n\n" +
+		"Page count statistics\n" +
+		"\tNumber of logical branch pages: 0\n" +
+		"\tNumber of physical branch overflow pages: 0\n" +
+		"\tNumber of logical leaf pages: 1\n" +
+		"\tNumber of physical leaf overflow pages: 0\n" +
+		"Tree statistics\n" +
+		"\tNumber of keys/value pairs: 111\n" +
+		"\tNumber of levels in B+tree: 1\n" +
+		"Page size utilization\n" +
+		"\tBytes allocated for physical branch pages: 0\n" +
+		"\tBytes actually used for branch data: 0 (0%)\n" +
+		"\tBytes allocated for physical leaf pages: 4096\n" +
+		"\tBytes actually used for leaf data: 1996 (48%)\n" +
+		"Bucket statistics\n" +
+		"\tTotal number of buckets: 3\n" +
+		"\tTotal number on inlined buckets: 2 (66%)\n" +
+		"\tBytes used for inlined buckets: 236 (11%)\n"
+
+	// Run the command.
+	m := NewMain()
+	if err := m.Run("stats", db.Path); err != nil {
+		t.Fatal(err)
+	} else if m.Stdout.String() != exp {
+		t.Fatalf("unexpected stdout:\n\n%s", m.Stdout.String())
+	}
 }
 
-// tempfile returns a temporary file path.
-func tempfile() string {
+// Main represents a test wrapper for main.Main that records output.
+type Main struct {
+	*main.Main
+	Stdin  bytes.Buffer
+	Stdout bytes.Buffer
+	Stderr bytes.Buffer
+}
+
+// NewMain returns a new instance of Main.
+func NewMain() *Main {
+	m := &Main{Main: main.NewMain()}
+	m.Main.Stdin = &m.Stdin
+	m.Main.Stdout = &m.Stdout
+	m.Main.Stderr = &m.Stderr
+	return m
+}
+
+// MustOpen creates a Bolt database in a temporary location.
+func MustOpen(mode os.FileMode, options *bolt.Options) *DB {
+	// Create temporary path.
 	f, _ := ioutil.TempFile("", "bolt-")
 	f.Close()
 	os.Remove(f.Name())
-	return f.Name()
-}
 
-// assert fails the test if the condition is false.
-func assert(tb testing.TB, condition bool, msg string, v ...interface{}) {
-	if !condition {
-		_, file, line, _ := runtime.Caller(1)
-		fmt.Printf("\033[31m%s:%d: "+msg+"\033[39m\n\n", append([]interface{}{filepath.Base(file), line}, v...)...)
-		tb.FailNow()
-	}
-}
-
-// ok fails the test if an err is not nil.
-func ok(tb testing.TB, err error) {
+	db, err := bolt.Open(f.Name(), mode, options)
 	if err != nil {
-		_, file, line, _ := runtime.Caller(1)
-		fmt.Printf("\033[31m%s:%d: unexpected error: %s\033[39m\n\n", filepath.Base(file), line, err.Error())
-		tb.FailNow()
+		panic(err.Error())
 	}
+	return &DB{DB: db, Path: f.Name()}
 }
 
-// equals fails the test if exp is not equal to act.
-func equals(tb testing.TB, exp, act interface{}) {
-	if !reflect.DeepEqual(exp, act) {
-		_, file, line, _ := runtime.Caller(1)
-		fmt.Printf("\033[31m%s:%d:\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", filepath.Base(file), line, exp, act)
-		tb.FailNow()
-	}
+// DB is a test wrapper for bolt.DB.
+type DB struct {
+	*bolt.DB
+	Path string
+}
+
+// Close closes and removes the database.
+func (db *DB) Close() error {
+	defer os.Remove(db.Path)
+	return db.DB.Close()
 }
