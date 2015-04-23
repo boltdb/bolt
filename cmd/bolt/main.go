@@ -948,7 +948,6 @@ func (cmd *BenchCommand) ParseFlags(args []string) (*BenchOptions, error) {
 	fs.StringVar(&options.CPUProfile, "cpuprofile", "", "")
 	fs.StringVar(&options.MemProfile, "memprofile", "", "")
 	fs.StringVar(&options.BlockProfile, "blockprofile", "", "")
-	fs.StringVar(&options.BlockProfile, "blockprofile", "", "")
 	fs.Float64Var(&options.FillPercent, "fill-percent", bolt.DefaultFillPercent, "")
 	fs.BoolVar(&options.NoSync, "no-sync", false, "")
 	fs.BoolVar(&options.Work, "work", false, "")
