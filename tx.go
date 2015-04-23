@@ -127,7 +127,8 @@ func (tx *Tx) OnCommit(fn func()) {
 }
 
 // Commit writes all changes to disk and updates the meta page.
-// Returns an error if a disk write error occurs.
+// Returns an error if a disk write error occurs, or if Commit is
+// called on a read-only transaction.
 func (tx *Tx) Commit() error {
 	_assert(!tx.managed, "managed tx commit not allowed")
 	if tx.db == nil {
@@ -203,7 +204,8 @@ func (tx *Tx) Commit() error {
 	return nil
 }
 
-// Rollback closes the transaction and ignores all previous updates.
+// Rollback closes the transaction and ignores all previous updates. Read-only
+// transactions must be rolled back and not committed.
 func (tx *Tx) Rollback() error {
 	_assert(!tx.managed, "managed tx rollback not allowed")
 	if tx.db == nil {

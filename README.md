@@ -587,5 +587,6 @@ Below is a list of public, open source projects that use Bolt:
 * [SkyDB](https://github.com/skydb/sky) - Behavioral analytics database.
 * [Seaweed File System](https://github.com/chrislusf/weed-fs) - Highly scalable distributed key~file system with O(1) disk read.
 * [InfluxDB](http://influxdb.com) - Scalable datastore for metrics, events, and real-time analytics.
+* [Freehold](http://tshannon.bitbucket.org/freehold/) - An open, secure, and lightweight platform for your files and data.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
