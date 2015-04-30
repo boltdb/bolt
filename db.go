@@ -71,19 +71,20 @@ type DB struct {
 	// Do not change concurrently with calls to Batch.
 	MaxBatchDelay time.Duration
 
-	path     string
-	file     *os.File
-	dataref  []byte // mmap'ed readonly, write throws SEGV
-	data     *[maxMapSize]byte
-	datasz   int
-	meta0    *meta
-	meta1    *meta
-	pageSize int
-	opened   bool
-	rwtx     *Tx
-	txs      []*Tx
-	freelist *freelist
-	stats    Stats
+	path        string
+	file        *os.File
+	dataref     []byte // mmap'ed readonly, write throws SEGV
+	data        *[maxMapSize]byte
+	datasz      int
+	meta0       *meta
+	meta1       *meta
+	pageSize    int
+	minMmapSize int
+	opened      bool
+	rwtx        *Tx
+	txs         []*Tx
+	freelist    *freelist
+	stats       Stats
 
 	batchMu sync.Mutex
 	batch   *batch
@@ -127,6 +128,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	// Set default values for later DB operations.
 	db.MaxBatchSize = DefaultMaxBatchSize
 	db.MaxBatchDelay = DefaultMaxBatchDelay
+	db.minMmapSize = options.MinMmapSize
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
@@ -248,7 +250,7 @@ func (db *DB) munmap() error {
 // Returns an error if the new mmap size is greater than the max allowed.
 func (db *DB) mmapSize(size int) (int, error) {
 	// Double the size from 1MB until 1GB.
-	for i := uint(20); i <= 30; i++ {
+	for i := uint(db.minMmapSize); i <= 30; i++ {
 		if size <= 1<<i {
 			return 1 << i, nil
 		}
@@ -613,12 +615,16 @@ type Options struct {
 	// When set to zero it will wait indefinitely. This option is only
 	// available on Darwin and Linux.
 	Timeout time.Duration
+
+	// MinMmapSize is the minimum mmap size in bytes expressed in base 2
+	MinMmapSize int
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().
 // No timeout is used which will cause Bolt to wait indefinitely for a lock.
 var DefaultOptions = &Options{
-	Timeout: 0,
+	Timeout:     0,
+	MinMmapSize: 20,
 }
 
 // Stats represents statistics about the database.
