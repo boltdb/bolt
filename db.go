@@ -55,6 +55,14 @@ type DB struct {
 	// THIS IS UNSAFE. PLEASE USE WITH CAUTION.
 	NoSync bool
 
+	// When true, skips the truncate call when growing the database.
+	// Setting this to true is only safe on non-ext3/ext4 systems.
+	// Skipping truncation avoids preallocation of hard drive space and
+	// bypasses a truncate() and fsync() syscall on remapping.
+	//
+	// https://github.com/boltdb/bolt/issues/284
+	NoGrowSync bool
+
 	// MaxBatchSize is the maximum size of a batch. Default value is
 	// copied from DefaultMaxBatchSize in Open.
 	//
@@ -123,6 +131,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	if options == nil {
 		options = DefaultOptions
 	}
+	db.NoGrowSync = options.NoGrowSync
 
 	// Set default values for later DB operations.
 	db.MaxBatchSize = DefaultMaxBatchSize
@@ -613,12 +622,16 @@ type Options struct {
 	// When set to zero it will wait indefinitely. This option is only
 	// available on Darwin and Linux.
 	Timeout time.Duration
+
+	// Sets the DB.NoGrowSync flag before memory mapping the file.
+	NoGrowSync bool
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().
 // No timeout is used which will cause Bolt to wait indefinitely for a lock.
 var DefaultOptions = &Options{
-	Timeout: 0,
+	Timeout:    0,
+	NoGrowSync: false,
 }
 
 // Stats represents statistics about the database.
