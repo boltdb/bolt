@@ -556,6 +556,12 @@ func (db *DB) View(fn func(*Tx) error) error {
 	return nil
 }
 
+// Sync executes fdatasync() against the database file handle.
+//
+// This is not necessary under normal operation, however, if you use NoSync
+// then it allows you to force the database file to sync against the disk.
+func (db *DB) Sync() error { return fdatasync(db) }
+
 // Stats retrieves ongoing performance stats for the database.
 // This is only updated when a transaction closes.
 func (db *DB) Stats() Stats {
