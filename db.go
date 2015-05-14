@@ -102,8 +102,11 @@ type DB struct {
 	statlock sync.RWMutex // Protects stats access.
 
 	ops struct {
-		writeAt func(b []byte, off int64) (n int, err error)
+		writeAt  func(b []byte, off int64) (n int, err error)
+		Truncate func(size int64) error
 	}
+
+	readOnly bool // Read only mode. Update()/Begin(true) would return ErrDatabaseReadOnly immediately.
 }
 
 // Path returns the path to currently open database file.
@@ -137,21 +140,37 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	db.MaxBatchSize = DefaultMaxBatchSize
 	db.MaxBatchDelay = DefaultMaxBatchDelay
 
+	// Get file stats.
+	s, err := os.Stat(path)
+	flag := os.O_RDWR
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	} else if err == nil && (s.Mode().Perm()&0222) == 0 {
+		// remove www from mode as well.
+		mode ^= (mode & 0222)
+		flag = os.O_RDONLY
+		db.readOnly = true
+		// Ignore truncations.
+		db.ops.Truncate = func(int64) error { return nil }
+	}
+
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
-
-	var err error
-	if db.file, err = os.OpenFile(db.path, os.O_RDWR|os.O_CREATE, mode); err != nil {
+	if db.file, err = os.OpenFile(db.path, flag|os.O_CREATE, mode); err != nil {
 		_ = db.close()
 		return nil, err
 	}
 
-	// Lock file so that other processes using Bolt cannot use the database
-	// at the same time. This would cause corruption since the two processes
-	// would write meta pages and free pages separately.
-	if err := flock(db.file, options.Timeout); err != nil {
-		_ = db.close()
-		return nil, err
+	// No need to lock read-only file.
+	if !db.readOnly {
+		db.ops.Truncate = db.file.Truncate
+		// Lock file so that other processes using Bolt cannot use the database
+		// at the same time. This would cause corruption since the two processes
+		// would write meta pages and free pages separately.
+		if err := flock(db.file, options.Timeout); err != nil {
+			_ = db.close()
+			return nil, err
+		}
 	}
 
 	// Default values for test hooks
@@ -359,8 +378,11 @@ func (db *DB) close() error {
 
 	// Close file handles.
 	if db.file != nil {
-		// Unlock the file.
-		_ = funlock(db.file)
+		// No need to unlock read-only file.
+		if !db.readOnly {
+			// Unlock the file.
+			_ = funlock(db.file)
+		}
 
 		// Close the file descriptor.
 		if err := db.file.Close(); err != nil {
@@ -426,6 +448,9 @@ func (db *DB) beginTx() (*Tx, error) {
 }
 
 func (db *DB) beginRWTx() (*Tx, error) {
+	if db.readOnly {
+		return nil, ErrDatabaseReadOnly
+	}
 	// Obtain writer lock. This is released by the transaction when it closes.
 	// This enforces only one writer transaction at a time.
 	db.rwlock.Lock()
@@ -620,6 +645,10 @@ func (db *DB) allocate(count int) (*page, error) {
 	db.rwtx.meta.pgid += pgid(count)
 
 	return p, nil
+}
+
+func (db *DB) IsReadOnly() bool {
+	return db.readOnly
 }
 
 // Options represents the options that can be set when opening a database.

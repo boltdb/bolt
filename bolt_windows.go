@@ -29,7 +29,7 @@ func funlock(f *os.File) error {
 // Based on: https://github.com/edsrzf/mmap-go
 func mmap(db *DB, sz int) error {
 	// Truncate the database to the size of the mmap.
-	if err := db.file.Truncate(int64(sz)); err != nil {
+	if err := db.ops.Truncate(int64(sz)); err != nil {
 		return fmt.Errorf("truncate: %s", err)
 	}
 

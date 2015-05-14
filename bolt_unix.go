@@ -45,7 +45,7 @@ func mmap(db *DB, sz int) error {
 	// Truncate and fsync to ensure file size metadata is flushed.
 	// https://github.com/boltdb/bolt/issues/284
 	if !db.NoGrowSync {
-		if err := db.file.Truncate(int64(sz)); err != nil {
+		if err := db.ops.Truncate(int64(sz)); err != nil {
 			return fmt.Errorf("file resize error: %s", err)
 		}
 		if err := db.file.Sync(); err != nil {

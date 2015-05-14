@@ -224,6 +224,61 @@ func TestDB_Open_FileTooSmall(t *testing.T) {
 	equals(t, errors.New("file size too small"), err)
 }
 
+// Ensure that a database can be opened in read-only mode.
+func TestOpen_ReadOnly(t *testing.T) {
+	var bucket = []byte(`bucket`)
+	var key = []byte(`key`)
+	var value = []byte(`value`)
+	path := tempfile()
+	defer os.Remove(path)
+	db, err := bolt.Open(path, 0666, nil)
+	ok(t, db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket(bucket)
+		if err != nil {
+			return err
+		}
+		return b.Put(key, value)
+	}))
+	assert(t, db != nil, "")
+	assert(t, !db.IsReadOnly(), "")
+	ok(t, err)
+	ok(t, db.Close())
+	// Make it read-only.
+	ok(t, os.Chmod(path, 0444))
+	// Open again.
+	db0, err := bolt.Open(path, 0666, nil)
+	ok(t, err)
+	defer db0.Close()
+	// And again.
+	db1, err := bolt.Open(path, 0666, nil)
+	ok(t, err)
+	defer db1.Close()
+	for _, db := range []*bolt.DB{db0, db1} {
+		// Verify is is in read only mode indeed.
+		assert(t, db.IsReadOnly(), "")
+		assert(t,
+			bolt.ErrDatabaseReadOnly == db.Update(func(*bolt.Tx) error {
+				panic(`should never get here`)
+			}),
+			"")
+		_, err = db.Begin(true)
+		assert(t, bolt.ErrDatabaseReadOnly == err, "")
+		// Verify the data.
+		ok(t, db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket(bucket)
+			if b == nil {
+				return fmt.Errorf("expected bucket `%s`", string(bucket))
+			}
+			got := string(b.Get(key))
+			expected := string(value)
+			if got != expected {
+				return fmt.Errorf("expected `%s`, got `%s`", expected, got)
+			}
+			return nil
+		}))
+	}
+}
+
 // TODO(benbjohnson): Test corruption at every byte of the first two pages.
 
 // Ensure that a database cannot open a transaction when it's not open.
