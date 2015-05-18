@@ -256,8 +256,8 @@ func (db *DB) munmap() error {
 // of the database. The minimum size is 1MB and doubles until it reaches 1GB.
 // Returns an error if the new mmap size is greater than the max allowed.
 func (db *DB) mmapSize(size int) (int, error) {
-	// Double the size from 1MB until 1GB.
-	for i := uint(20); i <= 30; i++ {
+	// Double the size from 32KB until 1GB.
+	for i := uint(15); i <= 30; i++ {
 		if size <= 1<<i {
 			return 1 << i, nil
 		}
