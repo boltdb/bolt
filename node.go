@@ -220,16 +220,21 @@ func (n *node) write(p *page) {
 			elem.pgid = item.pgid
 			_assert(elem.pgid != p.id, "write: circular dependency occurred")
 		}
-		lk, lv := len(item.key), len(item.value)
-		if len(b) < lk+lv {
+
+		// If the length of key+value is larger than the max allocation size
+		// then we need to reallocate the byte array pointer.
+		//
+		// See: https://github.com/boltdb/bolt/pull/335
+		klen, vlen := len(item.key), len(item.value)
+		if len(b) < klen+vlen {
 			b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
 		}
 
 		// Write data for the element to the end of the page.
 		copy(b[0:], item.key)
-		b = b[lk:]
+		b = b[klen:]
 		copy(b[0:], item.value)
-		b = b[lv:]
+		b = b[vlen:]
 	}
 
 	// DEBUG ONLY: n.dump()
@@ -355,9 +360,7 @@ func (n *node) spill() error {
 		}
 
 		// Allocate contiguous space for the node.
-		// sz := node.size() + n.pageElementSize()*len(n.inodes)
-		sz := node.size()
-		p, err := tx.allocate((sz / tx.db.pageSize) + 1)
+		p, err := tx.allocate((node.size() / tx.db.pageSize) + 1)
 		if err != nil {
 			return err
 		}
