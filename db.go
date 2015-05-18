@@ -102,10 +102,12 @@ type DB struct {
 	statlock sync.RWMutex // Protects stats access.
 
 	ops struct {
-		writeAt  func(b []byte, off int64) (n int, err error)
+		writeAt func(b []byte, off int64) (n int, err error)
 	}
 
-	readOnly bool // Read only mode. Update()/Begin(true) would return ErrDatabaseReadOnly immediately.
+	// Read only mode.
+	// When true, Update() and Begin(true) return ErrDatabaseReadOnly immediately.
+	readOnly bool
 }
 
 // Path returns the path to currently open database file.
@@ -440,9 +442,11 @@ func (db *DB) beginTx() (*Tx, error) {
 }
 
 func (db *DB) beginRWTx() (*Tx, error) {
+	// If the database was opened with Options.ReadOnly, return an error.
 	if db.readOnly {
 		return nil, ErrDatabaseReadOnly
 	}
+
 	// Obtain writer lock. This is released by the transaction when it closes.
 	// This enforces only one writer transaction at a time.
 	db.rwlock.Lock()
