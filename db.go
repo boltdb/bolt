@@ -140,14 +140,8 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	db.MaxBatchSize = DefaultMaxBatchSize
 	db.MaxBatchDelay = DefaultMaxBatchDelay
 
-	// Get file stats.
-	s, err := os.Stat(path)
 	flag := os.O_RDWR
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	} else if err == nil && (s.Mode().Perm()&0222) == 0 {
-		// remove www from mode as well.
-		mode ^= (mode & 0222)
+	if options.ReadOnly {
 		flag = os.O_RDONLY
 		db.readOnly = true
 		// Ignore truncations.
@@ -156,21 +150,26 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	// Open data file and separate sync handler for metadata writes.
 	db.path = path
+	var err error
 	if db.file, err = os.OpenFile(db.path, flag|os.O_CREATE, mode); err != nil {
 		_ = db.close()
 		return nil, err
 	}
 
-	// No need to lock read-only file.
 	if !db.readOnly {
 		db.ops.Truncate = db.file.Truncate
-		// Lock file so that other processes using Bolt cannot use the database
-		// at the same time. This would cause corruption since the two processes
-		// would write meta pages and free pages separately.
-		if err := flock(db.file, options.Timeout); err != nil {
-			_ = db.close()
-			return nil, err
-		}
+	}
+
+	// Lock file so that other processes using Bolt in read-write mode cannot
+	// use the database  at the same time. This would cause corruption since
+	// the two processes would write meta pages and free pages separately.
+	// The database file is locked exclusively (only one process can grab the lock)
+	// if !options.ReadOnly.
+	// The database file is locked using the shared lock (more than one process may
+	// hold a lock at the same time) otherwise (options.ReadOnly is set).
+	if err := flock(db.file, !db.readOnly, options.Timeout); err != nil {
+		_ = db.close()
+		return nil, err
 	}
 
 	// Default values for test hooks
@@ -660,6 +659,10 @@ type Options struct {
 
 	// Sets the DB.NoGrowSync flag before memory mapping the file.
 	NoGrowSync bool
+
+	// Open database in read-only mode. Uses flock(..., LOCK_SH |LOCK_NB) to
+	// grab a shared lock (UNIX).
+	ReadOnly bool
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().

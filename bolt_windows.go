@@ -16,7 +16,7 @@ func fdatasync(db *DB) error {
 }
 
 // flock acquires an advisory lock on a file descriptor.
-func flock(f *os.File, _ time.Duration) error {
+func flock(f *os.File, _ bool, _ time.Duration) error {
 	return nil
 }
 

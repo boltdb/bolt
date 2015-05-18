@@ -224,7 +224,9 @@ func TestDB_Open_FileTooSmall(t *testing.T) {
 	equals(t, errors.New("file size too small"), err)
 }
 
-// Ensure that a database can be opened in read-only mode.
+// Ensure that a database can be opened in read-only mode by multiple processes
+// and that a database can not be opened in read-write mode and in read-only
+// mode at the same time.
 func TestOpen_ReadOnly(t *testing.T) {
 	var bucket = []byte(`bucket`)
 	var key = []byte(`key`)
@@ -243,14 +245,15 @@ func TestOpen_ReadOnly(t *testing.T) {
 	assert(t, !db.IsReadOnly(), "")
 	ok(t, err)
 	ok(t, db.Close())
-	// Make it read-only.
-	ok(t, os.Chmod(path, 0444))
-	// Open again.
-	db0, err := bolt.Open(path, 0666, nil)
+	// Open in read-only mode.
+	db0, err := bolt.Open(path, 0666, &bolt.Options{ReadOnly: true})
 	ok(t, err)
 	defer db0.Close()
-	// And again.
-	db1, err := bolt.Open(path, 0666, nil)
+	// Try opening in regular mode.
+	_, err = bolt.Open(path, 0666, &bolt.Options{Timeout: time.Millisecond * 100})
+	assert(t, err != nil, "")
+	// And again (in read-only mode).
+	db1, err := bolt.Open(path, 0666, &bolt.Options{ReadOnly: true})
 	ok(t, err)
 	defer db1.Close()
 	for _, db := range []*bolt.DB{db0, db1} {
