@@ -103,7 +103,6 @@ type DB struct {
 
 	ops struct {
 		writeAt  func(b []byte, off int64) (n int, err error)
-		Truncate func(size int64) error
 	}
 
 	readOnly bool // Read only mode. Update()/Begin(true) would return ErrDatabaseReadOnly immediately.
@@ -144,8 +143,6 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	if options.ReadOnly {
 		flag = os.O_RDONLY
 		db.readOnly = true
-		// Ignore truncations.
-		db.ops.Truncate = func(int64) error { return nil }
 	}
 
 	// Open data file and separate sync handler for metadata writes.
@@ -154,10 +151,6 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	if db.file, err = os.OpenFile(db.path, flag|os.O_CREATE, mode); err != nil {
 		_ = db.close()
 		return nil, err
-	}
-
-	if !db.readOnly {
-		db.ops.Truncate = db.file.Truncate
 	}
 
 	// Lock file so that other processes using Bolt in read-write mode cannot
