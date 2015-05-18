@@ -593,5 +593,6 @@ Below is a list of public, open source projects that use Bolt:
 * [Seaweed File System](https://github.com/chrislusf/weed-fs) - Highly scalable distributed key~file system with O(1) disk read.
 * [InfluxDB](http://influxdb.com) - Scalable datastore for metrics, events, and real-time analytics.
 * [Freehold](http://tshannon.bitbucket.org/freehold/) - An open, secure, and lightweight platform for your files and data.
+* [Prometheus Annotation Server](https://github.com/oliver006/prom_annotation_server) - Annotation server for PromDash & Prometheus service monitoring system.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
