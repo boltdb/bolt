@@ -446,6 +446,21 @@ It's also useful to pipe these stats to a service such as statsd for monitoring
 or to provide an HTTP endpoint that will perform a fixed-length sample.
 
 
+### Read-Only Mode
+
+Sometimes it is useful to create a shared, read-only Bolt database. To this,
+set the `Options.ReadOnly` flag when opening your database. Read-only mode
+uses a shared lock to allow multiple processes to read from the database but
+it will block any processes from opening the database in read-write mode.
+
+```go
+db, err := bolt.Open("my.db", 0666, &bolt.Options{ReadOnly: true})
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+
 ## Resources
 
 For more information on getting started with Bolt, check out the following articles:
