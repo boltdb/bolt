@@ -224,6 +224,76 @@ func TestDB_Open_FileTooSmall(t *testing.T) {
 	equals(t, errors.New("file size too small"), err)
 }
 
+// Ensure that a database can be opened in read-only mode by multiple processes
+// and that a database can not be opened in read-write mode and in read-only
+// mode at the same time.
+func TestOpen_ReadOnly(t *testing.T) {
+	bucket, key, value := []byte(`bucket`), []byte(`key`), []byte(`value`)
+
+	path := tempfile()
+	defer os.Remove(path)
+
+	// Open in read-write mode.
+	db, err := bolt.Open(path, 0666, nil)
+	ok(t, db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket(bucket)
+		if err != nil {
+			return err
+		}
+		return b.Put(key, value)
+	}))
+	assert(t, db != nil, "")
+	assert(t, !db.IsReadOnly(), "")
+	ok(t, err)
+	ok(t, db.Close())
+
+	// Open in read-only mode.
+	db0, err := bolt.Open(path, 0666, &bolt.Options{ReadOnly: true})
+	ok(t, err)
+	defer db0.Close()
+
+	// Opening in read-write mode should return an error.
+	_, err = bolt.Open(path, 0666, &bolt.Options{Timeout: time.Millisecond * 100})
+	assert(t, err != nil, "")
+
+	// And again (in read-only mode).
+	db1, err := bolt.Open(path, 0666, &bolt.Options{ReadOnly: true})
+	ok(t, err)
+	defer db1.Close()
+
+	// Verify both read-only databases are accessible.
+	for _, db := range []*bolt.DB{db0, db1} {
+		// Verify is is in read only mode indeed.
+		assert(t, db.IsReadOnly(), "")
+
+		// Read-only databases should not allow updates.
+		assert(t,
+			bolt.ErrDatabaseReadOnly == db.Update(func(*bolt.Tx) error {
+				panic(`should never get here`)
+			}),
+			"")
+
+		// Read-only databases should not allow beginning writable txns.
+		_, err = db.Begin(true)
+		assert(t, bolt.ErrDatabaseReadOnly == err, "")
+
+		// Verify the data.
+		ok(t, db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket(bucket)
+			if b == nil {
+				return fmt.Errorf("expected bucket `%s`", string(bucket))
+			}
+
+			got := string(b.Get(key))
+			expected := string(value)
+			if got != expected {
+				return fmt.Errorf("expected `%s`, got `%s`", expected, got)
+			}
+			return nil
+		}))
+	}
+}
+
 // TODO(benbjohnson): Test corruption at every byte of the first two pages.
 
 // Ensure that a database cannot open a transaction when it's not open.

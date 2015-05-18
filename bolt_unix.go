@@ -11,7 +11,7 @@ import (
 )
 
 // flock acquires an advisory lock on a file descriptor.
-func flock(f *os.File, timeout time.Duration) error {
+func flock(f *os.File, exclusive bool, timeout time.Duration) error {
 	var t time.Time
 	for {
 		// If we're beyond our timeout then return an error.
@@ -21,9 +21,13 @@ func flock(f *os.File, timeout time.Duration) error {
 		} else if timeout > 0 && time.Since(t) > timeout {
 			return ErrTimeout
 		}
+		flag := syscall.LOCK_SH
+		if exclusive {
+			flag = syscall.LOCK_EX
+		}
 
 		// Otherwise attempt to obtain an exclusive lock.
-		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err := syscall.Flock(int(f.Fd()), flag|syscall.LOCK_NB)
 		if err == nil {
 			return nil
 		} else if err != syscall.EWOULDBLOCK {
@@ -44,7 +48,7 @@ func funlock(f *os.File) error {
 func mmap(db *DB, sz int) error {
 	// Truncate and fsync to ensure file size metadata is flushed.
 	// https://github.com/boltdb/bolt/issues/284
-	if !db.NoGrowSync {
+	if !db.NoGrowSync && !db.readOnly {
 		if err := db.file.Truncate(int64(sz)); err != nil {
 			return fmt.Errorf("file resize error: %s", err)
 		}
