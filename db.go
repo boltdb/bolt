@@ -401,6 +401,11 @@ func (db *DB) close() error {
 // will cause the calls to block and be serialized until the current write
 // transaction finishes.
 //
+// Transactions should not be depedent on one another. Opening a read
+// transaction and a write transaction in the same goroutine can cause the
+// writer to deadlock because the database periodically needs to re-mmap itself
+// as it grows and it cannot do that while a read transaction is open.
+//
 // IMPORTANT: You must close read-only transactions after you are finished or
 // else the database will not reclaim old pages.
 func (db *DB) Begin(writable bool) (*Tx, error) {
