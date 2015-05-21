@@ -351,8 +351,15 @@ func (db *DB) init() error {
 // Close releases all database resources.
 // All transactions must be closed before closing the database.
 func (db *DB) Close() error {
+	db.rwlock.Lock()
+	defer db.rwlock.Unlock()
+
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
+
+	db.mmaplock.RLock()
+	defer db.mmaplock.RUnlock()
+
 	return db.close()
 }
 

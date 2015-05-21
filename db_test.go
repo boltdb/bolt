@@ -324,6 +324,49 @@ func TestDB_BeginRW_Closed(t *testing.T) {
 	assert(t, tx == nil, "")
 }
 
+func TestDB_Close_PendingTx_RW(t *testing.T) { testDB_Close_PendingTx(t, true) }
+func TestDB_Close_PendingTx_RO(t *testing.T) { testDB_Close_PendingTx(t, false) }
+
+// Ensure that a database cannot close while transactions are open.
+func testDB_Close_PendingTx(t *testing.T, writable bool) {
+	db := NewTestDB()
+	defer db.Close()
+
+	// Start transaction.
+	tx, err := db.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Open update in separate goroutine.
+	done := make(chan struct{})
+	go func() {
+		db.Close()
+		close(done)
+	}()
+
+	// Ensure database hasn't closed.
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-done:
+		t.Fatal("database closed too early")
+	default:
+	}
+
+	// Commit transaction.
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure database closed now.
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-done:
+	default:
+		t.Fatal("database did not close")
+	}
+}
+
 // Ensure a database can provide a transactional block.
 func TestDB_Update(t *testing.T) {
 	db := NewTestDB()
@@ -748,7 +791,7 @@ func (db *TestDB) PrintStats() {
 
 // MustCheck runs a consistency check on the database and panics if any errors are found.
 func (db *TestDB) MustCheck() {
-	db.View(func(tx *bolt.Tx) error {
+	db.Update(func(tx *bolt.Tx) error {
 		// Collect all the errors.
 		var errors []error
 		for err := range tx.Check() {
