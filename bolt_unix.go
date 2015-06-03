@@ -63,6 +63,11 @@ func mmap(db *DB, sz int) error {
 		return err
 	}
 
+	// Advise the kernel that the mmap is accessed randomly.
+	if err := madvise(b, syscall.MADV_RANDOM); err != nil {
+		return fmt.Errorf("madvise: %s", err)
+	}
+
 	// Save the original byte slice and convert to a byte array pointer.
 	db.dataref = b
 	db.data = (*[maxMapSize]byte)(unsafe.Pointer(&b[0]))
@@ -83,4 +88,13 @@ func munmap(db *DB) error {
 	db.data = nil
 	db.datasz = 0
 	return err
+}
+
+// NOTE: This function is copied from stdlib because it is not available on darwin.
+func madvise(b []byte, advice int) (err error) {
+	_, _, e1 := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(advice))
+	if e1 != 0 {
+		err = e1
+	}
+	return
 }
