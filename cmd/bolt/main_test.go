@@ -146,6 +146,106 @@ func TestStatsCommand_Run(t *testing.T) {
 	}
 }
 
+// Ensure the "buckets" command can print a list of buckets.
+func TestBucketsCommand_Run(t *testing.T) {
+	db := MustOpen(0666, nil)
+	defer db.Close()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		for _, name := range []string{"foo", "bar", "baz"} {
+			_, err := tx.CreateBucket([]byte(name))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	db.DB.Close()
+
+	expected := "bar\nbaz\nfoo\n"
+
+	// Run the command.
+	m := NewMain()
+	if err := m.Run("buckets", db.Path); err != nil {
+		t.Fatal(err)
+	} else if actual := m.Stdout.String(); actual != expected {
+		t.Fatalf("unexpected stdout:\n\n%s", actual)
+	}
+}
+
+// Ensure the "keys" command can print a list of keys for a bucket.
+func TestKeysCommand_Run(t *testing.T) {
+	db := MustOpen(0666, nil)
+	defer db.Close()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		for _, name := range []string{"foo", "bar"} {
+			b, err := tx.CreateBucket([]byte(name))
+			if err != nil {
+				return err
+			}
+			for i := 0; i < 3; i++ {
+				key := fmt.Sprintf("%s-%d", name, i)
+				if err := b.Put([]byte(key), []byte{0}); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	db.DB.Close()
+
+	expected := "foo-0\nfoo-1\nfoo-2\n"
+
+	// Run the command.
+	m := NewMain()
+	if err := m.Run("keys", db.Path, "foo"); err != nil {
+		t.Fatal(err)
+	} else if actual := m.Stdout.String(); actual != expected {
+		t.Fatalf("unexpected stdout:\n\n%s", actual)
+	}
+}
+
+// Ensure the "get" command can print the value of a key in a bucket.
+func TestGetCommand_Run(t *testing.T) {
+	db := MustOpen(0666, nil)
+	defer db.Close()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		for _, name := range []string{"foo", "bar"} {
+			b, err := tx.CreateBucket([]byte(name))
+			if err != nil {
+				return err
+			}
+			for i := 0; i < 3; i++ {
+				key := fmt.Sprintf("%s-%d", name, i)
+				val := fmt.Sprintf("val-%s-%d", name, i)
+				if err := b.Put([]byte(key), []byte(val)); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	db.DB.Close()
+
+	expected := "val-foo-1\n"
+
+	// Run the command.
+	m := NewMain()
+	if err := m.Run("get", db.Path, "foo", "foo-1"); err != nil {
+		t.Fatal(err)
+	} else if actual := m.Stdout.String(); actual != expected {
+		t.Fatalf("unexpected stdout:\n\n%s", actual)
+	}
+}
+
 // Main represents a test wrapper for main.Main that records output.
 type Main struct {
 	*main.Main
