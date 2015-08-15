@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"sync"
 	"unsafe"
 )
 
@@ -169,4 +170,36 @@ func (a pgids) merge(b pgids) pgids {
 	merged = append(merged, follow...)
 
 	return merged
+}
+
+var cacheBufferSize int = os.Getpagesize()
+var pagePools [2]sync.Pool
+var zero []byte
+
+func init() {
+	pagePools[0].New = func() interface{} {
+		return make([]byte, cacheBufferSize)
+	}
+	pagePools[1].New = func() interface{} {
+		return make([]byte, cacheBufferSize*2)
+	}
+	zero = make([]byte, cacheBufferSize*2)
+}
+
+func allocPage(pageSize int) []byte {
+	if pageSize > cacheBufferSize*2 {
+		return make([]byte, pageSize)
+	}
+	ix := (pageSize - 1) / cacheBufferSize
+	return pagePools[ix].Get().([]byte)
+}
+
+func freePage(p *page, pageSize int) {
+	if pageSize > cacheBufferSize*2 {
+		return
+	}
+	buf := (*[maxAllocSize]byte)(unsafe.Pointer(p))[:pageSize]
+	copy(buf, zero)
+	ix := (pageSize - 1) / cacheBufferSize
+	pagePools[ix].Put(buf)
 }
