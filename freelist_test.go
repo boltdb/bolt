@@ -3,7 +3,6 @@ package bolt
 import (
 	"math/rand"
 	"reflect"
-	"sort"
 	"testing"
 	"unsafe"
 )
@@ -130,6 +129,16 @@ func TestFreelist_write(t *testing.T) {
 	}
 }
 
+func TestFreelist_sort(t *testing.T) {
+	ids := randomPgids(1000)
+	for i := range ids[:len(ids)-1] {
+		if ids[i] > ids[i+1] {
+			t.Fatalf("ids[%d]=%d ids[%d]=%d", i, ids[i], i+1, ids[i+1])
+			return
+		}
+	}
+}
+
 func Benchmark_FreelistRelease10K(b *testing.B)    { benchmark_FreelistRelease(b, 10000) }
 func Benchmark_FreelistRelease100K(b *testing.B)   { benchmark_FreelistRelease(b, 100000) }
 func Benchmark_FreelistRelease1000K(b *testing.B)  { benchmark_FreelistRelease(b, 1000000) }
@@ -145,12 +154,32 @@ func benchmark_FreelistRelease(b *testing.B, size int) {
 	}
 }
 
-func randomPgids(n int) []pgid {
+func Benchmark_FreelistSort5(b *testing.B)   { benchmark_FreelistSort(b, 5) }
+func Benchmark_FreelistSort25(b *testing.B)  { benchmark_FreelistSort(b, 25) }
+func Benchmark_FreelistSort50(b *testing.B)  { benchmark_FreelistSort(b, 50) }
+func Benchmark_FreelistSort125(b *testing.B) { benchmark_FreelistSort(b, 125) }
+func Benchmark_FreelistSort250(b *testing.B) { benchmark_FreelistSort(b, 250) }
+func benchmark_FreelistSort(b *testing.B, size int) {
+	pending := unsortedPids(size)
+	cpy := make(pgids, size)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		copy(cpy, pending)
+		cpy.sort()
+	}
+}
+
+func unsortedPids(n int) pgids {
 	rand.Seed(42)
 	pgids := make(pgids, n)
 	for i := range pgids {
 		pgids[i] = pgid(rand.Int63())
 	}
-	sort.Sort(pgids)
+	return pgids
+}
+
+func randomPgids(n int) []pgid {
+	pgids := unsortedPids(n)
+	pgids.sort()
 	return pgids
 }

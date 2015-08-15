@@ -130,9 +130,73 @@ type PageInfo struct {
 
 type pgids []pgid
 
-func (s pgids) Len() int           { return len(s) }
-func (s pgids) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s pgids) Less(i, j int) bool { return s[i] < s[j] }
+func (s pgids) shellsort() {
+	ls := len(s)
+	for _, gap := range []int{9, 4, 1} {
+		for i := gap; i < ls; i++ {
+			j, v := i, s[i]
+			for ; j >= gap && s[j-gap] > v; j -= gap {
+				s[j] = s[j-gap]
+			}
+			s[j] = v
+		}
+	}
+}
+
+// custom quick sort
+func (s pgids) quicksort() {
+recursion:
+	ls := len(s)
+	if ls <= 32 {
+		s.shellsort()
+		return
+	}
+	a, b, c := s[0], s[ls/2], s[ls-1]
+	if a < b {
+		a, b = b, a
+	}
+	if b < c {
+		b, c = c, b
+		if a < b {
+			a, b = b, a
+		}
+	}
+	mid := b
+	l := 0
+	for s[l] < mid {
+		l++
+	}
+	r := l + 1
+	for r < ls {
+		if s[r] < mid {
+			s[l], s[r] = s[r], s[l]
+			l++
+		}
+		r++
+	}
+	if l < ls-l {
+		s[:l].quicksort()
+		s = s[l:]
+	} else {
+		s[l:].quicksort()
+		s = s[:l]
+	}
+	goto recursion
+}
+
+func (s pgids) sort() {
+	ls := len(s)
+	if ls <= 32 {
+		s.shellsort()
+		return
+	}
+	for i, v := range s[:ls-1] {
+		if v > s[i+1] {
+			s.quicksort()
+			return
+		}
+	}
+}
 
 // merge returns the sorted union of a and b.
 func (a pgids) merge(b pgids) pgids {

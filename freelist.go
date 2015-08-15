@@ -2,7 +2,6 @@ package bolt
 
 import (
 	"fmt"
-	"sort"
 	"unsafe"
 )
 
@@ -56,7 +55,7 @@ func (f *freelist) all() []pgid {
 		m = append(m, list...)
 	}
 
-	sort.Sort(m)
+	m.sort()
 	return pgids(f.ids).merge(m)
 }
 
@@ -137,7 +136,7 @@ func (f *freelist) release(txid txid) {
 			delete(f.pending, tid)
 		}
 	}
-	sort.Sort(m)
+	m.sort()
 	f.ids = pgids(f.ids).merge(m)
 }
 
@@ -173,8 +172,7 @@ func (f *freelist) read(p *page) {
 	f.ids = make([]pgid, len(ids))
 	copy(f.ids, ids)
 
-	// Make sure they're sorted.
-	sort.Sort(pgids(f.ids))
+	pgids(f.ids).sort()
 
 	// Rebuild the page cache.
 	f.reindex()
