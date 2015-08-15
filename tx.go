@@ -466,7 +466,7 @@ func (tx *Tx) write() error {
 	for _, p := range pages {
 		freePage(p, int(p.overflow+1)*tx.db.pageSize)
 	}
-	tx.pages = make(map[pgid]*page)
+	tx.pages = nil
 
 	return nil
 }
