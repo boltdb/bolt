@@ -130,9 +130,73 @@ type PageInfo struct {
 
 type pgids []pgid
 
-func (s pgids) Len() int           { return len(s) }
-func (s pgids) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s pgids) Less(i, j int) bool { return s[i] < s[j] }
+func (s pgids) shellsort() {
+	ls := len(s)
+	for _, gap := range []int{9, 4, 1} {
+		for i := gap; i < ls; i++ {
+			j, v := i, s[i]
+			for ; j >= gap && s[j-gap] > v; j -= gap {
+				s[j] = s[j-gap]
+			}
+			s[j] = v
+		}
+	}
+}
+
+// custom quick sort
+func (s pgids) quicksort() {
+recursion:
+	ls := len(s)
+	if ls <= 32 {
+		s.shellsort()
+		return
+	}
+	a, b, c := s[0], s[ls/2], s[ls-1]
+	if a < b {
+		a, b = b, a
+	}
+	if b < c {
+		b, c = c, b
+		if a < b {
+			a, b = b, a
+		}
+	}
+	mid := b
+	l := 0
+	for s[l] < mid {
+		l++
+	}
+	r := l + 1
+	for r < ls {
+		if s[r] < mid {
+			s[l], s[r] = s[r], s[l]
+			l++
+		}
+		r++
+	}
+	if l < ls-l {
+		s[:l].quicksort()
+		s = s[l:]
+	} else {
+		s[l:].quicksort()
+		s = s[:l]
+	}
+	goto recursion
+}
+
+func (s pgids) sort() {
+	ls := len(s)
+	if ls <= 32 {
+		s.shellsort()
+		return
+	}
+	for i, v := range s[:ls-1] {
+		if v > s[i+1] {
+			s.quicksort()
+			return
+		}
+	}
+}
 
 // merge returns the sorted union of a and b.
 func (a pgids) merge(b pgids) pgids {
@@ -144,29 +208,25 @@ func (a pgids) merge(b pgids) pgids {
 	}
 
 	// Create a list to hold all elements from both lists.
-	merged := make(pgids, 0, len(a)+len(b))
+	merged := make(pgids, len(a)+len(b))
 
-	// Assign lead to the slice with a lower starting value, follow to the higher value.
-	lead, follow := a, b
-	if b[0] < a[0] {
-		lead, follow = b, a
+	big, small := a, b
+	if len(b) > len(a) {
+		big, small = b, a
 	}
 
-	// Continue while there are elements in the lead.
-	for len(lead) > 0 {
-		// Merge largest prefix of lead that is ahead of follow[0].
-		n := sort.Search(len(lead), func(i int) bool { return lead[i] > follow[0] })
-		merged = append(merged, lead[:n]...)
-		if n >= len(lead) {
-			break
+	pos := 0
+	for _, v := range small {
+		if len(big) != 0 && big[0] < v {
+			n := sort.Search(len(big), func(i int) bool { return big[i] > v })
+			copy(merged[pos:pos+n], big)
+			big = big[n:]
+			pos += n
 		}
-
-		// Swap lead and follow.
-		lead, follow = follow, lead[n:]
+		merged[pos] = v
+		pos++
 	}
-
-	// Append what's left in follow.
-	merged = append(merged, follow...)
+	copy(merged[pos:], big)
 
 	return merged
 }

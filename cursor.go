@@ -235,6 +235,7 @@ func (c *Cursor) next() (key []byte, value []byte, flags uint32) {
 
 // search recursively performs a binary search against a given page/node until it finds a given key.
 func (c *Cursor) search(key []byte, pgid pgid) {
+recursion:
 	p, n := c.bucket.pageNode(pgid)
 	if p != nil && (p.flags&(branchPageFlag|leafPageFlag)) == 0 {
 		panic(fmt.Sprintf("invalid page type: %d: %x", p.id, p.flags))
@@ -249,13 +250,14 @@ func (c *Cursor) search(key []byte, pgid pgid) {
 	}
 
 	if n != nil {
-		c.searchNode(key, n)
-		return
+		pgid = c.searchNode(key, n)
+	} else {
+		pgid = c.searchPage(key, p)
 	}
-	c.searchPage(key, p)
+	goto recursion
 }
 
-func (c *Cursor) searchNode(key []byte, n *node) {
+func (c *Cursor) searchNode(key []byte, n *node) pgid {
 	var exact bool
 	index := sort.Search(len(n.inodes), func(i int) bool {
 		// TODO(benbjohnson): Optimize this range search. It's a bit hacky right now.
@@ -272,10 +274,10 @@ func (c *Cursor) searchNode(key []byte, n *node) {
 	c.stack[len(c.stack)-1].index = index
 
 	// Recursively search to the next page.
-	c.search(key, n.inodes[index].pgid)
+	return n.inodes[index].pgid
 }
 
-func (c *Cursor) searchPage(key []byte, p *page) {
+func (c *Cursor) searchPage(key []byte, p *page) pgid {
 	// Binary search for the correct range.
 	inodes := p.branchPageElements()
 
@@ -295,7 +297,7 @@ func (c *Cursor) searchPage(key []byte, p *page) {
 	c.stack[len(c.stack)-1].index = index
 
 	// Recursively search to the next page.
-	c.search(key, inodes[index].pgid)
+	return inodes[index].pgid
 }
 
 // nsearch searches the leaf node on the top of the stack for a key.

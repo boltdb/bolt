@@ -2,23 +2,24 @@ package bolt
 
 import (
 	"fmt"
-	"sort"
 	"unsafe"
 )
+
+type ctrue struct{}
 
 // freelist represents a list of all pages that are available for allocation.
 // It also tracks pages that have been freed but are still in use by open transactions.
 type freelist struct {
 	ids     []pgid          // all free and available free page ids.
 	pending map[txid][]pgid // mapping of soon-to-be free page ids by tx.
-	cache   map[pgid]bool   // fast lookup of all free and pending page ids.
+	cache   map[pgid]ctrue  // fast lookup of all free and pending page ids.
 }
 
 // newFreelist returns an empty, initialized freelist.
 func newFreelist() *freelist {
 	return &freelist{
 		pending: make(map[txid][]pgid),
-		cache:   make(map[pgid]bool),
+		cache:   make(map[pgid]ctrue),
 	}
 }
 
@@ -54,7 +55,7 @@ func (f *freelist) all() []pgid {
 		m = append(m, list...)
 	}
 
-	sort.Sort(m)
+	m.sort()
 	return pgids(f.ids).merge(m)
 }
 
@@ -113,13 +114,13 @@ func (f *freelist) free(txid txid, p *page) {
 	var ids = f.pending[txid]
 	for id := p.id; id <= p.id+pgid(p.overflow); id++ {
 		// Verify that page is not already free.
-		if f.cache[id] {
+		if _, ok := f.cache[id]; ok {
 			panic(fmt.Sprintf("page %d already freed", id))
 		}
 
 		// Add to the freelist and cache.
 		ids = append(ids, id)
-		f.cache[id] = true
+		f.cache[id] = ctrue{}
 	}
 	f.pending[txid] = ids
 }
@@ -135,7 +136,7 @@ func (f *freelist) release(txid txid) {
 			delete(f.pending, tid)
 		}
 	}
-	sort.Sort(m)
+	m.sort()
 	f.ids = pgids(f.ids).merge(m)
 }
 
@@ -152,7 +153,8 @@ func (f *freelist) rollback(txid txid) {
 
 // freed returns whether a given page is in the free list.
 func (f *freelist) freed(pgid pgid) bool {
-	return f.cache[pgid]
+	_, ok := f.cache[pgid]
+	return ok
 }
 
 // read initializes the freelist from a freelist page.
@@ -170,8 +172,7 @@ func (f *freelist) read(p *page) {
 	f.ids = make([]pgid, len(ids))
 	copy(f.ids, ids)
 
-	// Make sure they're sorted.
-	sort.Sort(pgids(f.ids))
+	pgids(f.ids).sort()
 
 	// Rebuild the page cache.
 	f.reindex()
@@ -206,10 +207,10 @@ func (f *freelist) reload(p *page) {
 	f.read(p)
 
 	// Build a cache of only pending pages.
-	pcache := make(map[pgid]bool)
+	pcache := make(map[pgid]ctrue)
 	for _, pendingIDs := range f.pending {
 		for _, pendingID := range pendingIDs {
-			pcache[pendingID] = true
+			pcache[pendingID] = ctrue{}
 		}
 	}
 
@@ -217,7 +218,7 @@ func (f *freelist) reload(p *page) {
 	// with any pages not in the pending lists.
 	var a []pgid
 	for _, id := range f.ids {
-		if !pcache[id] {
+		if _, ok := pcache[id]; !ok {
 			a = append(a, id)
 		}
 	}
@@ -230,13 +231,13 @@ func (f *freelist) reload(p *page) {
 
 // reindex rebuilds the free cache based on available and pending free lists.
 func (f *freelist) reindex() {
-	f.cache = make(map[pgid]bool)
+	f.cache = make(map[pgid]ctrue, len(f.ids))
 	for _, id := range f.ids {
-		f.cache[id] = true
+		f.cache[id] = ctrue{}
 	}
 	for _, pendingIDs := range f.pending {
 		for _, pendingID := range pendingIDs {
-			f.cache[pendingID] = true
+			f.cache[pendingID] = ctrue{}
 		}
 	}
 }

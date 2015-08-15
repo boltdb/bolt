@@ -2,7 +2,6 @@ package bolt
 
 import (
 	"reflect"
-	"sort"
 	"testing"
 	"testing/quick"
 )
@@ -50,15 +49,15 @@ func TestPgids_merge(t *testing.T) {
 func TestPgids_merge_quick(t *testing.T) {
 	if err := quick.Check(func(a, b pgids) bool {
 		// Sort incoming lists.
-		sort.Sort(a)
-		sort.Sort(b)
+		a.sort()
+		b.sort()
 
 		// Merge the two lists together.
 		got := a.merge(b)
 
 		// The expected value should be the two lists combined and sorted.
 		exp := append(a, b...)
-		sort.Sort(exp)
+		exp.sort()
 
 		if !reflect.DeepEqual(exp, got) {
 			t.Errorf("\nexp=%+v\ngot=%+v\n", exp, got)

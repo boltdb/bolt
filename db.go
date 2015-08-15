@@ -196,9 +196,11 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		return nil, err
 	}
 
-	// Read in the freelist.
-	db.freelist = newFreelist()
-	db.freelist.read(db.page(db.meta().freelist))
+	if !db.readOnly {
+		// Read in the freelist.
+		db.freelist = newFreelist()
+		db.freelist.read(db.page(db.meta().freelist))
+	}
 
 	// Mark the database as opened and return.
 	return db, nil
