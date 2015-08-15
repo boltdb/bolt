@@ -208,29 +208,25 @@ func (a pgids) merge(b pgids) pgids {
 	}
 
 	// Create a list to hold all elements from both lists.
-	merged := make(pgids, 0, len(a)+len(b))
+	merged := make(pgids, len(a)+len(b))
 
-	// Assign lead to the slice with a lower starting value, follow to the higher value.
-	lead, follow := a, b
-	if b[0] < a[0] {
-		lead, follow = b, a
+	big, small := a, b
+	if len(b) > len(a) {
+		big, small = b, a
 	}
 
-	// Continue while there are elements in the lead.
-	for len(lead) > 0 {
-		// Merge largest prefix of lead that is ahead of follow[0].
-		n := sort.Search(len(lead), func(i int) bool { return lead[i] > follow[0] })
-		merged = append(merged, lead[:n]...)
-		if n >= len(lead) {
-			break
+	pos := 0
+	for _, v := range small {
+		if len(big) != 0 && big[0] < v {
+			n := sort.Search(len(big), func(i int) bool { return big[i] > v })
+			copy(merged[pos:pos+n], big)
+			big = big[n:]
+			pos += n
 		}
-
-		// Swap lead and follow.
-		lead, follow = follow, lead[n:]
+		merged[pos] = v
+		pos++
 	}
-
-	// Append what's left in follow.
-	merged = append(merged, follow...)
+	copy(merged[pos:], big)
 
 	return merged
 }
