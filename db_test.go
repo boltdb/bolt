@@ -18,6 +18,7 @@ import (
 )
 
 var statsFlag = flag.Bool("stats", false, "show performance stats")
+var tempPath = flag.String("path", "", "path for databases")
 
 // Ensure that opening a database with a bad path returns an error.
 func TestOpen_BadPath(t *testing.T) {
@@ -832,7 +833,7 @@ func (db *TestDB) CopyTempFile() {
 
 // tempfile returns a temporary file path.
 func tempfile() string {
-	f, _ := ioutil.TempFile("", "bolt-")
+	f, _ := ioutil.TempFile(*tempPath, "bolt-")
 	f.Close()
 	os.Remove(f.Name())
 	return f.Name()
