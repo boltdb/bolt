@@ -42,6 +42,9 @@ func TestOpen_Timeout(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("timeout not supported on windows")
 	}
+	if runtime.GOOS == "solaris" {
+		t.Skip("solaris fcntl locks don't support intra-process locking")
+	}
 
 	path := tempfile()
 	defer os.Remove(path)
@@ -65,6 +68,9 @@ func TestOpen_Timeout(t *testing.T) {
 func TestOpen_Wait(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("timeout not supported on windows")
+	}
+	if runtime.GOOS == "solaris" {
+		t.Skip("solaris fcntl locks don't support intra-process locking")
 	}
 
 	path := tempfile()
@@ -228,6 +234,10 @@ func TestDB_Open_FileTooSmall(t *testing.T) {
 // and that a database can not be opened in read-write mode and in read-only
 // mode at the same time.
 func TestOpen_ReadOnly(t *testing.T) {
+	if runtime.GOOS == "solaris" {
+		t.Skip("solaris fcntl locks don't support intra-process locking")
+	}
+
 	bucket, key, value := []byte(`bucket`), []byte(`key`), []byte(`value`)
 
 	path := tempfile()
