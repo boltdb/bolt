@@ -1,3 +1,4 @@
+// +build go1.5
 package bolt
 
 // maxMapSize represents the largest mmap size supported by Bolt.
