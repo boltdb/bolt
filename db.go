@@ -191,7 +191,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 
 	// Memory map the data file.
-	if err := db.mmap(0); err != nil {
+	if err := db.mmap(options.InitialMmapSize); err != nil {
 		_ = db.close()
 		return nil, err
 	}
@@ -405,6 +405,10 @@ func (db *DB) close() error {
 // transaction and a write transaction in the same goroutine can cause the
 // writer to deadlock because the database periodically needs to re-mmap itself
 // as it grows and it cannot do that while a read transaction is open.
+//
+// If a long running read transaction (for example, a snapshot transaction) is
+// needed, you might want to set DB.InitialMmapSize to a large enough value
+// to avoid potential blocking of write transaction.
 //
 // IMPORTANT: You must close read-only transactions after you are finished or
 // else the database will not reclaim old pages.
@@ -672,6 +676,18 @@ type Options struct {
 	// Open database in read-only mode. Uses flock(..., LOCK_SH |LOCK_NB) to
 	// grab a shared lock (UNIX).
 	ReadOnly bool
+
+	// InitialMmapSize is the initial mmap size of the database
+	// in bytes.
+	//
+	// Read transaction is guaranteed not to block write transaction
+	// if the mmap size required by the database is smaller than
+	// the initial mmap. (See DB.Begin for more information)
+	//
+	// If <=0, the initial map size is 0.
+	// If initialMmapSize is smaller than the previous database size,
+	// it takes no effect.
+	InitialMmapSize int
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().

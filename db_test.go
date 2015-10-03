@@ -304,6 +304,47 @@ func TestOpen_ReadOnly(t *testing.T) {
 	}
 }
 
+// TestDB_Open_InitialMmapSize tests the passed in InitialMmapSize takes
+// effect. This is a very hacky test since the mmap size is not exposed.
+//
+// This test indirecly ensures the behavior by trying to block the re-mmap
+// by a reader and aks a writer to write a large value that will trigger
+// a mmap if the initial mmap size is small.
+func TestDB_Open_InitialMmapSize(t *testing.T) {
+	path := tempfile()
+	defer os.Remove(path)
+
+	isz := 1 << 31 // 2GB
+	db, err := bolt.Open(path, 0666, &bolt.Options{InitialMmapSize: isz})
+	assert(t, err == nil, "")
+
+	// a reader tx
+	rtx, err := db.Begin(false)
+	assert(t, err == nil, "")
+	defer rtx.Rollback()
+
+	// create a write tx and commit a large write
+	wtx, err := db.Begin(true)
+	assert(t, err == nil, "")
+	b, err := wtx.CreateBucket([]byte("test"))
+	assert(t, err == nil, "")
+	err = b.Put([]byte("foo"), make([]byte, 1<<23))
+	assert(t, err == nil, "")
+
+	done := make(chan struct{})
+
+	go func() {
+		wtx.Commit()
+		done <- struct{}{}
+	}()
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Errorf("unexpected that the reader blocks writer")
+	case <-done:
+	}
+}
+
 // TODO(benbjohnson): Test corruption at every byte of the first two pages.
 
 // Ensure that a database cannot open a transaction when it's not open.
