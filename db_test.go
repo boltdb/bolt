@@ -622,7 +622,7 @@ func TestDB_Consistency(t *testing.T) {
 	})
 }
 
-// Ensure that DB stats can be substracted from one another.
+// Ensure that DB stats can be subtracted from one another.
 func TestDBStats_Sub(t *testing.T) {
 	var a, b bolt.Stats
 	a.TxStats.PageCount = 3

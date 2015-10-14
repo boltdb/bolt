@@ -256,7 +256,7 @@ db.View(func(tx *bolt.Tx) error {
 ```
 
 The `Get()` function does not return an error because its operation is
-guarenteed to work (unless there is some kind of system failure). If the key
+guaranteed to work (unless there is some kind of system failure). If the key
 exists then it will return its byte slice value. If it doesn't exist then it
 will return `nil`. It's important to note that you can have a zero-length value
 set to a key which is different than the key not existing.
@@ -615,7 +615,7 @@ Below is a list of public, open source projects that use Bolt:
 * [Freehold](http://tshannon.bitbucket.org/freehold/) - An open, secure, and lightweight platform for your files and data.
 * [Prometheus Annotation Server](https://github.com/oliver006/prom_annotation_server) - Annotation server for PromDash & Prometheus service monitoring system.
 * [Consul](https://github.com/hashicorp/consul) - Consul is service discovery and configuration made easy. Distributed, highly available, and datacenter-aware.
-* [Kala](https://github.com/ajvb/kala) - Kala is a modern job scheduler optimized to run on a single node. It is persistant, JSON over HTTP API, ISO 8601 duration notation, and dependent jobs.
+* [Kala](https://github.com/ajvb/kala) - Kala is a modern job scheduler optimized to run on a single node. It is persistent, JSON over HTTP API, ISO 8601 duration notation, and dependent jobs.
 * [drive](https://github.com/odeke-em/drive) - drive is an unofficial Google Drive command line client for \*NIX operating systems.
 * [stow](https://github.com/djherbis/stow) -  a persistence manager for objects
   backed by boltdb.
