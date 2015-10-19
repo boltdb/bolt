@@ -268,6 +268,50 @@ transaction is open. If you need to use a value outside of the transaction
 then you must use `copy()` to copy it to another byte slice.
 
 
+### Autoincrementing integer for the bucket
+By using the NextSequence() function, you can let Bolt determine a sequence
+which can be used as the unique identifier for your key/value pairs. See the
+example below.
+
+```go
+// CreateUser saves u to the store. The new user ID is set on u once the data is persisted.
+func (s *Store) CreateUser(u *User) error {
+    return s.db.Update(func(tx *bolt.Tx) error {
+        // Retrieve the users bucket.
+        // This should be created when the DB is first opened.
+        b := tx.Bucket([]byte("users"))
+
+        // Generate ID for the user.
+        // This returns an error only if the Tx is closed or not writeable.
+        // That can't happen in an Update() call so I ignore the error check.
+        id, _ = b.NextSequence()
+        u.ID = int(id)
+
+        // Marshal user data into bytes.
+        buf, err := json.Marshal(u)
+        if err != nil {
+            return err
+        }
+
+        // Persist bytes to users bucket.
+        return b.Put(itob(u.ID), buf)
+    })
+}
+
+// itob returns an 8-byte big endian representation of v.
+func itob(v int) []byte {
+    b := make([]byte, 8)
+    binary.BigEndian.PutUint64(b, uint64(v))
+    return b
+}
+
+type User struct {
+    ID int
+    ...
+}
+
+```
+
 ### Iterating over keys
 
 Bolt stores its keys in byte-sorted order within a bucket. This makes sequential
