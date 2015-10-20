@@ -296,8 +296,11 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 		return ErrIncompatibleValue
 	}
 
-	// Insert into node.
+	// Copy key and value since changing these can corrupt the database.
 	key = cloneBytes(key)
+	value = cloneBytes(value)
+
+	// Insert into node.
 	c.node().put(key, key, value, 0, 0)
 
 	return nil
