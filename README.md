@@ -612,7 +612,9 @@ Here are a few things to note when evaluating and using Bolt:
   can in memory and will release memory as needed to other processes. This means
   that Bolt can show very high memory usage when working with large databases.
   However, this is expected and the OS will release memory as needed. Bolt can
-  handle databases much larger than the available physical RAM.
+  handle databases much larger than the available physical RAM, provided its
+  memory-map fits in the process virtual address space. It may be problematic
+  on 32-bits systems.
 
 * The data structures in the Bolt database are memory mapped so the data file
   will be endian specific. This means that you cannot copy a Bolt file from a
