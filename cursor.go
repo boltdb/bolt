@@ -38,6 +38,9 @@ func (c *Cursor) First() (key []byte, value []byte) {
 	if (flags & uint32(bucketLeafFlag)) != 0 {
 		return k, nil
 	}
+	if k == nil && v == nil && flags == 0 {
+		k, v, flags = c.next()
+	}
 	return k, v
 
 }
@@ -230,6 +233,11 @@ func (c *Cursor) next() (key []byte, value []byte, flags uint32) {
 	// first element of the first leaf page.
 	c.stack = c.stack[:i+1]
 	c.first()
+
+	if c.stack[len(c.stack)-1].count() == 0 {
+		return c.next()
+	}
+
 	return c.keyValue()
 }
 
