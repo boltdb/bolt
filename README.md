@@ -180,8 +180,8 @@ and then safely close your transaction if an error is returned. This is the
 recommended way to use Bolt transactions.
 
 However, sometimes you may want to manually start and end your transactions.
-You can use the `Tx.Begin()` function directly but _please_ be sure to close the
-transaction.
+You can use the `Tx.Begin()` function directly but **please** be sure to close
+the transaction.
 
 ```go
 // Start a writable transaction.
@@ -544,7 +544,7 @@ they are libraries bundled into the application, however, their underlying
 structure is a log-structured merge-tree (LSM tree). An LSM tree optimizes
 random writes by using a write ahead log and multi-tiered, sorted files called
 SSTables. Bolt uses a B+tree internally and only a single file. Both approaches
-have trade offs.
+have trade-offs.
 
 If you require a high random write throughput (>10,000 w/sec) or you need to use
 spinning disks then LevelDB could be a good choice. If your application is
