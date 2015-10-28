@@ -11,7 +11,7 @@ const (
 	MaxKeySize = 32768
 
 	// MaxValueSize is the maximum length of a value, in bytes.
-	MaxValueSize = 4294967295
+	MaxValueSize = (1 << 31) - 2
 )
 
 const (
