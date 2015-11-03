@@ -1,8 +1,8 @@
 Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https://drone.io/github.com/boltdb/bolt/latest) [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.png?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.png)](https://godoc.org/github.com/boltdb/bolt) ![Version](http://img.shields.io/badge/version-1.0-green.png)
 ====
 
-Bolt is a pure Go key/value store inspired by [Howard Chu's][hyc_symas] and
-the [LMDB project][lmdb]. The goal of the project is to provide a simple,
+Bolt is a pure Go key/value store inspired by [Howard Chu's][hyc_symas] 
+[LMDB project][lmdb]. The goal of the project is to provide a simple,
 fast, and reliable database for projects that don't require a full database
 server such as Postgres or MySQL.
 
