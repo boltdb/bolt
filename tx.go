@@ -30,14 +30,12 @@ type Tx struct {
 	stats          TxStats
 	commitHandlers []func()
 
-	// WriteFlag specifies the flag for write related methods
-	// like WriteTo.
-	// Tx opens the database file with the specified
-	// flag to copy the data.
+	// WriteFlag specifies the flag for write-related methods like WriteTo().
+	// Tx opens the database file with the specified flag to copy the data.
 	//
-	// By default, the flag is set to empty for in-memory workload.
-	// To avoid cache trashing for large on disk workload, set this
-	// flag with o_direct.
+	// By default, the flag is unset, which works well for mostly in-memory
+	// workloads. For databases that are much larger than available RAM,
+	// set the flag to syscall.O_DIRECT to avoid trashing the page cache.
 	WriteFlag int
 }
 
@@ -283,17 +281,17 @@ func (tx *Tx) Copy(w io.Writer) error {
 // If err == nil then exactly tx.Size() bytes will be written into the writer.
 func (tx *Tx) WriteTo(w io.Writer) (n int64, err error) {
 	// Attempt to open reader with WriteFlag
-	var f *os.File
-	if f, err = os.OpenFile(tx.db.path, os.O_RDONLY|tx.WriteFlag, 0); err != nil {
+	f, err := os.OpenFile(tx.db.path, os.O_RDONLY|tx.WriteFlag, 0)
+	if err != nil {
 		return 0, err
 	}
+	defer f.Close()
 
 	// Copy the meta pages.
 	tx.db.metalock.Lock()
 	n, err = io.CopyN(w, f, int64(tx.db.pageSize*2))
 	tx.db.metalock.Unlock()
 	if err != nil {
-		_ = f.Close()
 		return n, fmt.Errorf("meta copy: %s", err)
 	}
 
@@ -301,7 +299,6 @@ func (tx *Tx) WriteTo(w io.Writer) (n int64, err error) {
 	wn, err := io.CopyN(w, f, tx.Size()-int64(tx.db.pageSize*2))
 	n += wn
 	if err != nil {
-		_ = f.Close()
 		return n, err
 	}
 

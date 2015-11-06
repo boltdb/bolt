@@ -426,8 +426,11 @@ func (*Bucket) DeleteBucket(key []byte) error
 Bolt is a single file so it's easy to backup. You can use the `Tx.WriteTo()`
 function to write a consistent view of the database to a writer. If you call
 this from a read-only transaction, it will perform a hot backup and not block
-your other database reads and writes. It will also use `O_DIRECT` when available
-to prevent page cache trashing.
+your other database reads and writes.
+
+By default, it will use a regular file handle which will utilize the operating
+system's page cache. See the [`Tx`](https://godoc.org/github.com/boltdb/bolt#Tx)
+documentation for information about optimizing for larger-than-RAM datasets. 
 
 One common use case is to backup over HTTP so you can use tools like `cURL` to
 do database backups:
