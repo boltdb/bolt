@@ -29,6 +29,16 @@ type Tx struct {
 	pages          map[pgid]*page
 	stats          TxStats
 	commitHandlers []func()
+
+	// WriteFlag specifies the flag for write related methods
+	// like WriteTo.
+	// Tx opens the database file with the specified
+	// flag to copy the data.
+	//
+	// By default, the flag is set to empty for in-memory workload.
+	// To avoid cache trashing for large on disk workload, set this
+	// flag with o_direct.
+	WriteFlag int
 }
 
 // init initializes the transaction.
@@ -272,13 +282,10 @@ func (tx *Tx) Copy(w io.Writer) error {
 // WriteTo writes the entire database to a writer.
 // If err == nil then exactly tx.Size() bytes will be written into the writer.
 func (tx *Tx) WriteTo(w io.Writer) (n int64, err error) {
-	// Attempt to open reader directly.
+	// Attempt to open reader with WriteFlag
 	var f *os.File
-	if f, err = os.OpenFile(tx.db.path, os.O_RDONLY|odirect, 0); err != nil {
-		// Fallback to a regular open if that doesn't work.
-		if f, err = os.OpenFile(tx.db.path, os.O_RDONLY, 0); err != nil {
-			return 0, err
-		}
+	if f, err = os.OpenFile(tx.db.path, os.O_RDONLY|tx.WriteFlag, 0); err != nil {
+		return 0, err
 	}
 
 	// Copy the meta pages.
