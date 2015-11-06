@@ -40,8 +40,6 @@ func unlockFileEx(h syscall.Handle, reserved, locklow, lockhigh uint32, ol *sysc
 	return nil
 }
 
-var odirect int
-
 // fdatasync flushes written data to a file descriptor.
 func fdatasync(db *DB) error {
 	return db.file.Sync()
