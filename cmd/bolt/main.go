@@ -102,6 +102,8 @@ func (m *Main) Run(args ...string) error {
 		return newBenchCommand(m).Run(args[1:]...)
 	case "check":
 		return newCheckCommand(m).Run(args[1:]...)
+	case "compact":
+		return newCompactCommand(m).Run(args[1:]...)
 	case "dump":
 		return newDumpCommand(m).Run(args[1:]...)
 	case "info":
@@ -130,6 +132,7 @@ The commands are:
 
     bench       run synthetic benchmark against bolt
     check       verifies integrity of bolt database
+    compact     copies a bolt database, compacting it in the process
     info        print basic info
     help        print this screen
     pages       print list of pages with their types
@@ -1526,4 +1529,154 @@ func (n *leafPageElement) key() []byte {
 func (n *leafPageElement) value() []byte {
 	buf := (*[maxAllocSize]byte)(unsafe.Pointer(n))
 	return buf[n.pos+n.ksize : n.pos+n.ksize+n.vsize]
+}
+
+// CompactCommand represents the "compact" command execution.
+type CompactCommand struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// newCompactCommand returns a CompactCommand.
+func newCompactCommand(m *Main) *CompactCommand {
+	return &CompactCommand{
+		Stdin:  m.Stdin,
+		Stdout: m.Stdout,
+		Stderr: m.Stderr,
+	}
+}
+
+// BucketWalkFunc is the type of the function called for keys (buckets and "normal" values)
+// discovered by Walk.
+// keys is the list of keys to descend to the bucket owning the discovered key/value pair k/v.
+type BucketWalkFunc func(keys [][]byte, k []byte, v []byte) error
+
+// Walk walks recursively the bolt database db, calling walkFn for each key it finds.
+func (cmd *CompactCommand) Walk(db *bolt.DB, walkFn BucketWalkFunc) error {
+	return db.View(func(tx *bolt.Tx) error {
+		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
+			return cmd.walkBucket(b, nil, name, nil, walkFn)
+		})
+	})
+}
+
+func (cmd *CompactCommand) walkBucket(b *bolt.Bucket, keys [][]byte, k []byte, v []byte, walkFn BucketWalkFunc) error {
+	if err := walkFn(keys, k, v); err != nil {
+		return err
+	}
+	// not a bucket, exit.
+	if v != nil {
+		return nil
+	}
+
+	keys2 := append(keys, k)
+	return b.ForEach(func(k, v []byte) error {
+		if v == nil {
+			return cmd.walkBucket(b.Bucket(k), keys2, k, nil, walkFn)
+		}
+		return cmd.walkBucket(b, keys2, k, v, walkFn)
+	})
+}
+
+// Run executes the command.
+func (cmd *CompactCommand) Run(args ...string) error {
+	// Parse flags.
+	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	help := fs.Bool("h", false, "")
+	if err := fs.Parse(args); err != nil {
+		return err
+	} else if *help {
+		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		return ErrUsage
+	}
+
+	// Require database path.
+	path := fs.Arg(0)
+	if path == "" {
+		return ErrPathRequired
+	} else if _, err := os.Stat(path); os.IsNotExist(err) {
+		return ErrFileNotFound
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	initialSize := fi.Size()
+
+	// Open database.
+	db, err := bolt.Open(path, 0444, nil)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	var dstPath string
+	if fs.NArg() < 2 {
+		f, err := ioutil.TempFile("", "bolt-compact-")
+		if err != nil {
+			return fmt.Errorf("temp file: %v", err)
+		}
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		dstPath = f.Name()
+		fmt.Fprintf(cmd.Stdout, "compacting db to %s\n", dstPath)
+	} else {
+		dstPath = fs.Arg(1)
+	}
+
+	defer func() {
+		fi, err := os.Stat(dstPath)
+		if err != nil {
+			fmt.Fprintln(cmd.Stderr, err)
+		}
+		newSize := fi.Size()
+		if newSize == 0 {
+			fmt.Fprintln(cmd.Stderr, "db size is 0")
+		}
+		fmt.Fprintf(cmd.Stdout, "%d -> %d bytes (gain=%.2fx)\n", initialSize, newSize, float64(initialSize)/float64(newSize))
+	}()
+
+	dstdb, err := bolt.Open(dstPath, 0666, nil)
+	if err != nil {
+		return err
+	}
+	defer dstdb.Close()
+
+	return dstdb.Update(func(tx *bolt.Tx) error {
+		return cmd.Walk(db, func(keys [][]byte, k []byte, v []byte) error {
+			nk := len(keys)
+			if nk == 0 {
+				_, err := tx.CreateBucket(k)
+				return err
+			}
+
+			b := tx.Bucket(keys[0])
+			if nk > 1 {
+				for _, k := range keys[1:] {
+					b = b.Bucket(k)
+				}
+			}
+			if v == nil {
+				_, err := b.CreateBucket(k)
+				return err
+			}
+			return b.Put(k, v)
+		})
+	})
+}
+
+// Usage returns the help message.
+func (cmd *CompactCommand) Usage() string {
+	return strings.TrimLeft(`
+usage: bolt compact PATH [DST_PATH]
+
+Compact opens a database at PATH and walks it recursively entirely,
+copying keys as they are found from all buckets, to a newly created db.
+
+If DST_PATH is non-empty, the new db is created at DST_PATH, else it will be
+in a temporary location.
+
+The original db is left untouched.
+`, "\n")
 }
