@@ -1580,14 +1580,18 @@ func (cmd *CompactCommand) walkBucket(b *bolt.Bucket, keys [][]byte, k []byte, v
 }
 
 // Run executes the command.
-func (cmd *CompactCommand) Run(args ...string) error {
+func (cmd *CompactCommand) Run(args ...string) (err error) {
 	// Parse flags.
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
-	help := fs.Bool("h", false, "")
+	fs.SetOutput(cmd.Stderr)
+	var txMaxSize int64
+	fs.Int64Var(&txMaxSize, "tx-max-size", 0, "commit tx when key/value size sum exceed this value. If 0, only one transaction is used. If you are compacting a large database, set this to a value appropriate for the available memory.")
+	help := fs.Bool("h", false, "print this help")
 	if err := fs.Parse(args); err != nil {
 		return err
 	} else if *help {
 		fmt.Fprintln(cmd.Stderr, cmd.Usage())
+		fs.PrintDefaults()
 		return ErrUsage
 	}
 
@@ -1643,26 +1647,49 @@ func (cmd *CompactCommand) Run(args ...string) error {
 	}
 	defer dstdb.Close()
 
-	return dstdb.Update(func(tx *bolt.Tx) error {
-		return cmd.Walk(db, func(keys [][]byte, k []byte, v []byte) error {
-			nk := len(keys)
-			if nk == 0 {
-				_, err := tx.CreateBucket(k)
+	// commit regularly, or we'll run out of memory for large datasets if using one transaction.
+	var size int64
+	tx, err := dstdb.Begin(true)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		} else {
+			err = tx.Commit()
+		}
+	}()
+	return cmd.Walk(db, func(keys [][]byte, k []byte, v []byte) error {
+		s := int64(len(k) + len(v))
+		if size+s > txMaxSize && txMaxSize != 0 {
+			if err := tx.Commit(); err != nil {
 				return err
 			}
+			tx, err = dstdb.Begin(true)
+			if err != nil {
+				return err
+			}
+			size = 0
+		}
+		size += s
+		nk := len(keys)
+		if nk == 0 {
+			_, err := tx.CreateBucket(k)
+			return err
+		}
 
-			b := tx.Bucket(keys[0])
-			if nk > 1 {
-				for _, k := range keys[1:] {
-					b = b.Bucket(k)
-				}
+		b := tx.Bucket(keys[0])
+		if nk > 1 {
+			for _, k := range keys[1:] {
+				b = b.Bucket(k)
 			}
-			if v == nil {
-				_, err := b.CreateBucket(k)
-				return err
-			}
-			return b.Put(k, v)
-		})
+		}
+		if v == nil {
+			_, err := b.CreateBucket(k)
+			return err
+		}
+		return b.Put(k, v)
 	})
 }
 
