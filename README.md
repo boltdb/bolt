@@ -344,10 +344,15 @@ Next()   Move to the next key.
 Prev()   Move to the previous key.
 ```
 
-When you have iterated to the end of the cursor then `Next()` will return `nil`.
-You must seek to a position using `First()`, `Last()`, or `Seek()` before
-calling `Next()` or `Prev()`. If you do not seek to a position then these
-functions will return `nil`.
+Each of those functions has a return signature of `(key []byte, value []byte)`.
+When you have iterated to the end of the cursor then `Next()` will return a
+`nil` key.  You must seek to a position using `First()`, `Last()`, or `Seek()`
+before calling `Next()` or `Prev()`. If you do not seek to a position then
+these functions will return a `nil` key.
+
+During iteration, if the key is non-`nil` but the value is `nil`, that means
+the key refers to a bucket rather than a value.  Use `Bucket.Bucket()` to
+access the sub-bucket.
 
 
 #### Prefix scans
