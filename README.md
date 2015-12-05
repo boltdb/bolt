@@ -1,7 +1,7 @@
 Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https://drone.io/github.com/boltdb/bolt/latest) [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.png?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.png)](https://godoc.org/github.com/boltdb/bolt) ![Version](http://img.shields.io/badge/version-1.0-green.png)
 ====
 
-Bolt is a pure Go key/value store inspired by [Howard Chu's][hyc_symas] 
+Bolt is a pure Go key/value store inspired by [Howard Chu's][hyc_symas]
 [LMDB project][lmdb]. The goal of the project is to provide a simple,
 fast, and reliable database for projects that don't require a full database
 server such as Postgres or MySQL.
@@ -269,7 +269,7 @@ then you must use `copy()` to copy it to another byte slice.
 
 
 ### Autoincrementing integer for the bucket
-By using the NextSequence() function, you can let Bolt determine a sequence
+By using the `NextSequence()` function, you can let Bolt determine a sequence
 which can be used as the unique identifier for your key/value pairs. See the
 example below.
 
@@ -435,7 +435,7 @@ your other database reads and writes.
 
 By default, it will use a regular file handle which will utilize the operating
 system's page cache. See the [`Tx`](https://godoc.org/github.com/boltdb/bolt#Tx)
-documentation for information about optimizing for larger-than-RAM datasets. 
+documentation for information about optimizing for larger-than-RAM datasets.
 
 One common use case is to backup over HTTP so you can use tools like `cURL` to
 do database backups:
@@ -626,7 +626,7 @@ Here are a few things to note when evaluating and using Bolt:
 
 * The data structures in the Bolt database are memory mapped so the data file
   will be endian specific. This means that you cannot copy a Bolt file from a
-  little endian machine to a big endian machine and have it work. For most 
+  little endian machine to a big endian machine and have it work. For most
   users this is not a concern since most modern CPUs are little endian.
 
 * Because of the way pages are laid out on disk, Bolt cannot truncate data files
