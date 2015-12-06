@@ -588,9 +588,8 @@ It's important to pick the right tool for the job and Bolt is no exception.
 Here are a few things to note when evaluating and using Bolt:
 
 * Bolt is good for read intensive workloads. Sequential write performance is
-  also fast but random writes can be slow. You can add a write-ahead log or
-  [transaction coalescer](https://github.com/boltdb/coalescer) in front of Bolt
-  to mitigate this issue.
+  also fast but random writes can be slow. You can use `DB.Batch()` or add a
+  write-ahead log to help mitigate this issue.
 
 * Bolt uses a B+tree internally so there can be a lot of random page access.
   SSDs provide a significant performance boost over spinning disks.
