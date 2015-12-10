@@ -177,7 +177,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	// Initialize the database if it doesn't exist.
 	if info, err := db.file.Stat(); err != nil {
-		return nil, fmt.Errorf("stat error: %s", err)
+		return nil, err
 	} else if info.Size() == 0 {
 		// Initialize new files with meta pages.
 		if err := db.init(); err != nil {
@@ -189,7 +189,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 			m := db.pageInBuffer(buf[:], 0).meta()
 			if err := m.validate(); err != nil {
-				return nil, fmt.Errorf("meta0 error: %s", err)
+				return nil, err
 			}
 			db.pageSize = int(m.pageSize)
 		}
@@ -253,10 +253,10 @@ func (db *DB) mmap(minsz int) error {
 
 	// Validate the meta pages.
 	if err := db.meta0.validate(); err != nil {
-		return fmt.Errorf("meta0 error: %s", err)
+		return err
 	}
 	if err := db.meta1.validate(); err != nil {
-		return fmt.Errorf("meta1 error: %s", err)
+		return err
 	}
 
 	return nil
