@@ -20,6 +20,7 @@ import (
 )
 
 var statsFlag = flag.Bool("stats", false, "show performance stats")
+var tempPath = flag.String("path", "", "path for databases")
 
 // version is the data file format version.
 const version = 2
@@ -906,7 +907,7 @@ func (db *TestDB) CopyTempFile() {
 
 // tempfile returns a temporary file path.
 func tempfile() string {
-	f, _ := ioutil.TempFile("", "bolt-")
+	f, _ := ioutil.TempFile(*tempPath, "bolt-")
 	f.Close()
 	os.Remove(f.Name())
 	return f.Name()

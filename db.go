@@ -636,7 +636,7 @@ func (db *DB) meta() *meta {
 // allocate returns a contiguous block of memory starting at a given page.
 func (db *DB) allocate(count int) (*page, error) {
 	// Allocate a temporary buffer for the page.
-	buf := make([]byte, count*db.pageSize)
+	buf := allocPage(count * db.pageSize)
 	p := (*page)(unsafe.Pointer(&buf[0]))
 	p.overflow = uint32(count - 1)
 
