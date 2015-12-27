@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"os"
+	"reflect"
 	"sort"
 	"testing"
 	"testing/quick"
@@ -14,100 +16,149 @@ import (
 
 // Ensure that a cursor can return a reference to the bucket that created it.
 func TestCursor_Bucket(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
-	db.Update(func(tx *bolt.Tx) error {
-		b, _ := tx.CreateBucket([]byte("widgets"))
-		c := b.Cursor()
-		equals(t, b, c.Bucket())
+	db := MustOpenDB()
+	defer db.MustClose()
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cb := b.Cursor().Bucket(); !reflect.DeepEqual(cb, b) {
+			t.Fatal("cursor bucket mismatch")
+		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a Tx cursor can seek to the appropriate keys.
 func TestCursor_Seek(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
-	db.Update(func(tx *bolt.Tx) error {
+	db := MustOpenDB()
+	defer db.MustClose()
+	if err := db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
-		ok(t, err)
-		ok(t, b.Put([]byte("foo"), []byte("0001")))
-		ok(t, b.Put([]byte("bar"), []byte("0002")))
-		ok(t, b.Put([]byte("baz"), []byte("0003")))
-		_, err = b.CreateBucket([]byte("bkt"))
-		ok(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("foo"), []byte("0001")); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("bar"), []byte("0002")); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("baz"), []byte("0003")); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := b.CreateBucket([]byte("bkt")); err != nil {
+			t.Fatal(err)
+		}
 		return nil
-	})
-	db.View(func(tx *bolt.Tx) error {
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 
 		// Exact match should go to the key.
-		k, v := c.Seek([]byte("bar"))
-		equals(t, []byte("bar"), k)
-		equals(t, []byte("0002"), v)
+		if k, v := c.Seek([]byte("bar")); !bytes.Equal(k, []byte("bar")) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte("0002")) {
+			t.Fatalf("unexpected value: %v", v)
+		}
 
 		// Inexact match should go to the next key.
-		k, v = c.Seek([]byte("bas"))
-		equals(t, []byte("baz"), k)
-		equals(t, []byte("0003"), v)
+		if k, v := c.Seek([]byte("bas")); !bytes.Equal(k, []byte("baz")) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte("0003")) {
+			t.Fatalf("unexpected value: %v", v)
+		}
 
 		// Low key should go to the first key.
-		k, v = c.Seek([]byte(""))
-		equals(t, []byte("bar"), k)
-		equals(t, []byte("0002"), v)
+		if k, v := c.Seek([]byte("")); !bytes.Equal(k, []byte("bar")) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if !bytes.Equal(v, []byte("0002")) {
+			t.Fatalf("unexpected value: %v", v)
+		}
 
 		// High key should return no key.
-		k, v = c.Seek([]byte("zzz"))
-		assert(t, k == nil, "")
-		assert(t, v == nil, "")
+		if k, v := c.Seek([]byte("zzz")); k != nil {
+			t.Fatalf("expected nil key: %v", k)
+		} else if v != nil {
+			t.Fatalf("expected nil value: %v", v)
+		}
 
 		// Buckets should return their key but no value.
-		k, v = c.Seek([]byte("bkt"))
-		equals(t, []byte("bkt"), k)
-		assert(t, v == nil, "")
+		if k, v := c.Seek([]byte("bkt")); !bytes.Equal(k, []byte("bkt")) {
+			t.Fatalf("unexpected key: %v", k)
+		} else if v != nil {
+			t.Fatalf("expected nil value: %v", v)
+		}
 
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestCursor_Delete(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
-	var count = 1000
+	const count = 1000
 
 	// Insert every other key between 0 and $count.
-	db.Update(func(tx *bolt.Tx) error {
-		b, _ := tx.CreateBucket([]byte("widgets"))
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
 		for i := 0; i < count; i += 1 {
 			k := make([]byte, 8)
 			binary.BigEndian.PutUint64(k, uint64(i))
-			b.Put(k, make([]byte, 100))
+			if err := b.Put(k, make([]byte, 100)); err != nil {
+				t.Fatal(err)
+			}
 		}
-		b.CreateBucket([]byte("sub"))
+		if _, err := b.CreateBucket([]byte("sub")); err != nil {
+			t.Fatal(err)
+		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
-	db.Update(func(tx *bolt.Tx) error {
+	if err := db.Update(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		bound := make([]byte, 8)
 		binary.BigEndian.PutUint64(bound, uint64(count/2))
 		for key, _ := c.First(); bytes.Compare(key, bound) < 0; key, _ = c.Next() {
 			if err := c.Delete(); err != nil {
-				return err
+				t.Fatal(err)
 			}
 		}
-		c.Seek([]byte("sub"))
-		err := c.Delete()
-		equals(t, err, bolt.ErrIncompatibleValue)
-		return nil
-	})
 
-	db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("widgets"))
-		equals(t, b.Stats().KeyN, count/2+1)
+		c.Seek([]byte("sub"))
+		if err := c.Delete(); err != bolt.ErrIncompatibleValue {
+			t.Fatalf("unexpected error: %s", err)
+		}
+
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
+		stats := tx.Bucket([]byte("widgets")).Stats()
+		if stats.KeyN != count/2+1 {
+			t.Fatalf("unexpected KeyN: %d", stats.KeyN)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a Tx cursor can seek to the appropriate keys when there are a
@@ -116,25 +167,33 @@ func TestCursor_Delete(t *testing.T) {
 //
 // Related: https://github.com/boltdb/bolt/pull/187
 func TestCursor_Seek_Large(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
 	var count = 10000
 
 	// Insert every other key between 0 and $count.
-	db.Update(func(tx *bolt.Tx) error {
-		b, _ := tx.CreateBucket([]byte("widgets"))
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		for i := 0; i < count; i += 100 {
 			for j := i; j < i+100; j += 2 {
 				k := make([]byte, 8)
 				binary.BigEndian.PutUint64(k, uint64(j))
-				b.Put(k, make([]byte, 100))
+				if err := b.Put(k, make([]byte, 100)); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
-	db.View(func(tx *bolt.Tx) error {
+	if err := db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for i := 0; i < count; i++ {
 			seek := make([]byte, 8)
@@ -145,171 +204,269 @@ func TestCursor_Seek_Large(t *testing.T) {
 			// The last seek is beyond the end of the the range so
 			// it should return nil.
 			if i == count-1 {
-				assert(t, k == nil, "")
+				if k != nil {
+					t.Fatal("expected nil key")
+				}
 				continue
 			}
 
 			// Otherwise we should seek to the exact key or the next key.
 			num := binary.BigEndian.Uint64(k)
 			if i%2 == 0 {
-				equals(t, uint64(i), num)
+				if num != uint64(i) {
+					t.Fatalf("unexpected num: %d", num)
+				}
 			} else {
-				equals(t, uint64(i+1), num)
+				if num != uint64(i+1) {
+					t.Fatalf("unexpected num: %d", num)
+				}
 			}
 		}
 
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a cursor can iterate over an empty bucket without error.
 func TestCursor_EmptyBucket(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
-	db.Update(func(tx *bolt.Tx) error {
+	db := MustOpenDB()
+	defer db.MustClose()
+	if err := db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
-	})
-	db.View(func(tx *bolt.Tx) error {
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		k, v := c.First()
-		assert(t, k == nil, "")
-		assert(t, v == nil, "")
+		if k != nil {
+			t.Fatalf("unexpected key: %v", k)
+		} else if v != nil {
+			t.Fatalf("unexpected value: %v", v)
+		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a Tx cursor can reverse iterate over an empty bucket without error.
 func TestCursor_EmptyBucketReverse(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
-	db.Update(func(tx *bolt.Tx) error {
+	if err := db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("widgets"))
 		return err
-	})
-	db.View(func(tx *bolt.Tx) error {
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.View(func(tx *bolt.Tx) error {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		k, v := c.Last()
-		assert(t, k == nil, "")
-		assert(t, v == nil, "")
+		if k != nil {
+			t.Fatalf("unexpected key: %v", k)
+		} else if v != nil {
+			t.Fatalf("unexpected value: %v", v)
+		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a Tx cursor can iterate over a single root with a couple elements.
 func TestCursor_Iterate_Leaf(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucket([]byte("widgets"))
-		tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte{})
-		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte{0})
-		tx.Bucket([]byte("widgets")).Put([]byte("bar"), []byte{1})
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("baz"), []byte{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("foo"), []byte{0}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("bar"), []byte{1}); err != nil {
+			t.Fatal(err)
+		}
 		return nil
-	})
-	tx, _ := db.Begin(false)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
 	k, v := c.First()
-	equals(t, string(k), "bar")
-	equals(t, v, []byte{1})
+	if !bytes.Equal(k, []byte("bar")) {
+		t.Fatalf("unexpected key: %v", k)
+	} else if !bytes.Equal(v, []byte{1}) {
+		t.Fatalf("unexpected value: %v", v)
+	}
 
 	k, v = c.Next()
-	equals(t, string(k), "baz")
-	equals(t, v, []byte{})
+	if !bytes.Equal(k, []byte("baz")) {
+		t.Fatalf("unexpected key: %v", k)
+	} else if !bytes.Equal(v, []byte{}) {
+		t.Fatalf("unexpected value: %v", v)
+	}
 
 	k, v = c.Next()
-	equals(t, string(k), "foo")
-	equals(t, v, []byte{0})
+	if !bytes.Equal(k, []byte("foo")) {
+		t.Fatalf("unexpected key: %v", k)
+	} else if !bytes.Equal(v, []byte{0}) {
+		t.Fatalf("unexpected value: %v", v)
+	}
 
 	k, v = c.Next()
-	assert(t, k == nil, "")
-	assert(t, v == nil, "")
+	if k != nil {
+		t.Fatalf("expected nil key: %v", k)
+	} else if v != nil {
+		t.Fatalf("expected nil value: %v", v)
+	}
 
 	k, v = c.Next()
-	assert(t, k == nil, "")
-	assert(t, v == nil, "")
+	if k != nil {
+		t.Fatalf("expected nil key: %v", k)
+	} else if v != nil {
+		t.Fatalf("expected nil value: %v", v)
+	}
 
-	tx.Rollback()
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a Tx cursor can iterate in reverse over a single root with a couple elements.
 func TestCursor_LeafRootReverse(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucket([]byte("widgets"))
-		tx.Bucket([]byte("widgets")).Put([]byte("baz"), []byte{})
-		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte{0})
-		tx.Bucket([]byte("widgets")).Put([]byte("bar"), []byte{1})
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("baz"), []byte{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("foo"), []byte{0}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("bar"), []byte{1}); err != nil {
+			t.Fatal(err)
+		}
 		return nil
-	})
-	tx, _ := db.Begin(false)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin(false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
-	k, v := c.Last()
-	equals(t, string(k), "foo")
-	equals(t, v, []byte{0})
+	if k, v := c.Last(); !bytes.Equal(k, []byte("foo")) {
+		t.Fatalf("unexpected key: %v", k)
+	} else if !bytes.Equal(v, []byte{0}) {
+		t.Fatalf("unexpected value: %v", v)
+	}
 
-	k, v = c.Prev()
-	equals(t, string(k), "baz")
-	equals(t, v, []byte{})
+	if k, v := c.Prev(); !bytes.Equal(k, []byte("baz")) {
+		t.Fatalf("unexpected key: %v", k)
+	} else if !bytes.Equal(v, []byte{}) {
+		t.Fatalf("unexpected value: %v", v)
+	}
 
-	k, v = c.Prev()
-	equals(t, string(k), "bar")
-	equals(t, v, []byte{1})
+	if k, v := c.Prev(); !bytes.Equal(k, []byte("bar")) {
+		t.Fatalf("unexpected key: %v", k)
+	} else if !bytes.Equal(v, []byte{1}) {
+		t.Fatalf("unexpected value: %v", v)
+	}
 
-	k, v = c.Prev()
-	assert(t, k == nil, "")
-	assert(t, v == nil, "")
+	if k, v := c.Prev(); k != nil {
+		t.Fatalf("expected nil key: %v", k)
+	} else if v != nil {
+		t.Fatalf("expected nil value: %v", v)
+	}
 
-	k, v = c.Prev()
-	assert(t, k == nil, "")
-	assert(t, v == nil, "")
+	if k, v := c.Prev(); k != nil {
+		t.Fatalf("expected nil key: %v", k)
+	} else if v != nil {
+		t.Fatalf("expected nil value: %v", v)
+	}
 
-	tx.Rollback()
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a Tx cursor can restart from the beginning.
 func TestCursor_Restart(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucket([]byte("widgets"))
-		tx.Bucket([]byte("widgets")).Put([]byte("bar"), []byte{})
-		tx.Bucket([]byte("widgets")).Put([]byte("foo"), []byte{})
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("bar"), []byte{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("foo"), []byte{}); err != nil {
+			t.Fatal(err)
+		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
-	tx, _ := db.Begin(false)
+	tx, err := db.Begin(false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
-	k, _ := c.First()
-	equals(t, string(k), "bar")
+	if k, _ := c.First(); !bytes.Equal(k, []byte("bar")) {
+		t.Fatalf("unexpected key: %v", k)
+	}
+	if k, _ := c.Next(); !bytes.Equal(k, []byte("foo")) {
+		t.Fatalf("unexpected key: %v", k)
+	}
 
-	k, _ = c.Next()
-	equals(t, string(k), "foo")
+	if k, _ := c.First(); !bytes.Equal(k, []byte("bar")) {
+		t.Fatalf("unexpected key: %v", k)
+	}
+	if k, _ := c.Next(); !bytes.Equal(k, []byte("foo")) {
+		t.Fatalf("unexpected key: %v", k)
+	}
 
-	k, _ = c.First()
-	equals(t, string(k), "bar")
-
-	k, _ = c.Next()
-	equals(t, string(k), "foo")
-
-	tx.Rollback()
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a cursor can skip over empty pages that have been deleted.
 func TestCursor_First_EmptyPages(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
 	// Create 1000 keys in the "widgets" bucket.
-	db.Update(func(tx *bolt.Tx) error {
+	if err := db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
 		if err != nil {
 			t.Fatal(err)
@@ -322,10 +479,12 @@ func TestCursor_First_EmptyPages(t *testing.T) {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Delete half the keys and then try to iterate.
-	db.Update(func(tx *bolt.Tx) error {
+	if err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		for i := 0; i < 600; i++ {
 			if err := b.Delete(u64tob(uint64(i))); err != nil {
@@ -343,38 +502,61 @@ func TestCursor_First_EmptyPages(t *testing.T) {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a Tx can iterate over all elements in a bucket.
 func TestCursor_QuickCheck(t *testing.T) {
 	f := func(items testdata) bool {
-		db := NewTestDB()
-		defer db.Close()
+		db := MustOpenDB()
+		defer db.MustClose()
 
 		// Bulk insert all values.
-		tx, _ := db.Begin(true)
-		tx.CreateBucket([]byte("widgets"))
-		b := tx.Bucket([]byte("widgets"))
-		for _, item := range items {
-			ok(t, b.Put(item.Key, item.Value))
+		tx, err := db.Begin(true)
+		if err != nil {
+			t.Fatal(err)
 		}
-		ok(t, tx.Commit())
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range items {
+			if err := b.Put(item.Key, item.Value); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 
 		// Sort test data.
 		sort.Sort(items)
 
 		// Iterate over all items and check consistency.
 		var index = 0
-		tx, _ = db.Begin(false)
+		tx, err = db.Begin(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.First(); k != nil && index < len(items); k, v = c.Next() {
-			equals(t, k, items[index].Key)
-			equals(t, v, items[index].Value)
+			if !bytes.Equal(k, items[index].Key) {
+				t.Fatalf("unexpected key: %v", k)
+			} else if !bytes.Equal(v, items[index].Value) {
+				t.Fatalf("unexpected value: %v", v)
+			}
 			index++
 		}
-		equals(t, len(items), index)
-		tx.Rollback()
+		if len(items) != index {
+			t.Fatalf("unexpected item count: %v, expected %v", len(items), index)
+		}
+
+		if err := tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
 
 		return true
 	}
@@ -386,32 +568,52 @@ func TestCursor_QuickCheck(t *testing.T) {
 // Ensure that a transaction can iterate over all elements in a bucket in reverse.
 func TestCursor_QuickCheck_Reverse(t *testing.T) {
 	f := func(items testdata) bool {
-		db := NewTestDB()
-		defer db.Close()
+		db := MustOpenDB()
+		defer db.MustClose()
 
 		// Bulk insert all values.
-		tx, _ := db.Begin(true)
-		tx.CreateBucket([]byte("widgets"))
-		b := tx.Bucket([]byte("widgets"))
-		for _, item := range items {
-			ok(t, b.Put(item.Key, item.Value))
+		tx, err := db.Begin(true)
+		if err != nil {
+			t.Fatal(err)
 		}
-		ok(t, tx.Commit())
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range items {
+			if err := b.Put(item.Key, item.Value); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
 
 		// Sort test data.
 		sort.Sort(revtestdata(items))
 
 		// Iterate over all items and check consistency.
 		var index = 0
-		tx, _ = db.Begin(false)
+		tx, err = db.Begin(false)
+		if err != nil {
+			t.Fatal(err)
+		}
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.Last(); k != nil && index < len(items); k, v = c.Prev() {
-			equals(t, k, items[index].Key)
-			equals(t, v, items[index].Value)
+			if !bytes.Equal(k, items[index].Key) {
+				t.Fatalf("unexpected key: %v", k)
+			} else if !bytes.Equal(v, items[index].Value) {
+				t.Fatalf("unexpected value: %v", v)
+			}
 			index++
 		}
-		equals(t, len(items), index)
-		tx.Rollback()
+		if len(items) != index {
+			t.Fatalf("unexpected item count: %v, expected %v", len(items), index)
+		}
+
+		if err := tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
 
 		return true
 	}
@@ -422,76 +624,114 @@ func TestCursor_QuickCheck_Reverse(t *testing.T) {
 
 // Ensure that a Tx cursor can iterate over subbuckets.
 func TestCursor_QuickCheck_BucketsOnly(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
-	db.Update(func(tx *bolt.Tx) error {
+	if err := db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
-		ok(t, err)
-		_, err = b.CreateBucket([]byte("foo"))
-		ok(t, err)
-		_, err = b.CreateBucket([]byte("bar"))
-		ok(t, err)
-		_, err = b.CreateBucket([]byte("baz"))
-		ok(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.CreateBucket([]byte("foo")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.CreateBucket([]byte("bar")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.CreateBucket([]byte("baz")); err != nil {
+			t.Fatal(err)
+		}
 		return nil
-	})
-	db.View(func(tx *bolt.Tx) error {
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
 		var names []string
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
 			names = append(names, string(k))
-			assert(t, v == nil, "")
+			if v != nil {
+				t.Fatalf("unexpected value: %v", v)
+			}
 		}
-		equals(t, names, []string{"bar", "baz", "foo"})
+		if !reflect.DeepEqual(names, []string{"bar", "baz", "foo"}) {
+			t.Fatalf("unexpected names: %+v", names)
+		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Ensure that a Tx cursor can reverse iterate over subbuckets.
 func TestCursor_QuickCheck_BucketsOnly_Reverse(t *testing.T) {
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
-	db.Update(func(tx *bolt.Tx) error {
+	if err := db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
-		ok(t, err)
-		_, err = b.CreateBucket([]byte("foo"))
-		ok(t, err)
-		_, err = b.CreateBucket([]byte("bar"))
-		ok(t, err)
-		_, err = b.CreateBucket([]byte("baz"))
-		ok(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.CreateBucket([]byte("foo")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.CreateBucket([]byte("bar")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.CreateBucket([]byte("baz")); err != nil {
+			t.Fatal(err)
+		}
 		return nil
-	})
-	db.View(func(tx *bolt.Tx) error {
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
 		var names []string
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		for k, v := c.Last(); k != nil; k, v = c.Prev() {
 			names = append(names, string(k))
-			assert(t, v == nil, "")
+			if v != nil {
+				t.Fatalf("unexpected value: %v", v)
+			}
 		}
-		equals(t, names, []string{"foo", "baz", "bar"})
+		if !reflect.DeepEqual(names, []string{"foo", "baz", "bar"}) {
+			t.Fatalf("unexpected names: %+v", names)
+		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func ExampleCursor() {
 	// Open the database.
-	db, _ := bolt.Open(tempfile(), 0666, nil)
+	db, err := bolt.Open(tempfile(), 0666, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer os.Remove(db.Path())
-	defer db.Close()
 
 	// Start a read-write transaction.
-	db.Update(func(tx *bolt.Tx) error {
+	if err := db.Update(func(tx *bolt.Tx) error {
 		// Create a new bucket.
-		tx.CreateBucket([]byte("animals"))
+		b, err := tx.CreateBucket([]byte("animals"))
+		if err != nil {
+			return err
+		}
 
 		// Insert data into a bucket.
-		b := tx.Bucket([]byte("animals"))
-		b.Put([]byte("dog"), []byte("fun"))
-		b.Put([]byte("cat"), []byte("lame"))
-		b.Put([]byte("liger"), []byte("awesome"))
+		if err := b.Put([]byte("dog"), []byte("fun")); err != nil {
+			log.Fatal(err)
+		}
+		if err := b.Put([]byte("cat"), []byte("lame")); err != nil {
+			log.Fatal(err)
+		}
+		if err := b.Put([]byte("liger"), []byte("awesome")); err != nil {
+			log.Fatal(err)
+		}
 
 		// Create a cursor for iteration.
 		c := b.Cursor()
@@ -506,7 +746,13 @@ func ExampleCursor() {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := db.Close(); err != nil {
+		log.Fatal(err)
+	}
 
 	// Output:
 	// A cat is lame.
@@ -516,20 +762,30 @@ func ExampleCursor() {
 
 func ExampleCursor_reverse() {
 	// Open the database.
-	db, _ := bolt.Open(tempfile(), 0666, nil)
+	db, err := bolt.Open(tempfile(), 0666, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer os.Remove(db.Path())
-	defer db.Close()
 
 	// Start a read-write transaction.
-	db.Update(func(tx *bolt.Tx) error {
+	if err := db.Update(func(tx *bolt.Tx) error {
 		// Create a new bucket.
-		tx.CreateBucket([]byte("animals"))
+		b, err := tx.CreateBucket([]byte("animals"))
+		if err != nil {
+			return err
+		}
 
 		// Insert data into a bucket.
-		b := tx.Bucket([]byte("animals"))
-		b.Put([]byte("dog"), []byte("fun"))
-		b.Put([]byte("cat"), []byte("lame"))
-		b.Put([]byte("liger"), []byte("awesome"))
+		if err := b.Put([]byte("dog"), []byte("fun")); err != nil {
+			log.Fatal(err)
+		}
+		if err := b.Put([]byte("cat"), []byte("lame")); err != nil {
+			log.Fatal(err)
+		}
+		if err := b.Put([]byte("liger"), []byte("awesome")); err != nil {
+			log.Fatal(err)
+		}
 
 		// Create a cursor for iteration.
 		c := b.Cursor()
@@ -545,7 +801,14 @@ func ExampleCursor_reverse() {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	// Close the database to release the file lock.
+	if err := db.Close(); err != nil {
+		log.Fatal(err)
+	}
 
 	// Output:
 	// A liger is awesome.

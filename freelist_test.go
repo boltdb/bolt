@@ -117,7 +117,9 @@ func TestFreelist_write(t *testing.T) {
 	f.pending[100] = []pgid{28, 11}
 	f.pending[101] = []pgid{3}
 	p := (*page)(unsafe.Pointer(&buf[0]))
-	f.write(p)
+	if err := f.write(p); err != nil {
+		t.Fatal(err)
+	}
 
 	// Read the page back out.
 	f2 := newFreelist()
