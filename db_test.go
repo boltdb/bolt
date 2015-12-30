@@ -368,6 +368,51 @@ func TestOpen_ReadOnly(t *testing.T) {
 	}
 }
 
+// TestDB_Open_InitialMmapSize tests if having InitialMmapSize large enough
+// to hold data from concurrent write transaction resolves the issue that
+// read transaction blocks the write transaction and causes deadlock.
+// This is a very hacky test since the mmap size is not exposed.
+func TestDB_Open_InitialMmapSize(t *testing.T) {
+	path := tempfile()
+	defer os.Remove(path)
+
+	initMmapSize := 1 << 31  // 2GB
+	testWriteSize := 1 << 27 // 134MB
+
+	db, err := bolt.Open(path, 0666, &bolt.Options{InitialMmapSize: initMmapSize})
+	assert(t, err == nil, "")
+
+	// create a long-running read transaction
+	// that never gets closed while writing
+	rtx, err := db.Begin(false)
+	assert(t, err == nil, "")
+	defer rtx.Rollback()
+
+	// create a write transaction
+	wtx, err := db.Begin(true)
+	assert(t, err == nil, "")
+
+	b, err := wtx.CreateBucket([]byte("test"))
+	assert(t, err == nil, "")
+
+	// and commit a large write
+	err = b.Put([]byte("foo"), make([]byte, testWriteSize))
+	assert(t, err == nil, "")
+
+	done := make(chan struct{})
+
+	go func() {
+		wtx.Commit()
+		done <- struct{}{}
+	}()
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Errorf("unexpected that the reader blocks writer")
+	case <-done:
+	}
+}
+
 // TODO(benbjohnson): Test corruption at every byte of the first two pages.
 
 // Ensure that a database cannot open a transaction when it's not open.
