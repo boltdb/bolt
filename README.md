@@ -13,7 +13,6 @@ and setting values. That's it.
 [hyc_symas]: https://twitter.com/hyc_symas
 [lmdb]: http://symas.com/mdb/
 
-
 ## Project Status
 
 Bolt is stable and the API is fixed. Full unit test coverage and randomized
@@ -22,6 +21,35 @@ Bolt is currently in high-load production environments serving databases as
 large as 1TB. Many companies such as Shopify and Heroku use Bolt-backed
 services every day.
 
+## Table of Contents
+
+- [Getting Started](#getting-started)
+  - [Installing](#installing)
+  - [Opening a database](#opening-a-database)
+  - [Transactions](#transactions)
+    - [Read-write transactions](#read-write-transactions)
+    - [Read-only transactions](#read-only-transactions)
+    - [Batch read-write transactions](#batch-read-write-transactions)
+    - [Managing transactions manually](#managing-transactions-manually)
+  - [Using buckets](#using-buckets)
+  - [Using key/value pairs](#using-keyvalue-pairs)
+  - [Autoincrementing integer for the bucket](#autoincrementing-integer-for-the-bucket)
+  - [Iterating over keys](#iterating-over-keys)
+    - [Prefix scans](#prefix-scans)
+    - [Range scans](#range-scans)
+    - [ForEach()](#foreach)
+  - [Nested buckets](#nested-buckets)
+  - [Database backups](#database-backups)
+  - [Statistics](#statistics)
+  - [Read-Only Mode](#read-only-mode)
+- [Resources](#resources)
+- [Comparison with other databases](#comparison-with-other-databases)
+  - [Postgres, MySQL, & other relational databases](#postgres-mysql--other-relational-databases)
+  - [LevelDB, RocksDB](#leveldb-rocksdb)
+  - [LMDB](#lmdb)
+- [Caveats & Limitations](#caveats--limitations)
+- [Reading the Source](#reading-the-source)
+- [Other Projects Using Bolt](#other-projects-using-bolt)
 
 ## Getting Started
 
