@@ -717,7 +717,7 @@ func (cmd *PagesCommand) Run(args ...string) error {
 			fmt.Fprintf(cmd.Stdout, "%-8d %-10s %-6s %-6s\n", p.ID, p.Type, count, overflow)
 
 			// Move to the next non-overflow page.
-			id += 1
+			id++
 			if p.Type != "free" {
 				id += p.OverflowCount
 			}
@@ -790,7 +790,7 @@ func (cmd *StatsCommand) Run(args ...string) error {
 		if err := tx.ForEach(func(name []byte, b *bolt.Bucket) error {
 			if bytes.HasPrefix(name, []byte(prefix)) {
 				s.Add(b.Stats())
-				count += 1
+				count++
 			}
 			return nil
 		}); err != nil {
@@ -1295,7 +1295,7 @@ type BenchResults struct {
 	ReadDuration  time.Duration
 }
 
-// Returns the duration for a single write operation.
+// WriteOpDuration returns the duration for a single write operation.
 func (r *BenchResults) WriteOpDuration() time.Duration {
 	if r.WriteOps == 0 {
 		return 0
@@ -1303,7 +1303,7 @@ func (r *BenchResults) WriteOpDuration() time.Duration {
 	return r.WriteDuration / time.Duration(r.WriteOps)
 }
 
-// Returns average number of write operations that can be performed per second.
+// WriteOpsPerSecond returns average number of write operations that can be performed per second.
 func (r *BenchResults) WriteOpsPerSecond() int {
 	var op = r.WriteOpDuration()
 	if op == 0 {
@@ -1312,7 +1312,7 @@ func (r *BenchResults) WriteOpsPerSecond() int {
 	return int(time.Second) / int(op)
 }
 
-// Returns the duration for a single read operation.
+// ReadOpDuration returns the duration for a single read operation.
 func (r *BenchResults) ReadOpDuration() time.Duration {
 	if r.ReadOps == 0 {
 		return 0
@@ -1320,7 +1320,7 @@ func (r *BenchResults) ReadOpDuration() time.Duration {
 	return r.ReadDuration / time.Duration(r.ReadOps)
 }
 
-// Returns average number of read operations that can be performed per second.
+// ReadOpsPerSecond returns average number of read operations that can be performed per second.
 func (r *BenchResults) ReadOpsPerSecond() int {
 	var op = r.ReadOpDuration()
 	if op == 0 {
@@ -1329,6 +1329,7 @@ func (r *BenchResults) ReadOpsPerSecond() int {
 	return int(time.Second) / int(op)
 }
 
+// PageError represents a page error.
 type PageError struct {
 	ID  int
 	Err error

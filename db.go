@@ -612,7 +612,7 @@ func (db *DB) Stats() Stats {
 	return db.stats
 }
 
-// This is for internal access to the raw data bytes from the C cursor, use
+// Info is for internal access to the raw data bytes from the C cursor, use
 // carefully, or not at all.
 func (db *DB) Info() *Info {
 	return &Info{uintptr(unsafe.Pointer(&db.data[0])), db.pageSize}
@@ -664,6 +664,8 @@ func (db *DB) allocate(count int) (*page, error) {
 	return p, nil
 }
 
+// IsReadOnly returns a boolean indicating whether the DB is read-only. When
+// true, db.Update() and db.Begin(true) return ErrDatabaseReadOnly immediately.
 func (db *DB) IsReadOnly() bool {
 	return db.readOnly
 }
@@ -739,6 +741,7 @@ func (s *Stats) add(other *Stats) {
 	s.TxStats.add(&other.TxStats)
 }
 
+// Info holds raw data bytes from the C cursor, use carefully, or not at all.
 type Info struct {
 	Data     uintptr
 	PageSize int

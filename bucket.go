@@ -167,9 +167,8 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	if bytes.Equal(key, k) {
 		if (flags & bucketLeafFlag) != 0 {
 			return nil, ErrBucketExists
-		} else {
-			return nil, ErrIncompatibleValue
 		}
+		return nil, ErrIncompatibleValue
 	}
 
 	// Create empty, inline bucket.
@@ -365,13 +364,13 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 	return nil
 }
 
-// Stat returns stats on a bucket.
+// Stats returns stats on a bucket.
 func (b *Bucket) Stats() BucketStats {
 	var s, subStats BucketStats
 	pageSize := b.tx.db.pageSize
-	s.BucketN += 1
+	s.BucketN++
 	if b.root == 0 {
-		s.InlineBucketN += 1
+		s.InlineBucketN++
 	}
 	b.forEachPage(func(p *page, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
@@ -721,6 +720,8 @@ type BucketStats struct {
 	InlineBucketInuse int // bytes used for inlined buckets (also accounted for in LeafInuse)
 }
 
+// Add adds the stats from other bucket into the bucket. Use it to aggregate
+// statistics of multiple buckets.
 func (s *BucketStats) Add(other BucketStats) {
 	s.BranchPageN += other.BranchPageN
 	s.BranchOverflowN += other.BranchOverflowN

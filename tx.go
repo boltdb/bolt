@@ -243,8 +243,8 @@ func (tx *Tx) close() {
 	}
 	if tx.writable {
 		// Grab freelist stats.
-		var freelistFreeN = tx.db.freelist.free_count()
-		var freelistPendingN = tx.db.freelist.pending_count()
+		var freelistFreeN = tx.db.freelist.freeCount()
+		var freelistPendingN = tx.db.freelist.pendingCount()
 		var freelistAlloc = tx.db.freelist.size()
 
 		// Remove transaction ref & writer lock.
