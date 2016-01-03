@@ -285,7 +285,7 @@ func (tx *Tx) WriteTo(w io.Writer) (n int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Copy the meta pages.
 	tx.db.metalock.Lock()

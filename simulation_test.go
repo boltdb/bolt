@@ -42,8 +42,8 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 	var versions = make(map[int]*QuickDB)
 	versions[1] = NewQuickDB()
 
-	db := NewTestDB()
-	defer db.Close()
+	db := MustOpenDB()
+	defer db.MustClose()
 
 	var mutex sync.Mutex
 
@@ -89,10 +89,12 @@ func testSimulate(t *testing.T, threadCount, parallelism int) {
 					versions[tx.ID()] = qdb
 					mutex.Unlock()
 
-					ok(t, tx.Commit())
+					if err := tx.Commit(); err != nil {
+						t.Fatal(err)
+					}
 				}()
 			} else {
-				defer tx.Rollback()
+				defer func() { _ = tx.Rollback() }()
 			}
 
 			// Ignore operation if we don't have data yet.
