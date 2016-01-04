@@ -580,7 +580,7 @@ func (b *BoltDB) Close() {
 Database logic should be defined as methods on this wrapper struct.
 
 To initialize this struct from the native language (both platforms now sync
-their local storage to the cloud. These snippits disable that functionality for the
+their local storage to the cloud. These snippets disable that functionality for the
 database file):
 ####Android
 ```java
@@ -596,7 +596,9 @@ Boltmobiledemo.BoltDB boltDB = Boltmobiledemo.NewBoltDB(path)
 ####iOS
 ```objc
 - (void)demo {
-	NSString* path = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+    NSString* path = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory,
+                                                          NSUserDomainMask,
+                                                          YES) objectAtIndex:0];
 	GoBoltmobiledemoBoltDB * demo = GoBoltmobiledemoNewBoltDB(path);
 	[self addSkipBackupAttributeToItemAtPath:demo.path];
 	//Some DB Logic would go here
