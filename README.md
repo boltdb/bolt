@@ -42,6 +42,7 @@ services every day.
   - [Database backups](#database-backups)
   - [Statistics](#statistics)
   - [Read-Only Mode](#read-only-mode)
+  - [Mobile Use (iOS/Android)](#mobile-use-iosandroid)
 - [Resources](#resources)
 - [Comparison with other databases](#comparison-with-other-databases)
   - [Postgres, MySQL, & other relational databases](#postgres-mysql--other-relational-databases)
