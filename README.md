@@ -545,6 +545,79 @@ if err != nil {
 }
 ```
 
+### Mobile Use (iOS/Android)
+
+Bolt is able to run on mobile devices by leveraging the binding feature of the
+[gomobile](https://github.com/golang/mobile) tool. Create a struct that will
+contain your database logic and a reference to a *bolt.DB with a initializing
+contstructor that takes in a filepath where the database file will be stored.
+Neither Android nor iOS require extra permissions or cleanup from using this method.
+
+```go
+func NewBoltDB(filepath string) *BoltDB {
+	db, err := bolt.Open(filepath+"/demo.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return &BoltDB{db}
+}
+
+type BoltDB struct {
+	db *bolt.DB
+	...
+}
+
+func (b *BoltDB) Path() string {
+	return b.db.Path()
+}
+
+func (b *BoltDB) Close() {
+	b.db.Close()
+}
+```
+
+Database logic should be defined as methods on this wrapper struct.
+
+To initialize this struct from the native language (both platforms now sync
+their local storage to the cloud. These snippits disable that functionality for the
+database file):
+####Android
+```java
+String path;
+if (android.os.Build.VERSION.SDK_INT >=android.os.Build.VERSION_CODES.LOLLIPOP){
+    path = getNoBackupFilesDir().getAbsolutePath();
+} else{
+    path = getFilesDir().getAbsolutePath();
+}
+Boltmobiledemo.BoltDB boltDB = Boltmobiledemo.NewBoltDB(path)
+```
+
+####iOS
+```objc
+- (void)demo {
+	NSString* path = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+	GoBoltmobiledemoBoltDB * demo = GoBoltmobiledemoNewBoltDB(path);
+	[self addSkipBackupAttributeToItemAtPath:demo.path];
+	//Some DB Logic would go here
+	[demo close];
+}
+
+- (BOOL)addSkipBackupAttributeToItemAtPath:(NSString *) filePathString
+{
+    NSURL* URL= [NSURL fileURLWithPath: filePathString];
+    assert([[NSFileManager defaultManager] fileExistsAtPath: [URL path]]);
+    
+    NSError *error = nil;
+    BOOL success = [URL setResourceValue: [NSNumber numberWithBool: YES]
+                                  forKey: NSURLIsExcludedFromBackupKey error: &error];
+    if(!success){
+        NSLog(@"Error excluding %@ from backup %@", [URL lastPathComponent], error);
+    }
+    return success;
+}
+
+```
 
 ## Resources
 
