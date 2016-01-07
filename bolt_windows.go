@@ -81,8 +81,8 @@ func funlock(f *os.File) error {
 
 // mmap memory maps a DB's data file.
 // Based on: https://github.com/edsrzf/mmap-go
-func mmap(db *DB, sz int) error {
-	if !db.readOnly {
+func mmap(db *DB, sz int, callTruncate bool) error {
+	if callTruncate {
 		// Truncate the database to the size of the mmap.
 		if err := db.file.Truncate(int64(sz)); err != nil {
 			return fmt.Errorf("truncate: %s", err)

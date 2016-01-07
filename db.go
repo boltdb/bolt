@@ -245,7 +245,8 @@ func (db *DB) mmap(minsz int) error {
 	}
 
 	// Memory-map the data file as a byte slice.
-	if err := mmap(db, size); err != nil {
+	callTruncate := info.Size() != int64(size) && !db.NoGrowSync && !db.readOnly
+	if err := mmap(db, size, callTruncate); err != nil {
 		return err
 	}
 
