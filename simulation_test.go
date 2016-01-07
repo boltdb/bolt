@@ -10,7 +10,7 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-func TestSimulate_1op_1p(t *testing.T)     { testSimulate(t, 100, 1) }
+func TestSimulate_1op_1p(t *testing.T)     { testSimulate(t, 1, 1) }
 func TestSimulate_10op_1p(t *testing.T)    { testSimulate(t, 10, 1) }
 func TestSimulate_100op_1p(t *testing.T)   { testSimulate(t, 100, 1) }
 func TestSimulate_1000op_1p(t *testing.T)  { testSimulate(t, 1000, 1) }
