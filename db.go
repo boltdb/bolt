@@ -26,7 +26,7 @@ const magic uint32 = 0xED0CDAED
 // IgnoreNoSync specifies whether the NoSync field of a DB is ignored when
 // syncing changes to a file.  This is required as some operating systems,
 // such as OpenBSD, do not have a unified buffer cache (UBC) and writes
-// must be synchronzied using the msync(2) syscall.
+// must be synchronized using the msync(2) syscall.
 const IgnoreNoSync = runtime.GOOS == "openbsd"
 
 // Default values if not set in a DB instance.
@@ -410,7 +410,7 @@ func (db *DB) close() error {
 // will cause the calls to block and be serialized until the current write
 // transaction finishes.
 //
-// Transactions should not be depedent on one another. Opening a read
+// Transactions should not be dependent on one another. Opening a read
 // transaction and a write transaction in the same goroutine can cause the
 // writer to deadlock because the database periodically needs to re-mmap itself
 // as it grows and it cannot do that while a read transaction is open.

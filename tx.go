@@ -505,7 +505,7 @@ func (tx *Tx) writeMeta() error {
 }
 
 // page returns a reference to the page with a given id.
-// If page has been written to then a temporary bufferred page is returned.
+// If page has been written to then a temporary buffered page is returned.
 func (tx *Tx) page(id pgid) *page {
 	// Check the dirty pages first.
 	if tx.pages != nil {
