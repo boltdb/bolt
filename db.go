@@ -564,7 +564,10 @@ func (db *DB) Update(fn func(*Tx) error) error {
 		return err
 	}
 
-	return t.Commit()
+	tt := time.Now()
+	er := t.Commit()
+	fmt.Println("commit took:", time.Since(tt))
+	return er
 }
 
 // View executes a function within the context of a managed read-only transaction.

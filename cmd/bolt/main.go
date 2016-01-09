@@ -87,6 +87,8 @@ func NewMain() *Main {
 
 // Run executes the program.
 func (m *Main) Run(args ...string) error {
+	return newBenchCommand(m).Run(args[0:]...)
+
 	// Require a command at the beginning.
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		fmt.Fprintln(m.Stderr, m.Usage())
@@ -935,6 +937,15 @@ func (cmd *BenchCommand) Run(args ...string) error {
 	return nil
 }
 
+/*
+./bolt
+go tool pprof ./bolt ./bolt.pprof
+
+png > bolt.png
+svg > bolt.svg
+pdf > bolt.pdf
+*/
+
 // ParseFlags parses the command line flags.
 func (cmd *BenchCommand) ParseFlags(args []string) (*BenchOptions, error) {
 	var options BenchOptions
@@ -944,11 +955,12 @@ func (cmd *BenchCommand) ParseFlags(args []string) (*BenchOptions, error) {
 	fs.StringVar(&options.ProfileMode, "profile-mode", "rw", "")
 	fs.StringVar(&options.WriteMode, "write-mode", "seq", "")
 	fs.StringVar(&options.ReadMode, "read-mode", "seq", "")
-	fs.IntVar(&options.Iterations, "count", 1000, "")
-	fs.IntVar(&options.BatchSize, "batch-size", 0, "")
+	// fs.IntVar(&options.Iterations, "count", 100000, "")
+	fs.IntVar(&options.Iterations, "count", 5000000, "")
+	fs.IntVar(&options.BatchSize, "batch-size", 500, "")
 	fs.IntVar(&options.KeySize, "key-size", 8, "")
-	fs.IntVar(&options.ValueSize, "value-size", 32, "")
-	fs.StringVar(&options.CPUProfile, "cpuprofile", "", "")
+	fs.IntVar(&options.ValueSize, "value-size", 150, "")
+	fs.StringVar(&options.CPUProfile, "cpuprofile", "bolt.pprof", "")
 	fs.StringVar(&options.MemProfile, "memprofile", "", "")
 	fs.StringVar(&options.BlockProfile, "blockprofile", "", "")
 	fs.Float64Var(&options.FillPercent, "fill-percent", bolt.DefaultFillPercent, "")
@@ -1040,6 +1052,8 @@ func (cmd *BenchCommand) runWritesWithSource(db *bolt.DB, options *BenchOptions,
 	results.WriteOps = options.Iterations
 
 	for i := 0; i < options.Iterations; i += options.BatchSize {
+		st := time.Now()
+		var ttx *bolt.Tx
 		if err := db.Update(func(tx *bolt.Tx) error {
 			b, _ := tx.CreateBucketIfNotExists(benchBucketName)
 			b.FillPercent = options.FillPercent
@@ -1056,11 +1070,27 @@ func (cmd *BenchCommand) runWritesWithSource(db *bolt.DB, options *BenchOptions,
 					return err
 				}
 			}
-
+			ttx = tx
 			return nil
 		}); err != nil {
 			return err
 		}
+		took := time.Since(st)
+		stat := ttx.Stats()
+		fmt.Println("write  count:", i)
+		if stat.SpillTime > 100*time.Millisecond {
+			fmt.Println("spill   took:", stat.SpillTime, "[BAD]")
+		} else {
+			fmt.Println("spill   took:", stat.SpillTime)
+		}
+		if took > 100*time.Millisecond {
+			fmt.Println("total   took:", took, "[BAD]")
+		} else {
+			fmt.Println("total   took:", took)
+		}
+		fmt.Printf("t.tx.Stats(): %+v\n", stat)
+		// fmt.Printf("backend.db.Stats(): %+v\n", t.backend.db.Stats())
+		fmt.Println()
 	}
 	return nil
 }
