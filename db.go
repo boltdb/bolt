@@ -90,6 +90,7 @@ type DB struct {
 	dataref  []byte // mmap'ed readonly, write throws SEGV
 	data     *[maxMapSize]byte
 	datasz   int
+	filesz   int // current on disk file size
 	meta0    *meta
 	meta1    *meta
 	pageSize int
@@ -796,6 +797,37 @@ func (db *DB) allocate(count int) (*page, error) {
 	db.rwtx.meta.pgid += pgid(count)
 
 	return p, nil
+}
+
+// growSize grows the size of the database to the given sz.
+func (db *DB) growSize(sz int) error {
+	if sz <= db.filesz {
+		return nil
+	}
+
+	// over allocate 16MB to avoid calling Truncate aggressively
+	// for efficiency
+	overAllocation := 16 * 1024 * 1024
+	sz = sz + overAllocation
+
+	// do not over allocate
+	if sz > db.datasz {
+		sz = db.datasz
+	}
+
+	// Truncate and fsync to ensure file size metadata is flushed.
+	// https://github.com/boltdb/bolt/issues/284
+	if !db.NoGrowSync && !db.readOnly {
+		if err := db.file.Truncate(int64(sz)); err != nil {
+			return fmt.Errorf("file resize error: %s", err)
+		}
+		if err := db.file.Sync(); err != nil {
+			return fmt.Errorf("file sync error: %s", err)
+		}
+	}
+
+	db.filesz = sz
+	return nil
 }
 
 func (db *DB) IsReadOnly() bool {
