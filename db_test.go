@@ -910,11 +910,11 @@ func TestDB_Stats(t *testing.T) {
 
 	stats := db.Stats()
 	if stats.TxStats.PageCount != 2 {
-		t.Fatalf("unexpected TxStats.PageCount", stats.TxStats.PageCount)
+		t.Fatalf("unexpected TxStats.PageCount: %d", stats.TxStats.PageCount)
 	} else if stats.FreePageN != 0 {
-		t.Fatalf("unexpected FreePageN != 0", stats.FreePageN)
+		t.Fatalf("unexpected FreePageN != 0: %d", stats.FreePageN)
 	} else if stats.PendingPageN != 2 {
-		t.Fatalf("unexpected PendingPageN != 2", stats.PendingPageN)
+		t.Fatalf("unexpected PendingPageN != 2: %d", stats.PendingPageN)
 	}
 }
 
