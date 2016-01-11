@@ -33,6 +33,7 @@ const IgnoreNoSync = runtime.GOOS == "openbsd"
 const (
 	DefaultMaxBatchSize  int = 1000
 	DefaultMaxBatchDelay     = 10 * time.Millisecond
+	DefaultAllocSize         = 16 * 1024 * 1024
 )
 
 // DB represents a collection of buckets persisted to a file on disk.
@@ -84,6 +85,11 @@ type DB struct {
 	//
 	// Do not change concurrently with calls to Batch.
 	MaxBatchDelay time.Duration
+
+	// AllocSize is the amount of space allocated when the database
+	// needs to create new pages. This is done to amortize the cost
+	// of truncate() and fsync() when growing the data file.
+	AllocSize int
 
 	path     string
 	file     *os.File
@@ -148,6 +154,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	// Set default values for later DB operations.
 	db.MaxBatchSize = DefaultMaxBatchSize
 	db.MaxBatchDelay = DefaultMaxBatchDelay
+	db.AllocSize = DefaultAllocSize
 
 	flag := os.O_RDWR
 	if options.ReadOnly {
@@ -799,20 +806,19 @@ func (db *DB) allocate(count int) (*page, error) {
 	return p, nil
 }
 
-// growSize grows the size of the database to the given sz.
-func (db *DB) growSize(sz int) error {
+// grow grows the size of the database to the given sz.
+func (db *DB) grow(sz int) error {
+	// Ignore if the new size is less than available file size.
 	if sz <= db.filesz {
 		return nil
 	}
 
-	// over allocate 16MB to avoid calling Truncate aggressively
-	// for efficiency
-	overAllocation := 16 * 1024 * 1024
-	sz = sz + overAllocation
-
-	// do not over allocate
-	if sz > db.datasz {
+	// If the data is smaller than the alloc size then only allocate what's needed.
+	// Once it goes over the allocation size then allocate in chunks.
+	if db.datasz < db.AllocSize {
 		sz = db.datasz
+	} else {
+		sz += db.AllocSize
 	}
 
 	// Truncate and fsync to ensure file size metadata is flushed.

@@ -184,8 +184,12 @@ func (tx *Tx) Commit() error {
 	}
 	tx.meta.freelist = p.id
 
+	// If the high water mark has moved up then attempt to grow the database.
 	if tx.meta.pgid > opgid {
-		tx.db.growSize(int(tx.meta.pgid+1) * tx.db.pageSize)
+		if err := tx.db.grow(int(tx.meta.pgid+1) * tx.db.pageSize); err != nil {
+			tx.rollback()
+			return err
+		}
 	}
 
 	// Write dirty pages to disk.
