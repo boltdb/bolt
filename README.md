@@ -349,7 +349,9 @@ iteration over these keys extremely fast. To iterate over keys we'll use a
 
 ```go
 db.View(func(tx *bolt.Tx) error {
+	// Assume bucket exists and has keys
 	b := tx.Bucket([]byte("MyBucket"))
+
 	c := b.Cursor()
 
 	for k, v := c.First(); k != nil; k, v = c.Next() {
@@ -390,6 +392,7 @@ To iterate over a key prefix, you can combine `Seek()` and `bytes.HasPrefix()`:
 
 ```go
 db.View(func(tx *bolt.Tx) error {
+	// Assume bucket exists and has keys
 	c := tx.Bucket([]byte("MyBucket")).Cursor()
 
 	prefix := []byte("1234")
@@ -409,7 +412,7 @@ date range like this:
 
 ```go
 db.View(func(tx *bolt.Tx) error {
-	// Assume our events bucket has RFC3339 encoded time keys.
+	// Assume our events bucket exists and has RFC3339 encoded time keys.
 	c := tx.Bucket([]byte("Events")).Cursor()
 
 	// Our time range spans the 90's decade.
@@ -433,7 +436,9 @@ all the keys in a bucket:
 
 ```go
 db.View(func(tx *bolt.Tx) error {
+	// Assume bucket exists and has keys
 	b := tx.Bucket([]byte("MyBucket"))
+	
 	b.ForEach(func(k, v []byte) error {
 		fmt.Printf("key=%s, value=%s\n", k, v)
 		return nil
