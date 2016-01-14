@@ -1,4 +1,4 @@
-Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https://drone.io/github.com/boltdb/bolt/latest) [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.png?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.png)](https://godoc.org/github.com/boltdb/bolt) ![Version](https://img.shields.io/badge/version-1.0-green.png)
+Bolt [![Build Status](https://drone.io/github.com/boltdb/bolt/status.png)](https://drone.io/github.com/boltdb/bolt/latest) [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.svg?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.svg)](https://godoc.org/github.com/boltdb/bolt) ![Version](https://img.shields.io/badge/version-1.0-green.svg)
 ====
 
 Bolt is a pure Go key/value store inspired by [Howard Chu's][hyc_symas]
@@ -338,7 +338,6 @@ type User struct {
     ID int
     ...
 }
-
 ```
 
 ### Iterating over keys
@@ -555,7 +554,7 @@ if err != nil {
 
 Bolt is able to run on mobile devices by leveraging the binding feature of the
 [gomobile](https://github.com/golang/mobile) tool. Create a struct that will
-contain your database logic and a reference to a *bolt.DB with a initializing
+contain your database logic and a reference to a `*bolt.DB` with a initializing
 contstructor that takes in a filepath where the database file will be stored.
 Neither Android nor iOS require extra permissions or cleanup from using this method.
 
@@ -588,7 +587,9 @@ Database logic should be defined as methods on this wrapper struct.
 To initialize this struct from the native language (both platforms now sync
 their local storage to the cloud. These snippets disable that functionality for the
 database file):
-####Android
+
+#### Android
+
 ```java
 String path;
 if (android.os.Build.VERSION.SDK_INT >=android.os.Build.VERSION_CODES.LOLLIPOP){
@@ -599,7 +600,8 @@ if (android.os.Build.VERSION.SDK_INT >=android.os.Build.VERSION_CODES.LOLLIPOP){
 Boltmobiledemo.BoltDB boltDB = Boltmobiledemo.NewBoltDB(path)
 ```
 
-####iOS
+#### iOS
+
 ```objc
 - (void)demo {
     NSString* path = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory,
