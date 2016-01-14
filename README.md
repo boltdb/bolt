@@ -835,5 +835,6 @@ Below is a list of public, open source projects that use Bolt:
   backed by boltdb.
 * [buckets](https://github.com/joyrexus/buckets) - a bolt wrapper streamlining
   simple tx and key scans.
+* [Request Baskets](https://github.com/darklynx/request-baskets) - A web service to collect arbitrary HTTP requests and inspect them via REST API or simple web UI, similar to [RequestBin](http://requestb.in/) service
 
 If you are using Bolt in a project please send a pull request to add it to the list.
