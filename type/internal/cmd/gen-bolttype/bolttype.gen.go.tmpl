@@ -1,0 +1,80 @@
+{{$types := .Types}}
+package bolttype
+
+{{range $type1 := $types}}{{range $type2 := $types}}
+// ForEach{{$type1.Name}}To{{$type2.Name}} is a for each with key of type {{$type1.Type}} and value of type {{$type2.Type}}.
+func (b *Bucket) ForEach{{$type1.Name}}To{{$type2.Name}}(fn func({{$type1.TypedKeyParameters}}, {{$type2.TypedValueParameters}}) error) error {
+	return b.ForEach(
+		func(rawKey []byte, rawValue []byte) error {
+			{{$type1.KeyParameters}} := {{$type1.FromBytesFunc}}(rawKey)
+			{{$type2.ValueParameters}} := {{$type2.FromBytesFunc}}(rawValue)
+			return fn({{$type1.KeyParameters}}, {{$type2.ValueParameters}})
+		},
+	)
+}
+
+// Get{{$type1.Name}}To{{$type2.Name}} is a get with key of type {{$type1.Type}} and value of type {{$type2.Type}}.
+func (b *Bucket) Get{{$type1.Name}}To{{$type2.Name}}({{$type1.TypedKeyParameters}}) ({{$type2.ReturnValueParameters}}) {
+	return {{$type2.FromBytesFunc}}(b.Get({{$type1.ToBytesFunc}}({{$type1.KeyParameters}})))
+}
+
+// GetRequired{{$type1.Name}}To{{$type2.Name}} is a get with key of type {{$type1.Type}} and value of type {{$type2.Type}} that returns a KeyNotFoundError if the key is not found.
+func (b *Bucket) GetRequired{{$type1.Name}}To{{$type2.Name}}({{$type1.TypedKeyParameters}}) ({{$type2.ReturnValueParameters}}, error) {
+	value := b.Get({{$type1.ToBytesFunc}}({{$type1.KeyParameters}}))
+	if value == nil {
+		return {{$type2.ZeroValue}}, NewKeyNotFoundError({{$type1.KeyParameters}})
+	}
+	{{if ne 0 (len $type2.ReturnParameters)}}{{$type2.ReturnParameters}} := {{$type2.FromBytesFunc}}(value)
+	return {{$type2.ReturnParameters}}, nil{{else}}return {{$type2.FromBytesFunc}}(value), nil{{end}}
+}
+
+// Put{{$type1.Name}}To{{$type2.Name}} is a put with key of type {{$type1.Type}} and value of type {{$type2.Type}}.
+func (b *Bucket) Put{{$type1.Name}}To{{$type2.Name}}({{$type1.TypedKeyParameters}}, {{$type2.TypedValueParameters}}) error {
+	return b.Put({{$type1.ToBytesFunc}}({{$type1.KeyParameters}}), {{$type2.ToBytesFunc}}({{$type2.ValueParameters}}))
+}
+
+// First{{$type1.Name}}To{{$type2.Name}} is first with key of type {{$type1.Type}} and value of type {{$type2.Type}}.
+func (c *Cursor) First{{$type1.Name}}To{{$type2.Name}}() ({{$type1.ReturnValueParameters}}, {{$type2.ReturnValueParameters}}) {
+	rawKey, rawValue := c.First()
+	{{$type1.KeyParameters}} := {{$type1.FromBytesFunc}}(rawKey)
+	{{$type2.ValueParameters}} := {{$type2.FromBytesFunc}}(rawValue)
+	return {{$type1.KeyParameters}}, {{$type2.ValueParameters}}
+}
+
+// Last{{$type1.Name}}To{{$type2.Name}} is first with key of type {{$type1.Type}} and value of type {{$type2.Type}}.
+func (c *Cursor) Last{{$type1.Name}}To{{$type2.Name}}() ({{$type1.ReturnValueParameters}}, {{$type2.ReturnValueParameters}}) {
+	rawKey, rawValue := c.Last()
+	{{$type1.KeyParameters}} := {{$type1.FromBytesFunc}}(rawKey)
+	{{$type2.ValueParameters}} := {{$type2.FromBytesFunc}}(rawValue)
+	return {{$type1.KeyParameters}}, {{$type2.ValueParameters}}
+}
+
+// Next{{$type1.Name}}To{{$type2.Name}} is first with key of type {{$type1.Type}} and value of type {{$type2.Type}}.
+func (c *Cursor) Next{{$type1.Name}}To{{$type2.Name}}() ({{$type1.ReturnValueParameters}}, {{$type2.ReturnValueParameters}}) {
+	rawKey, rawValue := c.Next()
+	{{$type1.KeyParameters}} := {{$type1.FromBytesFunc}}(rawKey)
+	{{$type2.ValueParameters}} := {{$type2.FromBytesFunc}}(rawValue)
+	return {{$type1.KeyParameters}}, {{$type2.ValueParameters}}
+}
+
+// Prev{{$type1.Name}}To{{$type2.Name}} is first with key of type {{$type1.Type}} and value of type {{$type2.Type}}.
+func (c *Cursor) Prev{{$type1.Name}}To{{$type2.Name}}() ({{$type1.ReturnValueParameters}}, {{$type2.ReturnValueParameters}}) {
+	rawKey, rawValue := c.Prev()
+	{{$type1.KeyParameters}} := {{$type1.FromBytesFunc}}(rawKey)
+	{{$type2.ValueParameters}} := {{$type2.FromBytesFunc}}(rawValue)
+	return {{$type1.KeyParameters}}, {{$type2.ValueParameters}}
+}
+
+// Seek{{$type1.Name}}To{{$type2.Name}} is first with key of type {{$type1.Type}} and value of type {{$type2.Type}}.
+func (c *Cursor) Seek{{$type1.Name}}To{{$type2.Name}}({{$type1.TypedKeyParameters}}) ({{$type1.ReturnValueParameters}}, {{$type2.ReturnValueParameters}}) {
+	rawKey, rawValue := c.Seek({{$type1.ToBytesFunc}}({{$type1.KeyParameters}}))
+	{{$type1.KeyParameters}} = {{$type1.FromBytesFunc}}(rawKey)
+	{{$type2.ValueParameters}} := {{$type2.FromBytesFunc}}(rawValue)
+	return {{$type1.KeyParameters}}, {{$type2.ValueParameters}}
+}
+{{end}}
+// Delete{{$type1.Name}} is a delete with key of type {{$type1.Type}}.
+func (b *Bucket) Delete{{$type1.Name}}({{$type1.TypedKeyParameters}}) error {
+	return b.Delete({{$type1.ToBytesFunc}}({{$type1.KeyParameters}}))
+}
+{{end}}
