@@ -345,7 +345,7 @@ func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 
 	// Retrieve value from node.
 	if ref.node != nil {
-		inode := &ref.node.inodes[ref.index]
+		inode := ref.node.inodes[ref.index]
 		return inode.key, inode.value, inode.flags
 	}
 
