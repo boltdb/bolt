@@ -299,14 +299,14 @@ func (tx *Tx) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Copy the meta pages.
 	tx.db.metalock.Lock()
-	n, err = io.CopyN(w, f, int64(tx.db.pageSize*2))
+	n, err = pageAlignedCopyN(w, f, int64(tx.db.pageSize*2), tx.db.pageSize)
 	tx.db.metalock.Unlock()
 	if err != nil {
 		return n, fmt.Errorf("meta copy: %s", err)
 	}
 
 	// Copy data pages.
-	wn, err := io.CopyN(w, f, tx.Size()-int64(tx.db.pageSize*2))
+	wn, err := pageAlignedCopyN(w, f, tx.Size()-int64(tx.db.pageSize*2), tx.db.pageSize)
 	n += wn
 	if err != nil {
 		return n, err
@@ -631,4 +631,55 @@ func (s *TxStats) Sub(other *TxStats) TxStats {
 	diff.Write = s.Write - other.Write
 	diff.WriteTime = s.WriteTime - other.WriteTime
 	return diff
+}
+
+// pageAlignedCopyN copies n bytes (or until an error) from src to dst.
+// similar to io.CopyN, except that it uses page-aligned buffer for direct io
+func pageAlignedCopyN(dst io.Writer, src io.Reader, n int64, pagesize int) (written int64, err error) {
+	written, err = pageAlignedCopy(dst, io.LimitReader(src, n), pagesize)
+	if written == n {
+		return n, nil
+	}
+	if written < n && err == nil {
+		err = io.EOF
+	}
+	return
+}
+
+// pageAlignedCopy copies from src to dst until either EOF is reached on src or an error occurs.
+// similar to io.Copy, except that it uses page-aligned buffer for direct io
+func pageAlignedCopy(dst io.Writer, src io.Reader, pagesize int) (written int64, err error) {
+	buf := make([]byte, 16*pagesize)
+	off := uintptr(unsafe.Pointer(&buf[0])) & uintptr(pagesize-1)
+	if off > 0 {
+		// TODO: need align ?
+		// Large objects (> 32 kB) are allocated straight from the heap.
+		// And addr should be page-aligned
+		buf = buf[pagesize-int(off) : len(buf)-int(off)]
+	}
+	for {
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			nw, ew := dst.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er == io.EOF {
+			break
+		}
+		if er != nil {
+			err = er
+			break
+		}
+	}
+	return written, err
 }
