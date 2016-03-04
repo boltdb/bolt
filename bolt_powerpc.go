@@ -1,4 +1,6 @@
-// +build ppc64le
+// +build linux
+// +build ppc64le ppc64
+// +build !386,!amd64,!arm,!arm64,!ppc,!s390x
 
 package bolt
 
