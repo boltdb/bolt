@@ -399,6 +399,13 @@ func (n *node) spill() error {
 	return nil
 }
 
+// reparent reassigns the node to a new parent.
+func (n *node) reparent(newParent *node) {
+	n.parent.removeChild(n)
+	n.parent = newParent
+	n.parent.children = append(n.parent.children, n)
+}
+
 // rebalance attempts to combine the node with sibling nodes if the node fill
 // size is below a threshold or if there are not enough keys.
 func (n *node) rebalance() {
@@ -468,9 +475,7 @@ func (n *node) rebalance() {
 		if useNextSibling {
 			// Reparent and move node.
 			if child, ok := n.bucket.nodes[target.inodes[0].pgid]; ok {
-				child.parent.removeChild(child)
-				child.parent = n
-				child.parent.children = append(child.parent.children, child)
+				child.reparent(n)
 			}
 			n.inodes = append(n.inodes, target.inodes[0])
 			target.inodes = target.inodes[1:]
@@ -482,9 +487,7 @@ func (n *node) rebalance() {
 		} else {
 			// Reparent and move node.
 			if child, ok := n.bucket.nodes[target.inodes[len(target.inodes)-1].pgid]; ok {
-				child.parent.removeChild(child)
-				child.parent = n
-				child.parent.children = append(child.parent.children, child)
+				child.reparent(n)
 			}
 			n.inodes = append(n.inodes, inode{})
 			copy(n.inodes[1:], n.inodes)
@@ -505,9 +508,7 @@ func (n *node) rebalance() {
 		// Reparent all child nodes being moved.
 		for _, inode := range target.inodes {
 			if child, ok := n.bucket.nodes[inode.pgid]; ok {
-				child.parent.removeChild(child)
-				child.parent = n
-				child.parent.children = append(child.parent.children, child)
+				child.reparent(n)
 			}
 		}
 
@@ -521,9 +522,7 @@ func (n *node) rebalance() {
 		// Reparent all child nodes being moved.
 		for _, inode := range n.inodes {
 			if child, ok := n.bucket.nodes[inode.pgid]; ok {
-				child.parent.removeChild(child)
-				child.parent = target
-				child.parent.children = append(child.parent.children, child)
+				child.reparent(target)
 			}
 		}
 
