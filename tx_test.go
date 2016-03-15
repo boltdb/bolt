@@ -570,7 +570,7 @@ func TestTx_CopyFile_Error_Meta(t *testing.T) {
 
 	if err := db.View(func(tx *bolt.Tx) error {
 		return tx.Copy(&failWriter{})
-	}); err == nil || err.Error() != "meta copy: error injected for tests" {
+	}); err == nil || err.Error() != "meta 0 copy: error injected for tests" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
