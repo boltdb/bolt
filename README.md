@@ -437,7 +437,7 @@ all the keys in a bucket:
 db.View(func(tx *bolt.Tx) error {
 	// Assume bucket exists and has keys
 	b := tx.Bucket([]byte("MyBucket"))
-	
+
 	b.ForEach(func(k, v []byte) error {
 		fmt.Printf("key=%s, value=%s\n", k, v)
 		return nil
@@ -617,7 +617,7 @@ Boltmobiledemo.BoltDB boltDB = Boltmobiledemo.NewBoltDB(path)
 {
     NSURL* URL= [NSURL fileURLWithPath: filePathString];
     assert([[NSFileManager defaultManager] fileExistsAtPath: [URL path]]);
-    
+
     NSError *error = nil;
     BOOL success = [URL setResourceValue: [NSNumber numberWithBool: YES]
                                   forKey: NSURLIsExcludedFromBackupKey error: &error];
@@ -840,5 +840,6 @@ Below is a list of public, open source projects that use Bolt:
 * [Go Report Card](https://goreportcard.com/) - Go code quality report cards as a (free and open source) service.
 * [Boltdb Boilerplate](https://github.com/bobintornado/boltdb-boilerplate) - Boilerplate wrapper around bolt aiming to make simple calls one-liners.
 * [lru](https://github.com/crowdriff/lru) - Easy to use Bolt-backed Least-Recently-Used (LRU) read-through cache with chainable remote stores.
+* [Storm](https://github.com/asdine/storm) - A simple ORM around BoltDB.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
