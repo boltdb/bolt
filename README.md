@@ -427,6 +427,8 @@ db.View(func(tx *bolt.Tx) error {
 })
 ```
 
+Note that, while RFC3339 is sortable, the Golang implementation of RFC3339Nano does not use a fixed number of digits after the decimal point and is therefore not sortable.
+
 
 #### ForEach()
 
