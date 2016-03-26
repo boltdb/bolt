@@ -843,5 +843,6 @@ Below is a list of public, open source projects that use Bolt:
 * [Boltdb Boilerplate](https://github.com/bobintornado/boltdb-boilerplate) - Boilerplate wrapper around bolt aiming to make simple calls one-liners.
 * [lru](https://github.com/crowdriff/lru) - Easy to use Bolt-backed Least-Recently-Used (LRU) read-through cache with chainable remote stores.
 * [Storm](https://github.com/asdine/storm) - A simple ORM around BoltDB.
+* [GoWebApp](https://github.com/josephspurrier/gowebapp) - A basic MVC web application in Go using BoltDB.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
