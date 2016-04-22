@@ -36,6 +36,9 @@ const (
 	DefaultAllocSize         = 16 * 1024 * 1024
 )
 
+// default page size for db is set to the OS page size.
+var defaultPageSize = os.Getpagesize()
+
 // DB represents a collection of buckets persisted to a file on disk.
 // All data access is performed through transactions which can be obtained through the DB.
 // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
@@ -321,7 +324,7 @@ func (db *DB) mmapSize(size int) (int, error) {
 // init creates a new database file and initializes its meta pages.
 func (db *DB) init() error {
 	// Set the page size to the OS page size.
-	db.pageSize = os.Getpagesize()
+	db.pageSize = defaultPageSize
 
 	// Create two meta pages on a buffer.
 	buf := make([]byte, db.pageSize*4)
@@ -784,10 +787,21 @@ func (db *DB) meta() *meta {
 	return db.meta1
 }
 
+var pagePool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, defaultPageSize)
+	},
+}
+
 // allocate returns a contiguous block of memory starting at a given page.
 func (db *DB) allocate(count int) (*page, error) {
 	// Allocate a temporary buffer for the page.
-	buf := make([]byte, count*db.pageSize)
+	var buf []byte
+	if count == 1 && db.pageSize == defaultPageSize {
+		buf = pagePool.Get().([]byte)
+	} else {
+		buf = make([]byte, count*db.pageSize)
+	}
 	p := (*page)(unsafe.Pointer(&buf[0]))
 	p.overflow = uint32(count - 1)
 
