@@ -519,17 +519,21 @@ func (tx *Tx) write() error {
 		}
 	}
 
-	// put small pages back to sync.Pool
+	// Put small pages back to page pool.
 	for _, p := range pages {
-		if int(p.overflow) != 0 || tx.db.pageSize != defaultPageSize {
+		// Ignore page sizes over 1 page.
+		// These are allocated using make() instead of the page pool.
+		if int(p.overflow) != 0 {
 			continue
 		}
-		buf := (*[maxAllocSize]byte)(unsafe.Pointer(p))[:defaultPageSize]
+
+		buf := (*[maxAllocSize]byte)(unsafe.Pointer(p))[:tx.db.pageSize]
+
 		// See https://go.googlesource.com/go/+/f03c9202c43e0abb130669852082117ca50aa9b1
 		for i := range buf {
 			buf[i] = 0
 		}
-		pagePool.Put(buf)
+		tx.db.pagePool.Put(buf)
 	}
 
 	return nil

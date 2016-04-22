@@ -110,6 +110,8 @@ type DB struct {
 	freelist *freelist
 	stats    Stats
 
+	pagePool sync.Pool
+
 	batchMu sync.Mutex
 	batch   *batch
 
@@ -207,6 +209,13 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 			}
 			db.pageSize = int(m.pageSize)
 		}
+	}
+
+	// Initialize page pool.
+	db.pagePool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, db.pageSize)
+		},
 	}
 
 	// Memory map the data file.
@@ -324,7 +333,7 @@ func (db *DB) mmapSize(size int) (int, error) {
 // init creates a new database file and initializes its meta pages.
 func (db *DB) init() error {
 	// Set the page size to the OS page size.
-	db.pageSize = defaultPageSize
+	db.pageSize = os.Getpagesize()
 
 	// Create two meta pages on a buffer.
 	buf := make([]byte, db.pageSize*4)
@@ -787,18 +796,12 @@ func (db *DB) meta() *meta {
 	return db.meta1
 }
 
-var pagePool = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, defaultPageSize)
-	},
-}
-
 // allocate returns a contiguous block of memory starting at a given page.
 func (db *DB) allocate(count int) (*page, error) {
 	// Allocate a temporary buffer for the page.
 	var buf []byte
-	if count == 1 && db.pageSize == defaultPageSize {
-		buf = pagePool.Get().([]byte)
+	if count == 1 {
+		buf = db.pagePool.Get().([]byte)
 	} else {
 		buf = make([]byte, count*db.pageSize)
 	}
