@@ -36,6 +36,9 @@ const (
 	DefaultAllocSize         = 16 * 1024 * 1024
 )
 
+// default page size for db is set to the OS page size.
+var defaultPageSize = os.Getpagesize()
+
 // DB represents a collection of buckets persisted to a file on disk.
 // All data access is performed through transactions which can be obtained through the DB.
 // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
@@ -106,6 +109,8 @@ type DB struct {
 	txs      []*Tx
 	freelist *freelist
 	stats    Stats
+
+	pagePool sync.Pool
 
 	batchMu sync.Mutex
 	batch   *batch
@@ -204,6 +209,13 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 			}
 			db.pageSize = int(m.pageSize)
 		}
+	}
+
+	// Initialize page pool.
+	db.pagePool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, db.pageSize)
+		},
 	}
 
 	// Memory map the data file.
@@ -787,7 +799,12 @@ func (db *DB) meta() *meta {
 // allocate returns a contiguous block of memory starting at a given page.
 func (db *DB) allocate(count int) (*page, error) {
 	// Allocate a temporary buffer for the page.
-	buf := make([]byte, count*db.pageSize)
+	var buf []byte
+	if count == 1 {
+		buf = db.pagePool.Get().([]byte)
+	} else {
+		buf = make([]byte, count*db.pageSize)
+	}
 	p := (*page)(unsafe.Pointer(&buf[0]))
 	p.overflow = uint32(count - 1)
 
