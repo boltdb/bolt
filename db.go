@@ -208,8 +208,10 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 				// If we can't read the page size, we can assume it's the same
 				// as the OS -- since that's how the page size was chosen in the
 				// first place.
-				// XXX: Does this cause issues with opening a database on a
-				//      different OS than the one it was created on?
+				//
+				// If the first page is invalid and this OS uses a different
+				// page size than what the database was created with then we
+				// are out of luck and cannot access the database.
 				db.pageSize = os.Getpagesize()
 			} else {
 				db.pageSize = int(m.pageSize)
@@ -286,7 +288,7 @@ func (db *DB) mmap(minsz int) error {
 	err0 := db.meta0.validate()
 	err1 := db.meta1.validate()
 	if err0 != nil && err1 != nil {
-		return fmt.Errorf("meta0(%v) meta1(%v)", err0, err1)
+		return err0
 	}
 
 	return nil
@@ -358,6 +360,7 @@ func (db *DB) init() error {
 		m.root = bucket{root: 3}
 		m.pgid = 4
 		m.txid = txid(i)
+		m.checksum = m.sum64()
 	}
 
 	// Write an empty freelist at page 3.
@@ -807,20 +810,16 @@ func (db *DB) meta() *meta {
 		metaB = db.meta0
 	}
 
-	errA := metaA.validate()
-	errB := metaB.validate()
-
-	if errA == nil {
+	// Use higher meta page if valid. Otherwise fallback to previous, if valid.
+	if err := metaA.validate(); err == nil {
 		return metaA
-	}
-
-	if errB == nil {
+	} else if err := metaB.validate(); err == nil {
 		return metaB
 	}
 
 	// This should never be reached, because both meta1 and meta0 were validated
 	// on mmap() and we do fsync() on every write.
-	panic("both meta0 and meta1 could not be validated in DB.meta()!")
+	panic("bolt.DB.meta(): invalid meta pages")
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
@@ -981,12 +980,12 @@ type meta struct {
 
 // validate checks the marker bytes and version of the meta page to ensure it matches this binary.
 func (m *meta) validate() error {
-	if m.checksum != 0 && m.checksum != m.sum64() {
-		return ErrChecksum
-	} else if m.magic != magic {
+	if m.magic != magic {
 		return ErrInvalid
 	} else if m.version != version {
 		return ErrVersionMismatch
+	} else if m.checksum != 0 && m.checksum != m.sum64() {
+		return ErrChecksum
 	}
 	return nil
 }
