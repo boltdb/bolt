@@ -205,9 +205,17 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 			m := db.pageInBuffer(buf[:], 0).meta()
 			if err := m.validate(); err != nil {
-				return nil, err
+				// If we can't read the page size, we can assume it's the same
+				// as the OS -- since that's how the page size was chosen in the
+				// first place.
+				//
+				// If the first page is invalid and this OS uses a different
+				// page size than what the database was created with then we
+				// are out of luck and cannot access the database.
+				db.pageSize = os.Getpagesize()
+			} else {
+				db.pageSize = int(m.pageSize)
 			}
-			db.pageSize = int(m.pageSize)
 		}
 	}
 
@@ -274,12 +282,13 @@ func (db *DB) mmap(minsz int) error {
 	db.meta0 = db.page(0).meta()
 	db.meta1 = db.page(1).meta()
 
-	// Validate the meta pages.
-	if err := db.meta0.validate(); err != nil {
-		return err
-	}
-	if err := db.meta1.validate(); err != nil {
-		return err
+	// Validate the meta pages. We only return an error if both meta pages fail
+	// validation, since meta0 failing validation means that it wasn't saved
+	// properly -- but we can recover using meta1. And vice-versa.
+	err0 := db.meta0.validate()
+	err1 := db.meta1.validate()
+	if err0 != nil && err1 != nil {
+		return err0
 	}
 
 	return nil
@@ -351,6 +360,7 @@ func (db *DB) init() error {
 		m.root = bucket{root: 3}
 		m.pgid = 4
 		m.txid = txid(i)
+		m.checksum = m.sum64()
 	}
 
 	// Write an empty freelist at page 3.
@@ -790,10 +800,26 @@ func (db *DB) pageInBuffer(b []byte, id pgid) *page {
 
 // meta retrieves the current meta page reference.
 func (db *DB) meta() *meta {
-	if db.meta0.txid > db.meta1.txid {
-		return db.meta0
+	// We have to return the meta with the highest txid which doesn't fail
+	// validation. Otherwise, we can cause errors when in fact the database is
+	// in a consistent state. metaA is the one with the higher txid.
+	metaA := db.meta0
+	metaB := db.meta1
+	if db.meta1.txid > db.meta0.txid {
+		metaA = db.meta1
+		metaB = db.meta0
 	}
-	return db.meta1
+
+	// Use higher meta page if valid. Otherwise fallback to previous, if valid.
+	if err := metaA.validate(); err == nil {
+		return metaA
+	} else if err := metaB.validate(); err == nil {
+		return metaB
+	}
+
+	// This should never be reached, because both meta1 and meta0 were validated
+	// on mmap() and we do fsync() on every write.
+	panic("bolt.DB.meta(): invalid meta pages")
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
@@ -954,12 +980,12 @@ type meta struct {
 
 // validate checks the marker bytes and version of the meta page to ensure it matches this binary.
 func (m *meta) validate() error {
-	if m.checksum != 0 && m.checksum != m.sum64() {
-		return ErrChecksum
-	} else if m.magic != magic {
+	if m.magic != magic {
 		return ErrInvalid
 	} else if m.version != version {
 		return ErrVersionMismatch
+	} else if m.checksum != 0 && m.checksum != m.sum64() {
+		return ErrChecksum
 	}
 	return nil
 }
