@@ -205,9 +205,15 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		if _, err := db.file.ReadAt(buf[:], 0); err == nil {
 			m := db.pageInBuffer(buf[:], 0).meta()
 			if err := m.validate(); err != nil {
-				return nil, err
+				// If we can't read the page size, we can assume it's the same
+				// as the OS -- since that's how the page size was chosen in the
+				// first place.
+				// XXX: Does this cause issues with opening a database on a
+				//      different OS than the one it was created on?
+				db.pageSize = os.Getpagesize()
+			} else {
+				db.pageSize = int(m.pageSize)
 			}
-			db.pageSize = int(m.pageSize)
 		}
 	}
 
@@ -274,12 +280,13 @@ func (db *DB) mmap(minsz int) error {
 	db.meta0 = db.page(0).meta()
 	db.meta1 = db.page(1).meta()
 
-	// Validate the meta pages.
-	if err := db.meta0.validate(); err != nil {
-		return err
-	}
-	if err := db.meta1.validate(); err != nil {
-		return err
+	// Validate the meta pages. We only return an error if both meta pages fail
+	// validation, since meta0 failing validation means that it wasn't saved
+	// properly -- but we can recover using meta1. And vice-versa.
+	err0 := db.meta0.validate()
+	err1 := db.meta1.validate()
+	if err0 != nil && err1 != nil {
+		return fmt.Errorf("meta0(%v) meta1(%v)", err0, err1)
 	}
 
 	return nil
@@ -790,10 +797,30 @@ func (db *DB) pageInBuffer(b []byte, id pgid) *page {
 
 // meta retrieves the current meta page reference.
 func (db *DB) meta() *meta {
-	if db.meta0.txid > db.meta1.txid {
-		return db.meta0
+	// We have to return the meta with the highest txid which doesn't fail
+	// validation. Otherwise, we can cause errors when in fact the database is
+	// in a consistent state. metaA is the one with the higher txid.
+	metaA := db.meta0
+	metaB := db.meta1
+	if db.meta1.txid > db.meta0.txid {
+		metaA = db.meta1
+		metaB = db.meta0
 	}
-	return db.meta1
+
+	errA := metaA.validate()
+	errB := metaB.validate()
+
+	if errA == nil {
+		return metaA
+	}
+
+	if errB == nil {
+		return metaB
+	}
+
+	// This should never be reached, because both meta1 and meta0 were validated
+	// on mmap() and we do fsync() on every write.
+	panic("both meta0 and meta1 could not be validated in DB.meta()!")
 }
 
 // allocate returns a contiguous block of memory starting at a given page.
