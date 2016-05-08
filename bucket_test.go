@@ -80,6 +80,46 @@ func TestBucket_Get_IncompatibleValue(t *testing.T) {
 	}
 }
 
+// Ensure that a slice returned from a bucket has a capacity equal to its length.
+// This also allows slices to be appended to since it will require a realloc by Go.
+//
+// https://github.com/boltdb/bolt/issues/544
+func TestBucket_Get_Capacity(t *testing.T) {
+	db := MustOpenDB()
+	defer db.MustClose()
+
+	// Write key to a bucket.
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("bucket"))
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte("key"), []byte("val"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Retrieve value and attempt to append to it.
+	if err := db.Update(func(tx *bolt.Tx) error {
+		k, v := tx.Bucket([]byte("bucket")).Cursor().First()
+
+		// Verify capacity.
+		if len(k) != cap(k) {
+			t.Fatalf("unexpected key slice capacity: %d", cap(k))
+		} else if len(v) != cap(v) {
+			t.Fatalf("unexpected value slice capacity: %d", cap(v))
+		}
+
+		// Ensure slice can be appended to without a segfault.
+		k = append(k, []byte("123")...)
+		v = append(v, []byte("123")...)
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Ensure that a bucket can write a key/value.
 func TestBucket_Put(t *testing.T) {
 	db := MustOpenDB()

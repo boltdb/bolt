@@ -45,7 +45,7 @@ type meta struct {
 	_        uint32
 	_        [16]byte
 	_        uint64
-	_        uint64
+	pgid     uint64
 	_        uint64
 	checksum uint64
 }
@@ -85,32 +85,6 @@ func TestOpen_ErrNotExists(t *testing.T) {
 	}
 }
 
-// Ensure that opening a file with wrong checksum returns ErrChecksum.
-func TestOpen_ErrChecksum(t *testing.T) {
-	buf := make([]byte, pageSize)
-	meta := (*meta)(unsafe.Pointer(&buf[0]))
-	meta.magic = magic
-	meta.version = version
-	meta.checksum = 123
-
-	path := tempfile()
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteAt(buf, pageHeaderSize); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(path)
-
-	if _, err := bolt.Open(path, 0666, nil); err != bolt.ErrChecksum {
-		t.Fatalf("unexpected error: %s", err)
-	}
-}
-
 // Ensure that opening a file that is not a Bolt database returns ErrInvalid.
 func TestOpen_ErrInvalid(t *testing.T) {
 	path := tempfile()
@@ -132,28 +106,76 @@ func TestOpen_ErrInvalid(t *testing.T) {
 	}
 }
 
-// Ensure that opening a file created with a different version of Bolt returns
-// ErrVersionMismatch.
+// Ensure that opening a file with two invalid versions returns ErrVersionMismatch.
 func TestOpen_ErrVersionMismatch(t *testing.T) {
-	buf := make([]byte, pageSize)
-	meta := (*meta)(unsafe.Pointer(&buf[0]))
-	meta.magic = magic
-	meta.version = version + 100
+	if pageSize != os.Getpagesize() {
+		t.Skip("page size mismatch")
+	}
 
-	path := tempfile()
-	f, err := os.Create(path)
+	// Create empty database.
+	db := MustOpenDB()
+	path := db.Path()
+	defer db.MustClose()
+
+	// Close database.
+	if err := db.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read data file.
+	buf, err := ioutil.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.WriteAt(buf, pageHeaderSize); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(path)
 
+	// Rewrite meta pages.
+	meta0 := (*meta)(unsafe.Pointer(&buf[pageHeaderSize]))
+	meta0.version++
+	meta1 := (*meta)(unsafe.Pointer(&buf[pageSize+pageHeaderSize]))
+	meta1.version++
+	if err := ioutil.WriteFile(path, buf, 0666); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reopen data file.
 	if _, err := bolt.Open(path, 0666, nil); err != bolt.ErrVersionMismatch {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
+// Ensure that opening a file with two invalid checksums returns ErrChecksum.
+func TestOpen_ErrChecksum(t *testing.T) {
+	if pageSize != os.Getpagesize() {
+		t.Skip("page size mismatch")
+	}
+
+	// Create empty database.
+	db := MustOpenDB()
+	path := db.Path()
+	defer db.MustClose()
+
+	// Close database.
+	if err := db.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read data file.
+	buf, err := ioutil.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Rewrite meta pages.
+	meta0 := (*meta)(unsafe.Pointer(&buf[pageHeaderSize]))
+	meta0.pgid++
+	meta1 := (*meta)(unsafe.Pointer(&buf[pageSize+pageHeaderSize]))
+	meta1.pgid++
+	if err := ioutil.WriteFile(path, buf, 0666); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reopen data file.
+	if _, err := bolt.Open(path, 0666, nil); err != bolt.ErrChecksum {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }
