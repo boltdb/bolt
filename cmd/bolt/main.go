@@ -539,9 +539,9 @@ func (cmd *PageCommand) PrintLeaf(w io.Writer, buf []byte) error {
 			b := (*bucket)(unsafe.Pointer(&e.value()[0]))
 			v = fmt.Sprintf("<pgid=%d,seq=%d>", b.root, b.sequence)
 		} else if isPrintable(string(e.value())) {
-			k = fmt.Sprintf("%q", string(e.value()))
+			v = fmt.Sprintf("%q", string(e.value()))
 		} else {
-			k = fmt.Sprintf("%x", string(e.value()))
+			v = fmt.Sprintf("%x", string(e.value()))
 		}
 
 		fmt.Fprintf(w, "%s: %s\n", k, v)
