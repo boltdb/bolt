@@ -557,7 +557,7 @@ if err != nil {
 Bolt is able to run on mobile devices by leveraging the binding feature of the
 [gomobile](https://github.com/golang/mobile) tool. Create a struct that will
 contain your database logic and a reference to a `*bolt.DB` with a initializing
-contstructor that takes in a filepath where the database file will be stored.
+constructor that takes in a filepath where the database file will be stored.
 Neither Android nor iOS require extra permissions or cleanup from using this method.
 
 ```go
