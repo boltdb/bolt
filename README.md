@@ -1,4 +1,4 @@
-Bolt [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.svg?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.svg)](https://godoc.org/github.com/boltdb/bolt) ![Version](https://img.shields.io/badge/version-1.0-green.svg)
+Bolt [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.svg?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.svg)](https://godoc.org/github.com/boltdb/bolt) ![Version](https://img.shields.io/badge/version-1.2.1-green.svg)
 ====
 
 Bolt is a pure Go key/value store inspired by [Howard Chu's][hyc_symas]
@@ -557,7 +557,7 @@ if err != nil {
 Bolt is able to run on mobile devices by leveraging the binding feature of the
 [gomobile](https://github.com/golang/mobile) tool. Create a struct that will
 contain your database logic and a reference to a `*bolt.DB` with a initializing
-contstructor that takes in a filepath where the database file will be stored.
+constructor that takes in a filepath where the database file will be stored.
 Neither Android nor iOS require extra permissions or cleanup from using this method.
 
 ```go
@@ -844,5 +844,8 @@ Below is a list of public, open source projects that use Bolt:
 * [lru](https://github.com/crowdriff/lru) - Easy to use Bolt-backed Least-Recently-Used (LRU) read-through cache with chainable remote stores.
 * [Storm](https://github.com/asdine/storm) - A simple ORM around BoltDB.
 * [GoWebApp](https://github.com/josephspurrier/gowebapp) - A basic MVC web application in Go using BoltDB.
+* [SimpleBolt](https://github.com/xyproto/simplebolt) - A simple way to use BoltDB. Deals mainly with strings.
+* [Algernon](https://github.com/xyproto/algernon) - A HTTP/2 web server with built-in support for Lua. Uses BoltDB as the default database backend.
+* [MuLiFS](https://github.com/dankomiocevic/mulifs) - Music Library Filesystem creates a filesystem to organise your music files.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
