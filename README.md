@@ -313,7 +313,7 @@ func (s *Store) CreateUser(u *User) error {
         // Generate ID for the user.
         // This returns an error only if the Tx is closed or not writeable.
         // That can't happen in an Update() call so I ignore the error check.
-        id, _ = b.NextSequence()
+        id, _ := b.NextSequence()
         u.ID = int(id)
 
         // Marshal user data into bytes.
