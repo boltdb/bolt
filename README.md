@@ -842,7 +842,7 @@ Below is a list of public, open source projects that use Bolt:
 * [Go Report Card](https://goreportcard.com/) - Go code quality report cards as a (free and open source) service.
 * [Boltdb Boilerplate](https://github.com/bobintornado/boltdb-boilerplate) - Boilerplate wrapper around bolt aiming to make simple calls one-liners.
 * [lru](https://github.com/crowdriff/lru) - Easy to use Bolt-backed Least-Recently-Used (LRU) read-through cache with chainable remote stores.
-* [Storm](https://github.com/asdine/storm) - A simple ORM around BoltDB.
+* [Storm](https://github.com/asdine/storm) - Simple and powerful ORM for BoltDB.
 * [GoWebApp](https://github.com/josephspurrier/gowebapp) - A basic MVC web application in Go using BoltDB.
 * [SimpleBolt](https://github.com/xyproto/simplebolt) - A simple way to use BoltDB. Deals mainly with strings.
 * [Algernon](https://github.com/xyproto/algernon) - A HTTP/2 web server with built-in support for Lua. Uses BoltDB as the default database backend.
