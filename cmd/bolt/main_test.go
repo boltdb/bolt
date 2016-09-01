@@ -209,6 +209,9 @@ func TestCompactCommand_Run(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			if err := b.SetSequence(uint64(i)); err != nil {
+				return err
+			}
 			if err := fillBucket(b, append(k, '.')); err != nil {
 				return err
 			}
@@ -263,7 +266,7 @@ func TestCompactCommand_Run(t *testing.T) {
 	}
 
 	m := NewMain()
-	if err := m.Run("compact", db.Path, dstdb.Path); err != nil {
+	if err := m.Run("compact", "-o", dstdb.Path, db.Path); err != nil {
 		t.Fatal(err)
 	}
 
@@ -336,22 +339,10 @@ func chkdb(path string) ([]byte, error) {
 }
 
 func walkBucket(parent *bolt.Bucket, k []byte, v []byte, w io.Writer) error {
-	_, err := w.Write(k)
-	if err != nil {
+	if _, err := fmt.Fprintf(w, "%d:%x=%x\n", parent.Sequence(), k, v); err != nil {
 		return err
 	}
-	_, err = io.WriteString(w, ":")
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(v)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintln(w)
-	if err != nil {
-		return err
-	}
+
 	// not a bucket, exit.
 	if v != nil {
 		return nil
