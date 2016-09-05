@@ -209,7 +209,7 @@ and then safely close your transaction if an error is returned. This is the
 recommended way to use Bolt transactions.
 
 However, sometimes you may want to manually start and end your transactions.
-You can use the `Tx.Begin()` function directly but **please** be sure to close
+You can use the `DB.Begin()` function directly but **please** be sure to close
 the transaction.
 
 ```go
