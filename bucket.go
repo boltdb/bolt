@@ -130,9 +130,17 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 func (b *Bucket) openBucket(value []byte) *Bucket {
 	var child = newBucket(b.tx)
 
+	// If unaligned load/stores are broken on this arch and value is
+	// unaligned simply clone to an aligned byte array.
+	unaligned := brokenUnaligned && uintptr(unsafe.Pointer(&value[0]))&3 != 0
+
+	if unaligned {
+		value = cloneBytes(value)
+	}
+
 	// If this is a writable transaction then we need to copy the bucket entry.
 	// Read-only transactions can point directly at the mmap entry.
-	if b.tx.writable {
+	if b.tx.writable && !unaligned {
 		child.bucket = &bucket{}
 		*child.bucket = *(*bucket)(unsafe.Pointer(&value[0]))
 	} else {
