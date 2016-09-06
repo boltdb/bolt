@@ -329,6 +329,28 @@ func (b *Bucket) Delete(key []byte) error {
 	return nil
 }
 
+// Sequence returns the current integer for the bucket without incrementing it.
+func (b *Bucket) Sequence() uint64 { return b.bucket.sequence }
+
+// SetSequence updates the sequence number for the bucket.
+func (b *Bucket) SetSequence(v uint64) error {
+	if b.tx.db == nil {
+		return ErrTxClosed
+	} else if !b.Writable() {
+		return ErrTxNotWritable
+	}
+
+	// Materialize the root node if it hasn't been already so that the
+	// bucket will be saved during commit.
+	if b.rootNode == nil {
+		_ = b.node(b.root, nil)
+	}
+
+	// Increment and return the sequence.
+	b.bucket.sequence = v
+	return nil
+}
+
 // NextSequence returns an autoincrementing integer for the bucket.
 func (b *Bucket) NextSequence() (uint64, error) {
 	if b.tx.db == nil {
