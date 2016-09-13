@@ -448,6 +448,10 @@ db.View(func(tx *bolt.Tx) error {
 })
 ```
 
+Please note that keys and values in `ForEach()` are only valid while
+the transaction is open. If you need to use a key or value outside of
+the transaction, you must use `copy()` to copy it to another byte
+slice.
 
 ### Nested buckets
 
