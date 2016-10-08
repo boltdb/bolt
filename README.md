@@ -17,7 +17,7 @@ and setting values. That's it.
 
 Bolt is stable, the API is fixed, and the file format is fixed. Full unit
 test coverage and randomized black box testing are used to ensure database
-consistency and thread safety. Bolt is currently in high-load production
+consistency and thread safety. Bolt is currently used in high-load production
 environments serving databases as large as 1TB. Many companies such as
 Shopify and Heroku use Bolt-backed services every day.
 
