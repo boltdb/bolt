@@ -464,6 +464,55 @@ func (*Bucket) CreateBucketIfNotExists(key []byte) (*Bucket, error)
 func (*Bucket) DeleteBucket(key []byte) error
 ```
 
+Say you had a multi-tenant application where the root level bucket was the account bucket. Inside of this bucket was a sequence of accounts which themselves are buckets. And inside the sequence bucket you could have many buckets pertaining to the Account itself (Users, Notes, etc) isolating the information into logical groupings.
+
+```go
+
+// createUser creates a new user in the given account.
+func createUser(accountID int, u *User) error {
+    // Start the transaction.
+    tx, err := db.Begin(true)
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+
+    // Retrieve the root bucket for the account.
+    // Assume this has already been created when the account was set up.
+    root := tx.Bucket([]byte(strconv.FormatUint(accountID, 10)))
+
+    // Setup the users bucket.
+    bkt, err := root.CreateBucketIfNotExists([]byte("USERS"))
+    if err != nil {
+        return err
+    }
+
+    // Generate an ID for the new user.
+    userID, err := bkt.NextSequence()
+    if err != nil {
+        return err
+    }
+    u.ID = userID
+
+    // Marshal and save the encoded user.
+    if buf, err := json.Marshal(u); err != nil {
+        return err
+    } else if err := bkt.Put([]byte(strconv.FormatUint(u.ID, 10)), buf); err != nil {
+        return err
+    }
+
+    // Commit the transaction.
+    if err := tx.Commit(); err != nil {
+        return err
+    }
+
+    return nil
+}
+
+```
+
+
+
 
 ### Database backups
 
