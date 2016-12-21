@@ -139,6 +139,14 @@ type pgids []pgid
 func (s pgids) Len() int           { return len(s) }
 func (s pgids) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s pgids) Less(i, j int) bool { return s[i] < s[j] }
+func (s pgids) isSorted() bool {
+	for i := len(s)-1; i > 0; i-- {
+		if s[i] < s[i-1] {
+			return false
+		}
+	}
+	return true
+}
 
 // merge returns the sorted union of a and b.
 func (a pgids) merge(b pgids) pgids {

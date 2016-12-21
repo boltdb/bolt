@@ -115,10 +115,11 @@ type DB struct {
 	batchMu sync.Mutex
 	batch   *batch
 
-	rwlock   sync.Mutex   // Allows only one writer at a time.
-	metalock sync.Mutex   // Protects meta page access.
-	mmaplock sync.RWMutex // Protects mmap access during remapping.
-	statlock sync.RWMutex // Protects stats access.
+	rwlock       sync.Mutex   // Allows only one writer at a time.
+	metalock     sync.Mutex   // Protects meta page access.
+	mmaplock     sync.RWMutex // Protects mmap access during remapping.
+	statlock     sync.RWMutex // Protects stats access.
+	freelistonce sync.Once    // Protects reading freelist from file.
 
 	ops struct {
 		writeAt func(b []byte, off int64) (n int, err error)
@@ -231,10 +232,6 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		_ = db.close()
 		return nil, err
 	}
-
-	// Read in the freelist.
-	db.freelist = newFreelist()
-	db.freelist.read(db.page(db.meta().freelist))
 
 	// Mark the database as opened and return.
 	return db, nil
@@ -439,6 +436,15 @@ func (db *DB) close() error {
 	return nil
 }
 
+func (db *DB) ensureFreelist() *freelist {
+	db.freelistonce.Do(func() {
+		fl := newFreelist()
+		fl.read(db.page(db.meta().freelist))
+		db.freelist = fl
+	})
+	return db.freelist
+}
+
 // Begin starts a new transaction.
 // Multiple read-only transactions can be used concurrently but only one
 // write transaction can be used at a time. Starting multiple write transactions
@@ -514,11 +520,11 @@ func (db *DB) beginRWTx() (*Tx, error) {
 	// Once we have the writer lock then we can lock the meta pages so that
 	// we can set up the transaction.
 	db.metalock.Lock()
-	defer db.metalock.Unlock()
 
 	// Exit if the database is not open yet.
 	if !db.opened {
 		db.rwlock.Unlock()
+		db.metalock.Unlock()
 		return nil, ErrDatabaseNotOpen
 	}
 
@@ -534,10 +540,14 @@ func (db *DB) beginRWTx() (*Tx, error) {
 			minid = t.meta.txid
 		}
 	}
+
+	// Release meta here cause ensureFreelist can take a long time
+	db.metalock.Unlock()
+
+	db.ensureFreelist()
 	if minid > 0 {
 		db.freelist.release(minid - 1)
 	}
-
 	return t, nil
 }
 
