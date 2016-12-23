@@ -46,17 +46,8 @@ func (f *freelist) pending_count() int {
 	return count
 }
 
-// lenall returns the combined number of all free ids and all pending ids.
-func (f *freelist) lenall() int {
-	n := len(f.ids)
-	for _, list := range f.pending {
-		n += len(list)
-	}
-	return n
-}
-
-// all copies into dst a list of all free ids and all pending ids in one sorted list.
-// f.lenall returns the minimum length required for dst.
+// copyall copies into dst a list of all free ids and all pending ids in one sorted list.
+// f.count returns the minimum length required for dst.
 func (f *freelist) copyall(dst []pgid) {
 	m := make(pgids, 0, len(f.pending)) // len(f.pending) undercounts, but it is a start
 	for _, list := range f.pending {
@@ -200,7 +191,7 @@ func (f *freelist) write(p *page) error {
 
 	// The page.count can only hold up to 64k elements so if we overflow that
 	// number then we handle it by putting the size in the first element.
-	lenids := f.lenall()
+	lenids := f.count()
 	if lenids == 0 {
 		p.count = uint16(lenids)
 	} else if lenids < 0xFFFF {

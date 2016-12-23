@@ -154,7 +154,7 @@ func (a pgids) merge(b pgids) pgids {
 	return merged
 }
 
-// merge copies the sorted union of a and b into dst.
+// mergepgids copies the sorted union of a and b into dst.
 // If dst is too small, it panics.
 func mergepgids(dst, a, b pgids) {
 	if len(dst) < len(a)+len(b) {
