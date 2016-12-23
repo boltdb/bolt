@@ -24,7 +24,12 @@ func newFreelist() *freelist {
 
 // size returns the size of the page after serialization.
 func (f *freelist) size() int {
-	return pageHeaderSize + (int(unsafe.Sizeof(pgid(0))) * f.count())
+	n := f.count()
+	if n >= 0xFFFF {
+		// The first element will be used to store the count. See freelist.write.
+		n++
+	}
+	return pageHeaderSize + (int(unsafe.Sizeof(pgid(0))) * n)
 }
 
 // count returns count of pages on the freelist
