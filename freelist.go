@@ -49,7 +49,7 @@ func (f *freelist) pending_count() int {
 // copyall copies into dst a list of all free ids and all pending ids in one sorted list.
 // f.count returns the minimum length required for dst.
 func (f *freelist) copyall(dst []pgid) {
-	m := make(pgids, 0, len(f.pending)) // len(f.pending) undercounts, but it is a start
+	m := make(pgids, 0, f.pending_count())
 	for _, list := range f.pending {
 		m = append(m, list...)
 	}
