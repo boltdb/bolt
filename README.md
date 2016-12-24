@@ -768,6 +768,9 @@ Here are a few things to note when evaluating and using Bolt:
   can be reused by a new page or can be unmapped from virtual memory and you'll
   see an `unexpected fault address` panic when accessing it.
 
+* Bolt uses an exclusive write lock on the database file so it cannot be
+  shared by multiple processes.
+
 * Be careful when using `Bucket.FillPercent`. Setting a high fill percent for
   buckets that have random inserts will cause your database to have very poor
   page utilization.

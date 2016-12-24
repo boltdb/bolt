@@ -552,7 +552,10 @@ func (db *DB) removeTx(tx *Tx) {
 	// Remove the transaction.
 	for i, t := range db.txs {
 		if t == tx {
-			db.txs = append(db.txs[:i], db.txs[i+1:]...)
+			last := len(db.txs) - 1
+			db.txs[i] = db.txs[last]
+			db.txs[last] = nil
+			db.txs = db.txs[:last]
 			break
 		}
 	}
