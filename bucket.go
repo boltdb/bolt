@@ -175,9 +175,8 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	if bytes.Equal(key, k) {
 		if (flags & bucketLeafFlag) != 0 {
 			return nil, ErrBucketExists
-		} else {
-			return nil, ErrIncompatibleValue
 		}
+		return nil, ErrIncompatibleValue
 	}
 
 	// Create empty, inline bucket.
