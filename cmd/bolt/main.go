@@ -359,7 +359,7 @@ func (cmd *DumpCommand) Run(args ...string) error {
 	return nil
 }
 
-// PrintPage prints a given page as hexidecimal.
+// PrintPage prints a given page as hexadecimal.
 func (cmd *DumpCommand) PrintPage(w io.Writer, r io.ReaderAt, pageID int, pageSize int) error {
 	const bytesPerLineN = 16
 
@@ -409,7 +409,7 @@ func (cmd *DumpCommand) Usage() string {
 	return strings.TrimLeft(`
 usage: bolt dump -page PAGEID PATH
 
-Dump prints a hexidecimal dump of a single page.
+Dump prints a hexadecimal dump of a single page.
 `, "\n")
 }
 
@@ -596,7 +596,7 @@ func (cmd *PageCommand) PrintFreelist(w io.Writer, buf []byte) error {
 	return nil
 }
 
-// PrintPage prints a given page as hexidecimal.
+// PrintPage prints a given page as hexadecimal.
 func (cmd *PageCommand) PrintPage(w io.Writer, r io.ReaderAt, pageID int, pageSize int) error {
 	const bytesPerLineN = 16
 
