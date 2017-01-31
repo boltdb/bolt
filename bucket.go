@@ -3,6 +3,7 @@ package bolt
 import (
 	"bytes"
 	"fmt"
+	"sync"
 	"unsafe"
 )
 
@@ -91,10 +92,7 @@ func (b *Bucket) Cursor() *Cursor {
 	b.tx.stats.CursorCount++
 
 	// Allocate and return a cursor.
-	return &Cursor{
-		bucket: b,
-		stack:  make([]elemRef, 0),
-	}
+	return newCursor(b)
 }
 
 // Bucket retrieves a nested bucket by name.
@@ -110,6 +108,7 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 	// Move cursor to key.
 	c := b.Cursor()
 	k, v, flags := c.seek(name)
+	c.Close()
 
 	// Return nil if the key doesn't exist or it is not a bucket.
 	if !bytes.Equal(name, k) || (flags&bucketLeafFlag) == 0 {
@@ -128,7 +127,8 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 // Helper method that re-interprets a sub-bucket value
 // from a parent into a Bucket
 func (b *Bucket) openBucket(value []byte) *Bucket {
-	var child = newBucket(b.tx)
+	child := bucketPool.Get()
+	*child = newBucket(b.tx)
 
 	// If unaligned load/stores are broken on this arch and value is
 	// unaligned simply clone to an aligned byte array.
@@ -142,7 +142,7 @@ func (b *Bucket) openBucket(value []byte) *Bucket {
 	// Read-only transactions can point directly at the mmap entry.
 	if b.tx.writable && !unaligned {
 		child.bucket = &bucket{}
-		*child.bucket = *(*bucket)(unsafe.Pointer(&value[0]))
+		*(child.bucket) = *(*bucket)(unsafe.Pointer(&value[0]))
 	} else {
 		child.bucket = (*bucket)(unsafe.Pointer(&value[0]))
 	}
@@ -152,8 +152,54 @@ func (b *Bucket) openBucket(value []byte) *Bucket {
 		child.page = (*page)(unsafe.Pointer(&value[bucketHeaderSize]))
 	}
 
-	return &child
+	return child
 }
+
+// Close releases the bucket structure so the memory can be used for another bucket.
+// Do not touch the bucket again after closing it. Note this does not effect the
+// contents of the bucket in the database, just the memory allocated to control
+// access to it.
+// You do not need to call Close() on your buckets, but doing so may reduce the
+// number of memory allocations, particularly when traversing a large number of
+// buckets in a read transaction.
+func (b *Bucket) Close() {
+	// if the bucket is part of a writeable transaction then we don't re-use the
+	// memory as it is kept in its parent buckets map
+	if b.tx.writable {
+		return
+	}
+	bucketPool.Put(b)
+}
+
+type freeBuckets struct {
+	sync.Mutex
+	items []*Bucket
+}
+
+func (fs *freeBuckets) Get() *Bucket {
+	fs.Lock()
+	l := len(fs.items)
+	var i *Bucket
+	if l > 0 {
+		i = fs.items[l-1]
+		fs.items = fs.items[:l-1]
+	} else {
+		i = &Bucket{}
+	}
+	fs.Unlock()
+	return i
+}
+
+func (fs *freeBuckets) Put(i *Bucket) {
+	// Ensure bucket is cleaned before storage - otherwise we might stop things
+	// being cleaned up with GC
+	*i = Bucket{}
+	fs.Lock()
+	fs.items = append(fs.items, i)
+	fs.Unlock()
+}
+
+var bucketPool = freeBuckets{}
 
 // CreateBucket creates a new bucket at the given key and returns the new bucket.
 // Returns an error if the key already exists, if the bucket name is blank, or if the bucket name is too long.
@@ -170,6 +216,7 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	// Move cursor to correct position.
 	c := b.Cursor()
 	k, _, flags := c.seek(key)
+	defer c.Close()
 
 	// Return an error if there is an existing key.
 	if bytes.Equal(key, k) {
@@ -224,6 +271,7 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 	// Move cursor to correct position.
 	c := b.Cursor()
 	k, _, flags := c.seek(key)
+	defer c.Close()
 
 	// Return an error if bucket doesn't exist or is not a bucket.
 	if !bytes.Equal(key, k) {
@@ -264,7 +312,9 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 // Returns a nil value if the key does not exist or if the key is a nested bucket.
 // The returned value is only valid for the life of the transaction.
 func (b *Bucket) Get(key []byte) []byte {
-	k, v, flags := b.Cursor().seek(key)
+	c := b.Cursor()
+	k, v, flags := c.seek(key)
+	c.Close()
 
 	// Return nil if this is a bucket.
 	if (flags & bucketLeafFlag) != 0 {
@@ -297,6 +347,7 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
+	defer c.Close()
 	k, _, flags := c.seek(key)
 
 	// Return an error if there is an existing key with a bucket value.
@@ -323,6 +374,7 @@ func (b *Bucket) Delete(key []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
+	defer c.Close()
 	_, _, flags := c.seek(key)
 
 	// Return an error if there is already existing bucket value.
@@ -386,6 +438,7 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 		return ErrTxClosed
 	}
 	c := b.Cursor()
+	defer c.Close()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		if err := fn(k, v); err != nil {
 			return err
@@ -559,6 +612,7 @@ func (b *Bucket) spill() error {
 			panic(fmt.Sprintf("unexpected bucket header flag: %x", flags))
 		}
 		c.node().put([]byte(name), []byte(name), value, 0, bucketLeafFlag)
+		c.Close()
 	}
 
 	// Ignore if there's not a materialized root node.

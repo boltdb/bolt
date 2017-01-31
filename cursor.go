@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"sync"
 )
 
 // Cursor represents an iterator that can traverse over all key/value pairs in a bucket in sorted order.
@@ -19,6 +20,75 @@ type Cursor struct {
 	bucket *Bucket
 	stack  []elemRef
 }
+
+func newCursor(b *Bucket) *Cursor {
+	c := cursorPool.Get()
+	c.bucket = b
+	c.stack = stackPool.Get()
+	return c
+}
+
+func (c *Cursor) Close() {
+	stackPool.Put(c.stack)
+	cursorPool.Put(c)
+}
+
+// Managing our own free list of stacks seems to work much better than using a
+// sync.Pool - potentially at the expense of a little higher data usage if
+// the application uses a lot of cursors at once
+type freeStack struct {
+	sync.Mutex
+	items [][]elemRef
+}
+
+func (fs *freeStack) Get() []elemRef {
+	fs.Lock()
+	l := len(fs.items)
+	var s []elemRef
+	if l > 0 {
+		s = fs.items[l-1]
+		fs.items = fs.items[:l-1]
+	}
+	fs.Unlock()
+	return s
+}
+
+func (fs *freeStack) Put(e []elemRef) {
+	e = e[:0]
+	fs.Lock()
+	fs.items = append(fs.items, e)
+	fs.Unlock()
+}
+
+var stackPool = freeStack{}
+
+type freeCursors struct {
+	sync.Mutex
+	items []*Cursor
+}
+
+func (fs *freeCursors) Get() *Cursor {
+	fs.Lock()
+	l := len(fs.items)
+	var c *Cursor
+	if l > 0 {
+		c = fs.items[l-1]
+		fs.items = fs.items[:l-1]
+	} else {
+		c = &Cursor{}
+	}
+	fs.Unlock()
+	return c
+}
+
+func (fs *freeCursors) Put(c *Cursor) {
+	c.bucket = nil
+	fs.Lock()
+	fs.items = append(fs.items, c)
+	fs.Unlock()
+}
+
+var cursorPool = freeCursors{}
 
 // Bucket returns the bucket that this cursor was created from.
 func (c *Cursor) Bucket() *Bucket {

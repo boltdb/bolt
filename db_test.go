@@ -1312,6 +1312,7 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 						if err := b.Put(k, []byte("filler")); err != nil {
 							return err
 						}
+						b.Close()
 					}
 					return nil
 				}
@@ -1326,6 +1327,96 @@ func BenchmarkDBBatchManual10x100(b *testing.B) {
 
 	b.StopTimer()
 	validateBatchBench(b, db)
+}
+
+// BenchmarkDBTraverse tests enumerating values from the database. We have a
+// database of N buckets each with 10 key, value pairs. We test how long it takes
+// us to enumerate all the buckets and values
+func BenchmarkDBTraverse(b *testing.B) {
+	db := MustOpenDB()
+	// defer db.MustClose()
+	var bench *bolt.Bucket
+	var err error
+	if err := db.Update(func(tx *bolt.Tx) error {
+		bench, err = tx.CreateBucket([]byte("bench"))
+		return err
+	}); err != nil {
+		b.Fatal(err)
+	}
+
+	// Fill the database with N buckets, each with 10 k,v pairs. We do this
+	// controlling the transaction so we can break it up into multiple transactions
+	// as this seems to be faster
+	tx, err := db.Begin(true)
+	if err != nil {
+		b.Fatal(err)
+	}
+	bench = tx.Bucket([]byte("bench"))
+	for i := 0; i < b.N; i++ {
+		name := make([]byte, 4)
+		binary.LittleEndian.PutUint32(name, uint32(i))
+		bucket, err := bench.CreateBucket(name)
+		if err != nil {
+			b.Fatal(err)
+		}
+		for j := 0; j < 10; j++ {
+			key := make([]byte, 4)
+			binary.LittleEndian.PutUint32(key, uint32(j))
+			if err := bucket.Put(key, key); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		if i%10000 == 0 {
+			if err := tx.Commit(); err != nil {
+				b.Fatal(err)
+			}
+			tx, err = db.Begin(true)
+			if err != nil {
+				b.Fatal(err)
+			}
+			bench = tx.Bucket([]byte("bench"))
+		}
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	// We're now ready to test
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	count := 0
+	if err := db.View(func(tx *bolt.Tx) error {
+		bench = tx.Bucket([]byte("bench"))
+		cursor := bench.Cursor()
+		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
+			nodeBucket := bench.Bucket(k)
+			if err := nodeBucket.ForEach(func(j, v []byte) error {
+				count++
+				if len(j) != 4 || len(v) != 4 {
+					b.Fatalf("Expect key & value to be 4 bytes. %v, %v", j, v)
+				}
+				if j[0] != v[0] || j[1] != v[1] || j[2] != v[2] || j[3] != v[3] {
+					b.Fatalf("Expect key to match value. %v != %v", j, v)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			nodeBucket.Close()
+		}
+		return nil
+	}); err != nil {
+		b.Fatal(err)
+	}
+
+	if count != b.N*10 {
+		b.Fatalf("Expected %d nodes, counted %d", b.N*10, count)
+	}
+
 }
 
 func validateBatchBench(b *testing.B, db *DB) {
