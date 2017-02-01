@@ -38,7 +38,7 @@ func (c *Cursor) First() (key []byte, value []byte) {
 	// If we land on an empty page then move to the next value.
 	// https://github.com/boltdb/bolt/issues/450
 	if c.stack[len(c.stack)-1].count() == 0 {
-		c.next()
+		c.nextJust()
 	}
 
 	k, v, flags := c.keyValue()
@@ -47,6 +47,26 @@ func (c *Cursor) First() (key []byte, value []byte) {
 	}
 	return k, v
 
+}
+
+// First moves the cursor to the first item in the bucket and returns its key only.
+// If the bucket is empty then a nil key is returned.
+// The returned key is only valid for the life of the transaction.
+func (c *Cursor) FirstKey() (key []byte) {
+	_assert(c.bucket.tx.db != nil, "tx closed")
+	c.stack = c.stack[:0]
+	p, n := c.bucket.pageNode(c.bucket.root)
+	c.stack = append(c.stack, elemRef{page: p, node: n, index: 0})
+	c.first()
+
+	// If we land on an empty page then move to the next value.
+	// https://github.com/boltdb/bolt/issues/450
+	if c.stack[len(c.stack)-1].count() == 0 {
+		c.nextJust()
+	}
+
+	k, _ := c.justKey()
+	return k
 }
 
 // Last moves the cursor to the last item in the bucket and returns its key and value.
@@ -67,6 +87,21 @@ func (c *Cursor) Last() (key []byte, value []byte) {
 	return k, v
 }
 
+// Last moves the cursor to the last item in the bucket and returns its key only.
+// If the bucket is empty then a nil key is returned.
+// The returned key is only valid for the life of the transaction.
+func (c *Cursor) LastKey() (key []byte) {
+	_assert(c.bucket.tx.db != nil, "tx closed")
+	c.stack = c.stack[:0]
+	p, n := c.bucket.pageNode(c.bucket.root)
+	ref := elemRef{page: p, node: n}
+	ref.index = ref.count() - 1
+	c.stack = append(c.stack, ref)
+	c.last()
+	k, _ := c.justKey()
+	return k
+}
+
 // Next moves the cursor to the next item in the bucket and returns its key and value.
 // If the cursor is at the end of the bucket then a nil key and value are returned.
 // The returned key and value are only valid for the life of the transaction.
@@ -77,6 +112,15 @@ func (c *Cursor) Next() (key []byte, value []byte) {
 		return k, nil
 	}
 	return k, v
+}
+
+// NextKey moves the cursor to the next item in the bucket and returns its key only.
+// If the cursor is at the end of the bucket then a nil key is returned.
+// The returned key is only valid for the life of the transaction.
+func (c *Cursor) NextKey() (key []byte) {
+	_assert(c.bucket.tx.db != nil, "tx closed")
+	k, _ := c.nextKey()
+	return k
 }
 
 // Prev moves the cursor to the previous item in the bucket and returns its key and value.
@@ -110,6 +154,34 @@ func (c *Cursor) Prev() (key []byte, value []byte) {
 	return k, v
 }
 
+// Prev moves the cursor to the previous item in the bucket and returns its key only.
+// If the cursor is at the beginning of the bucket then a nil key is returned.
+// The returned key is only valid for the life of the transaction.
+func (c *Cursor) PrevKey() (key []byte) {
+	_assert(c.bucket.tx.db != nil, "tx closed")
+
+	// Attempt to move back one element until we're successful.
+	// Move up the stack as we hit the beginning of each page in our stack.
+	for i := len(c.stack) - 1; i >= 0; i-- {
+		elem := &c.stack[i]
+		if elem.index > 0 {
+			elem.index--
+			break
+		}
+		c.stack = c.stack[:i]
+	}
+
+	// If we've hit the end then return nil.
+	if len(c.stack) == 0 {
+		return nil
+	}
+
+	// Move down the stack to find the last element of the last leaf under this branch.
+	c.last()
+	k, _ := c.justKey()
+	return k
+}
+
 // Seek moves the cursor to a given key and returns it.
 // If the key does not exist then the next key is used. If no keys
 // follow, a nil key is returned.
@@ -130,6 +202,24 @@ func (c *Cursor) Seek(seek []byte) (key []byte, value []byte) {
 	return k, v
 }
 
+// SeekKey moves the cursor to a given key and returns it.
+// If the key does not exist then the next key is used. If no keys
+// follow, a nil key is returned.
+// The returned key only are only valid for the life of the transaction.
+func (c *Cursor) SeekKey(seek []byte) (key []byte) {
+	k, _ := c.seekKey(seek)
+
+	// If we ended up after the last element of a page then move to the next one.
+	if ref := &c.stack[len(c.stack)-1]; ref.index >= ref.count() {
+		k, _ = c.nextKey()
+	}
+
+	if k == nil {
+		return nil
+	}
+	return k
+}
+
 // Delete removes the current key/value under the cursor from the bucket.
 // Delete fails if current key/value is a bucket or if the transaction is not writable.
 func (c *Cursor) Delete() error {
@@ -139,7 +229,7 @@ func (c *Cursor) Delete() error {
 		return ErrTxNotWritable
 	}
 
-	key, _, flags := c.keyValue()
+	key, flags := c.justKey()
 	// Return an error if current value is a bucket.
 	if (flags & bucketLeafFlag) != 0 {
 		return ErrIncompatibleValue
@@ -153,7 +243,6 @@ func (c *Cursor) Delete() error {
 // If the key does not exist then the next key is used.
 func (c *Cursor) seek(seek []byte) (key []byte, value []byte, flags uint32) {
 	_assert(c.bucket.tx.db != nil, "tx closed")
-
 	// Start from root page/node and traverse to correct page.
 	c.stack = c.stack[:0]
 	c.search(seek, c.bucket.root)
@@ -166,6 +255,24 @@ func (c *Cursor) seek(seek []byte) (key []byte, value []byte, flags uint32) {
 
 	// If this is a bucket then return a nil value.
 	return c.keyValue()
+}
+
+// seekKey moves the cursor to a given key and returns the key and flags only.
+// If the key does not exist then the next key is used.
+func (c *Cursor) seekKey(seek []byte) (key []byte, flags uint32) {
+	_assert(c.bucket.tx.db != nil, "tx closed")
+	// Start from root page/node and traverse to correct page.
+	c.stack = c.stack[:0]
+	c.search(seek, c.bucket.root)
+	ref := &c.stack[len(c.stack)-1]
+
+	// If the cursor is pointing to the end of page/node then return nil.
+	if ref.index >= ref.count() {
+		return nil, 0
+	}
+
+	// If this is a bucket then return a nil value.
+	return c.justKey()
 }
 
 // first moves the cursor to the first leaf element under the last page in the stack.
@@ -246,6 +353,79 @@ func (c *Cursor) next() (key []byte, value []byte, flags uint32) {
 		}
 
 		return c.keyValue()
+	}
+}
+
+// nextkey moves to the next leaf element and returns the key only.
+// If the cursor is at the last leaf element then it stays there and returns nil.
+func (c *Cursor) nextKey() (key []byte, flags uint32) {
+	for {
+		// Attempt to move over one element until we're successful.
+		// Move up the stack as we hit the end of each page in our stack.
+		var i int
+		for i = len(c.stack) - 1; i >= 0; i-- {
+			elem := &c.stack[i]
+			if elem.index < elem.count()-1 {
+				elem.index++
+				break
+			}
+		}
+
+		// If we've hit the root page then stop and return. This will leave the
+		// cursor on the last element of the last page.
+		if i == -1 {
+			return nil, 0
+		}
+
+		// Otherwise start from where we left off in the stack and find the
+		// first element of the first leaf page.
+		c.stack = c.stack[:i+1]
+		c.first()
+
+		// If this is an empty page then restart and move back up the stack.
+		// https://github.com/boltdb/bolt/issues/450
+		if c.stack[len(c.stack)-1].count() == 0 {
+			continue
+		}
+
+		return c.justKey()
+	}
+}
+
+// next moves to the next leaf element and returns no.
+// If the cursor is at the last leaf element then it stays there.
+func (c *Cursor) nextJust() {
+	for {
+		// Attempt to move over one element until we're successful.
+		// Move up the stack as we hit the end of each page in our stack.
+		var i int
+		for i = len(c.stack) - 1; i >= 0; i-- {
+			elem := &c.stack[i]
+			if elem.index < elem.count()-1 {
+				elem.index++
+				break
+			}
+		}
+
+		// If we've hit the root page then stop and return. This will leave the
+		// cursor on the last element of the last page.
+		if i == -1 {
+			return
+		}
+
+		// Otherwise start from where we left off in the stack and find the
+		// first element of the first leaf page.
+		c.stack = c.stack[:i+1]
+		c.first()
+
+		// If this is an empty page then restart and move back up the stack.
+		// https://github.com/boltdb/bolt/issues/450
+		if c.stack[len(c.stack)-1].count() == 0 {
+			continue
+		}
+
+		c.justKey()
+		return
 	}
 }
 
@@ -345,13 +525,60 @@ func (c *Cursor) keyValue() ([]byte, []byte, uint32) {
 
 	// Retrieve value from node.
 	if ref.node != nil {
+		in := &ref.node.inodes[ref.index]
+		if c.bucket.tx.db.Compress && (in.flags&uint32(bucketLeafFlag)) == 0 {
+			inodes := make([]inode, len(ref.node.inodes))
+			copy(inodes, ref.node.inodes)
+			err := decompressInodes(inodes)
+			if err != nil {
+				return in.key, in.value, in.flags
+			}
+			return inodes[ref.index].key, inodes[ref.index].value, inodes[ref.index].flags
+		}
+		return in.key, in.value, in.flags
+	}
+
+	elem := ref.page.leafPageElement(uint16(ref.index))
+
+	if c.bucket.tx.db.Compress && (elem.flags&uint32(bucketLeafFlag)) == 0 {
+		inodes := make([]inode, ref.count())
+		for i := 0; i < ref.count(); i++ {
+			elemi := ref.page.leafPageElement(uint16(i))
+			inodes[i].key = elemi.key()
+			inodes[i].flags = elemi.flags
+
+			if (elemi.flags & uint32(bucketLeafFlag)) == 0 {
+				inodes[i].value = make([]byte, len(elemi.value()))
+				copy(inodes[i].value, elemi.value())
+			}
+		}
+		err := decompressInodes(inodes)
+		if err != nil {
+			return elem.key(), elem.value(), elem.flags
+		}
+		return inodes[ref.index].key, inodes[ref.index].value, inodes[ref.index].flags
+	}
+
+	// Or retrieve value from page.
+	return elem.key(), elem.value(), elem.flags
+}
+
+// justKey returns the key of the current leaf element.
+func (c *Cursor) justKey() ([]byte, uint32) {
+	ref := &c.stack[len(c.stack)-1]
+	if ref.count() == 0 || ref.index >= ref.count() {
+		return nil, 0
+	}
+
+	// Retrieve value from node.
+	if ref.node != nil {
 		inode := &ref.node.inodes[ref.index]
-		return inode.key, inode.value, inode.flags
+		return inode.key, inode.flags
 	}
 
 	// Or retrieve value from page.
 	elem := ref.page.leafPageElement(uint16(ref.index))
-	return elem.key(), elem.value(), elem.flags
+	return elem.key(), elem.flags
 }
 
 // node returns the node that the cursor is currently positioned on.

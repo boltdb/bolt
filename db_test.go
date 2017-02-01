@@ -1481,7 +1481,7 @@ func tempfile() string {
 // mustContainKeys checks that a bucket contains a given set of keys.
 func mustContainKeys(b *bolt.Bucket, m map[string]string) {
 	found := make(map[string]string)
-	if err := b.ForEach(func(k, _ []byte) error {
+	if err := b.ForEachKey(func(k []byte) error {
 		found[string(k)] = ""
 		return nil
 	}); err != nil {

@@ -49,6 +49,10 @@ type DB struct {
 	// debugging purposes.
 	StrictMode bool
 
+	// When enabled use snappy compression to implement a compressing rebalance of the pages
+	// before commit
+	Compress bool
+
 	// Setting the NoSync flag will cause the database to skip fsync()
 	// calls after each commit. This can be useful when bulk loading data
 	// into a database and you can restart the bulk load in the event of
@@ -156,7 +160,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 	db.NoGrowSync = options.NoGrowSync
 	db.MmapFlags = options.MmapFlags
-
+	db.Compress = options.Compress
 	// Set default values for later DB operations.
 	db.MaxBatchSize = DefaultMaxBatchSize
 	db.MaxBatchDelay = DefaultMaxBatchDelay
@@ -919,6 +923,9 @@ type Options struct {
 	// If initialMmapSize is smaller than the previous database size,
 	// it takes no effect.
 	InitialMmapSize int
+
+	// Compress nodes before writing out and when reading
+	Compress bool
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().
@@ -926,6 +933,7 @@ type Options struct {
 var DefaultOptions = &Options{
 	Timeout:    0,
 	NoGrowSync: false,
+	Compress:   true,
 }
 
 // Stats represents statistics about the database.

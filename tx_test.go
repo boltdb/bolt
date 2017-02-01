@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/boltdb/bolt"
 )
@@ -481,17 +483,19 @@ func TestTx_OnCommit_Rollback(t *testing.T) {
 func TestTx_CopyFile(t *testing.T) {
 	db := MustOpenDB()
 	defer db.MustClose()
-
+	db.Compress = true
 	path := tempfile()
+	data1 := getRandomData(10240)
+	data2 := getRandomData(1024)
 	if err := db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("widgets"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("foo"), []byte("bar")); err != nil {
+		if err := b.Put([]byte("foo"), data1); err != nil {
 			t.Fatal(err)
 		}
-		if err := b.Put([]byte("baz"), []byte("bat")); err != nil {
+		if err := b.Put([]byte("baz"), data2); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -511,11 +515,11 @@ func TestTx_CopyFile(t *testing.T) {
 	}
 
 	if err := db2.View(func(tx *bolt.Tx) error {
-		if v := tx.Bucket([]byte("widgets")).Get([]byte("foo")); !bytes.Equal(v, []byte("bar")) {
-			t.Fatalf("unexpected value: %v", v)
+		if v := tx.Bucket([]byte("widgets")).Get([]byte("foo")); !bytes.Equal(v, data1) {
+			t.Fatalf("unexpected value")
 		}
-		if v := tx.Bucket([]byte("widgets")).Get([]byte("baz")); !bytes.Equal(v, []byte("bat")) {
-			t.Fatalf("unexpected value: %v", v)
+		if v := tx.Bucket([]byte("widgets")).Get([]byte("baz")); !bytes.Equal(v, data2) {
+			t.Fatalf("unexpected value")
 		}
 		return nil
 	}); err != nil {
@@ -525,6 +529,237 @@ func TestTx_CopyFile(t *testing.T) {
 	if err := db2.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Ensure that the database can be copied to a file path.
+func TestTx_CopyFileLargeCompressed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	db := MustOpenDB()
+	defer db.MustClose()
+	db.Compress = true
+	path := tempfile()
+	data := benchdata
+
+	for k := 0; k < multiplier; k++ {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucket([]byte(fmt.Sprintf("widgets%d", k)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < len(data); i++ {
+				if err := b.Put([]byte(fmt.Sprintf("foo%d%d", i, k)), data[i]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
+		return tx.CopyFile(path, 0600)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("dbsize: ", fi.Size())
+	file.Close()
+	db2, err := bolt.Open(path, 0600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k := 0; k < multiplier; k++ {
+
+		if err := db2.View(func(tx *bolt.Tx) error {
+			for i := 0; i < len(data); i++ {
+				if v := tx.Bucket([]byte(fmt.Sprintf("widgets%d", k))).Get([]byte(fmt.Sprintf("foo%d%d", i, k))); !bytes.Equal(v, data[i]) {
+					t.Fatalf("unexpected value")
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+	}
+	if err := db2.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Ensure that the database can be copied to a file path.
+func TestTx_CopyFileLargeUnCompressed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	db := MustOpenDB()
+	defer db.MustClose()
+	db.Compress = false
+	path := tempfile()
+	data := benchdata
+
+	for k := 0; k < multiplier; k++ {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucket([]byte(fmt.Sprintf("widgets%d", k)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < len(data); i++ {
+				if err := b.Put([]byte(fmt.Sprintf("foo%d%d", i, k)), data[i]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
+		return tx.CopyFile(path, 0600)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("dbsize: ", fi.Size())
+	file.Close()
+	db2, err := bolt.Open(path, 0600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k := 0; k < multiplier; k++ {
+
+		if err := db2.View(func(tx *bolt.Tx) error {
+			for i := 0; i < len(data); i++ {
+				if v := tx.Bucket([]byte(fmt.Sprintf("widgets%d", k))).Get([]byte(fmt.Sprintf("foo%d%d", i, k))); !bytes.Equal(v, data[i]) {
+					t.Fatalf("unexpected value")
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+	}
+	if err := db2.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+}
+
+// Ensure that the database can be copied to a file path.
+func TestTx_CopyFileLargeCompressedWrite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	db := MustOpenDB()
+	defer db.MustClose()
+	db.Compress = true
+	path := tempfile()
+	data := benchdata
+
+	for k := 0; k < multiplier; k++ {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucket([]byte(fmt.Sprintf("widgets%d", k)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < len(data); i++ {
+				if err := b.Put([]byte(fmt.Sprintf("foo%d%d", i, k)), data[i]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
+		return tx.CopyFile(path, 0600)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("dbsize: ", fi.Size())
+	file.Close()
+
+}
+
+// Ensure that the database can be copied to a file path.
+func TestTx_CopyFileLargeUnCompressedWrite(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+	db := MustOpenDB()
+	defer db.MustClose()
+	db.Compress = false
+	path := tempfile()
+	data := benchdata
+
+	for k := 0; k < multiplier; k++ {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucket([]byte(fmt.Sprintf("widgets%d", k)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < len(data); i++ {
+				if err := b.Put([]byte(fmt.Sprintf("foo%d%d", i, k)), data[i]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := db.View(func(tx *bolt.Tx) error {
+		return tx.CopyFile(path, 0600)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("dbsize: ", fi.Size())
+	file.Close()
+
 }
 
 type failWriterError struct{}
@@ -713,4 +948,69 @@ func ExampleTx_CopyFile() {
 
 	// Output:
 	// The value for 'foo' in the clone is: bar
+}
+
+func getRandomData(size int) []byte {
+	rand.Seed(time.Now().UTC().UnixNano())
+	const chars = "abcdefghijklmnopqrstuvwxyz1234567890                    "
+	data := make([]byte, size)
+	data[0] = []byte("{")[0]
+	for i := 1; i < size-1; i++ {
+		data[i] = chars[rand.Intn(len(chars))]
+	}
+	data[size-1] = []byte("}")[0]
+	return data
+}
+
+var words []string
+var benchdata [][]byte
+
+const chars = "abcdefghijklmnopqrstuvwxyz1234567890"
+const multiplier = 100000
+
+func init() {
+	for i := 0; i < 20; i++ {
+		word := make([]byte, 20)
+		for j := 0; j < 20; j++ {
+			word = append(word, chars[rand.Intn(len(chars))])
+			word = append(word, []byte(" ")...)
+
+		}
+		words = append(words, string(word))
+
+	}
+	benchdata = make([][]byte, 10)
+	for i := 0; i < len(benchdata); i++ {
+		switch i % 3 {
+		case 0:
+			benchdata[i] = getCompressableData(1024 * 2)
+		case 1:
+			benchdata[i] = getCompressableData(1024 * 4)
+		case 2:
+			benchdata[i] = getCompressableData(1024 * 8)
+		}
+	}
+
+}
+
+func getCompressableData(size int) []byte {
+	rand.Seed(time.Now().UTC().UnixNano())
+	keys := []string{"foo1234567 ", "barabcdefgh ", "bazABCDEFGH ", "0987654321 ", "POIUYTREWQ ", "lkjhgfdsa; ", "?.,mnbvcxz "}
+	data := make([]byte, size)
+	data = data[:0]
+	data = append(data, []byte("{")...)
+	for i := 1; i < size-1; {
+		randword := rand.Intn(len(words) * 2)
+		if randword >= len(words) {
+			randkey := rand.Intn(len(keys))
+			data = append(data, []byte(keys[randkey])...)
+			i += len(words[randkey])
+		} else {
+			data = append(data, []byte(words[randword])...)
+			i += len(words[randword])
+		}
+
+	}
+	data = append(data, []byte("}")[0])
+	return data
 }

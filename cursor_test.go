@@ -134,7 +134,7 @@ func TestCursor_Delete(t *testing.T) {
 		c := tx.Bucket([]byte("widgets")).Cursor()
 		bound := make([]byte, 8)
 		binary.BigEndian.PutUint64(bound, uint64(count/2))
-		for key, _ := c.First(); bytes.Compare(key, bound) < 0; key, _ = c.Next() {
+		for key := c.FirstKey(); bytes.Compare(key, bound) < 0; key = c.NextKey() {
 			if err := c.Delete(); err != nil {
 				t.Fatal(err)
 			}
@@ -199,7 +199,7 @@ func TestCursor_Seek_Large(t *testing.T) {
 			seek := make([]byte, 8)
 			binary.BigEndian.PutUint64(seek, uint64(i))
 
-			k, _ := c.Seek(seek)
+			k := c.SeekKey(seek)
 
 			// The last seek is beyond the end of the the range so
 			// it should return nil.
@@ -441,17 +441,17 @@ func TestCursor_Restart(t *testing.T) {
 	}
 	c := tx.Bucket([]byte("widgets")).Cursor()
 
-	if k, _ := c.First(); !bytes.Equal(k, []byte("bar")) {
+	if k := c.FirstKey(); !bytes.Equal(k, []byte("bar")) {
 		t.Fatalf("unexpected key: %v", k)
 	}
-	if k, _ := c.Next(); !bytes.Equal(k, []byte("foo")) {
+	if k := c.NextKey(); !bytes.Equal(k, []byte("foo")) {
 		t.Fatalf("unexpected key: %v", k)
 	}
 
-	if k, _ := c.First(); !bytes.Equal(k, []byte("bar")) {
+	if k := c.FirstKey(); !bytes.Equal(k, []byte("bar")) {
 		t.Fatalf("unexpected key: %v", k)
 	}
-	if k, _ := c.Next(); !bytes.Equal(k, []byte("foo")) {
+	if k := c.NextKey(); !bytes.Equal(k, []byte("foo")) {
 		t.Fatalf("unexpected key: %v", k)
 	}
 
@@ -494,7 +494,7 @@ func TestCursor_First_EmptyPages(t *testing.T) {
 
 		c := b.Cursor()
 		var n int
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		for k := c.FirstKey(); k != nil; k = c.NextKey() {
 			n++
 		}
 		if n != 400 {

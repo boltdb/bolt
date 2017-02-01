@@ -2,10 +2,18 @@ package bolt
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"unsafe"
+
+	SNAPPY "github.com/golang/snappy"
 )
+
+var magicChunk = "\xff\x06\x00\x00" + magicBody
+var magicBody = "sNaPpY"
+
+var ErrNotCompressed = fmt.Errorf("read data not compressed")
 
 // node represents an in-memory, deserialized page.
 type node struct {
@@ -18,6 +26,140 @@ type node struct {
 	parent     *node
 	children   nodes
 	inodes     inodes
+	compressed bool
+}
+
+//compress with snappy re-writing all the values if compression is benificial
+func (n *node) compress(pageSize int) (err error) {
+	if !n.isLeaf || n.compressed {
+		return nil
+	}
+	var size int
+	var keysize int
+	var datanodes int
+	if pageSize > 0 && len(n.inodes)*n.pageElementSize() > pageSize {
+		return ErrNotCompressed // compression cannot overcome overhead, need to split first
+	}
+	for i := range n.inodes {
+		if n.inodes[i].flags != 0 {
+			continue
+		}
+		size += len(n.inodes[i].value)
+		keysize += len(n.inodes[i].key)
+		datanodes++
+	}
+	if pageSize > 0 && len(n.inodes)*n.pageElementSize()+keysize > pageSize {
+		return ErrNotCompressed // compression cannot overcome overhead, need to split first
+	}
+	if pageSize > 0 && size+keysize+8*datanodes > 20*pageSize { // this is huge, let it split first
+		return ErrNotCompressed
+	}
+	var precoded = make([]byte, size+8*datanodes)
+	precoded = precoded[:0]
+	for i := range n.inodes {
+		if n.inodes[i].flags != 0 {
+			continue
+		}
+		sizebuf := make([]byte, 8)
+		binary.BigEndian.PutUint64(sizebuf, uint64(len(n.inodes[i].value)))
+		precoded = append(precoded, sizebuf...)
+		precoded = append(precoded, n.inodes[i].value...)
+	}
+	var current int
+	b := SNAPPY.Encode(nil, precoded)
+	if size < len(b) || (pageSize > 0 && pageSize < n.sizeWithoutValues()+len(b)) {
+		return ErrNotCompressed
+	}
+
+	for i := range n.inodes {
+		if n.inodes[i].flags != 0 || n.inodes[i].value == nil {
+			continue
+		}
+		remaining := len(b) - current
+		if remaining > len(n.inodes[i].value) && len(n.inodes[i].value) != 0 && remaining > 0 {
+			end := len(n.inodes[i].value) + current
+			if end >= len(b) {
+				n.inodes[i].value = b[current:]
+			} else {
+				n.inodes[i].value = b[current:end]
+			}
+			current = end
+		} else if len(b)-current > 0 {
+			n.inodes[i].value = b[current:]
+			current = len(b)
+		} else {
+			n.inodes[i].value = []byte{}
+		}
+	}
+	n.compressed = true
+	return nil
+
+}
+
+//decompress snappy compressed values, reset them to what they were originally
+func (n *node) decompress() (err error) {
+	if !n.isLeaf {
+		return nil
+	}
+
+	err = decompressInodes(n.inodes)
+	if err != nil && err != ErrNotCompressed {
+		return err
+	}
+
+	return nil
+}
+
+func decompressInodes(in inodes) (err error) {
+	var size int
+	for i := range in {
+		if in[i].flags != 0 {
+			continue
+		}
+		size += len(in[i].value)
+	}
+	compressed := make([]byte, size)
+	compressed = compressed[:0]
+	var seek uint64
+	for i := range in {
+		if in[i].flags != 0 {
+			continue
+		}
+		compressed = append(compressed, in[i].value...)
+	}
+	decompressed, err := SNAPPY.Decode(nil, compressed)
+	if err == SNAPPY.ErrCorrupt {
+		// if len(compressed) > 1024 {
+		// 	fmt.Println("not compressed ", err, " data: ", compressed[0:50])
+		// }
+		return ErrNotCompressed
+	} else if err != nil {
+		// fmt.Println("not compressed ", err)
+		return err
+	}
+	var offset int
+	for i := range in {
+		if in[i].flags != 0 {
+			continue
+		}
+		valueSize := 8
+		seek = binary.BigEndian.Uint64(decompressed[offset : offset+valueSize])
+		dataOffset := offset + valueSize
+		if int(seek) > len(decompressed)-dataOffset {
+			seek = uint64(len(decompressed) - dataOffset)
+		}
+		end := dataOffset + int(seek)
+		if end >= len(decompressed) {
+			// fmt.Println("take everything")
+			(in)[i].value = decompressed[dataOffset:]
+		} else {
+			// fmt.Println("take chunk ", dataOffset, " to ", end)
+			(in)[i].value = decompressed[dataOffset:end]
+		}
+		offset = end
+	}
+
+	return nil
 }
 
 // root returns the top-level node this node is attached to.
@@ -38,6 +180,7 @@ func (n *node) minKeys() int {
 
 // size returns the size of the node after serialization.
 func (n *node) size() int {
+
 	sz, elsz := pageHeaderSize, n.pageElementSize()
 	for i := 0; i < len(n.inodes); i++ {
 		item := &n.inodes[i]
@@ -51,6 +194,7 @@ func (n *node) size() int {
 // to know if it fits inside a certain page size.
 func (n *node) sizeLessThan(v int) bool {
 	sz, elsz := pageHeaderSize, n.pageElementSize()
+
 	for i := 0; i < len(n.inodes); i++ {
 		item := &n.inodes[i]
 		sz += elsz + len(item.key) + len(item.value)
@@ -59,6 +203,16 @@ func (n *node) sizeLessThan(v int) bool {
 		}
 	}
 	return true
+}
+
+func (n *node) sizeWithoutValues() int {
+	sz, elsz := pageHeaderSize, n.pageElementSize()
+
+	for i := 0; i < len(n.inodes); i++ {
+		item := &n.inodes[i]
+		sz += elsz + len(item.key)
+	}
+	return sz
 }
 
 // pageElementSize returns the size of each page element based on the type of node.
@@ -185,6 +339,13 @@ func (n *node) read(p *page) {
 	} else {
 		n.key = nil
 	}
+
+	err := n.decompress()
+	if err == ErrNotCompressed {
+		fmt.Sprintf("not compressed data: %v", err)
+	} else if err != nil {
+		_assert(false, fmt.Sprintf("read: decompression failed: %v", err))
+	}
 }
 
 // write writes the items onto one or more pages.
@@ -205,7 +366,10 @@ func (n *node) write(p *page) {
 	if p.count == 0 {
 		return
 	}
-
+	var compress = n.bucket.tx.db.Compress
+	if compress {
+		n.compress(-1) // force compression
+	}
 	// Loop over each item and write it to the page.
 	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
 	for i, item := range n.inodes {
@@ -271,6 +435,16 @@ func (n *node) split(pageSize int) []*node {
 // splitTwo breaks up a node into two smaller nodes, if appropriate.
 // This should only be called from the split() function.
 func (n *node) splitTwo(pageSize int) (*node, *node) {
+
+	var compress = n.bucket.tx.db.Compress
+
+	if compress && !n.compressed {
+		n.compress(pageSize)
+		if n.compressed && n.sizeLessThan(pageSize) {
+			return n, nil // we can fit if we compress
+		}
+	}
+
 	// Ignore the split if the page doesn't have at least enough nodes for
 	// two pages or if the nodes can fit in a single page.
 	if len(n.inodes) <= (minKeysPerPage*2) || n.sizeLessThan(pageSize) {
@@ -337,6 +511,7 @@ func (n *node) splitIndex(threshold int) (index, sz int) {
 // spill writes the nodes to dirty pages and splits nodes as it goes.
 // Returns an error if dirty pages cannot be allocated.
 func (n *node) spill() error {
+
 	var tx = n.bucket.tx
 	if n.spilled {
 		return nil
@@ -357,6 +532,7 @@ func (n *node) spill() error {
 
 	// Split nodes into appropriate sizes. The first node will always be n.
 	var nodes = n.split(tx.db.pageSize)
+
 	for _, node := range nodes {
 		// Add node's page to the freelist if it's not new.
 		if node.pgid > 0 {
@@ -407,6 +583,7 @@ func (n *node) spill() error {
 // rebalance attempts to combine the node with sibling nodes if the node fill
 // size is below a threshold or if there are not enough keys.
 func (n *node) rebalance() {
+
 	if !n.unbalanced {
 		return
 	}
@@ -521,6 +698,7 @@ func (n *node) removeChild(target *node) {
 // dereference causes the node to copy all its inode key/value references to heap memory.
 // This is required when the mmap is reallocated so inodes are not pointing to stale data.
 func (n *node) dereference() {
+
 	if n.key != nil {
 		key := make([]byte, len(n.key))
 		copy(key, n.key)

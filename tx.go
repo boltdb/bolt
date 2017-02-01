@@ -125,7 +125,7 @@ func (tx *Tx) DeleteBucket(name []byte) error {
 // If the provided function returns an error then the iteration is stopped and
 // the error is returned to the caller.
 func (tx *Tx) ForEach(fn func(name []byte, b *Bucket) error) error {
-	return tx.root.ForEach(func(k, v []byte) error {
+	return tx.root.ForEachKey(func(k []byte) error {
 		if err := fn(k, tx.root.Bucket(k)); err != nil {
 			return err
 		}
@@ -443,7 +443,7 @@ func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, freed map[pgid]bo
 	})
 
 	// Check each bucket within this bucket.
-	_ = b.ForEach(func(k, v []byte) error {
+	_ = b.ForEachKey(func(k []byte) error {
 		if child := b.Bucket(k); child != nil {
 			tx.checkBucket(child, reachable, freed, ch)
 		}

@@ -193,9 +193,10 @@ func TestBucket_Put_Large(t *testing.T) {
 	if err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("widgets"))
 		for i := 1; i < count; i++ {
-			value := b.Get([]byte(strings.Repeat("0", i*factor)))
+			key := []byte(strings.Repeat("0", i*factor))
+			value := b.Get(key)
 			if !bytes.Equal(value, []byte(strings.Repeat("X", (count-i)*factor))) {
-				t.Fatalf("unexpected value: %v", value)
+				t.Fatalf("unexpected value: %v:%v:%v", i, string(key), value)
 			}
 		}
 		return nil
@@ -205,7 +206,7 @@ func TestBucket_Put_Large(t *testing.T) {
 }
 
 // Ensure that a database can perform multiple large appends safely.
-func TestDB_Put_VeryLarge(t *testing.T) {
+func TestDB_Put_VeryLargeCompressed(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -215,6 +216,40 @@ func TestDB_Put_VeryLarge(t *testing.T) {
 
 	db := MustOpenDB()
 	defer db.MustClose()
+	db.Compress = true
+
+	for i := 0; i < n; i += batchN {
+		if err := db.Update(func(tx *bolt.Tx) error {
+			b, err := tx.CreateBucketIfNotExists([]byte("widgets"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for j := 0; j < batchN; j++ {
+				k, v := make([]byte, ksize), make([]byte, vsize)
+				binary.BigEndian.PutUint32(k, uint32(i+j))
+				if err := b.Put(k, v); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Ensure that a database can perform multiple large appends safely.
+func TestDB_Put_VeryLargeUncompressed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	n, batchN := 400000, 200000
+	ksize, vsize := 8, 500
+
+	db := MustOpenDB()
+	defer db.MustClose()
+	db.Compress = false
 
 	for i := 0; i < n; i += batchN {
 		if err := db.Update(func(tx *bolt.Tx) error {
@@ -414,7 +449,7 @@ func TestBucket_Delete_FreelistOverflow(t *testing.T) {
 	if err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("0"))
 		c := b.Cursor()
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		for k := c.FirstKey(); k != nil; k = c.NextKey() {
 			if err := c.Delete(); err != nil {
 				t.Fatal(err)
 			}
@@ -1064,7 +1099,7 @@ func TestBucket_ForEach_Closed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := b.ForEach(func(k, v []byte) error { return nil }); err != bolt.ErrTxClosed {
+	if err := b.ForEachKey(func(k []byte) error { return nil }); err != bolt.ErrTxClosed {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }
@@ -1136,6 +1171,7 @@ func TestBucket_Put_ValueTooLarge(t *testing.T) {
 // Ensure a bucket can calculate stats.
 func TestBucket_Stats(t *testing.T) {
 	db := MustOpenDB()
+	db.Compress = false
 	defer db.MustClose()
 
 	// Add bucket with fewer keys but one big value.
@@ -1229,6 +1265,8 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 	}
 
 	db := MustOpenDB()
+	db.Compress = false
+
 	defer db.MustClose()
 
 	// Add a set of values in random order. It will be the same random
@@ -1291,6 +1329,7 @@ func TestBucket_Stats_RandomFill(t *testing.T) {
 // Ensure a bucket can calculate stats.
 func TestBucket_Stats_Small(t *testing.T) {
 	db := MustOpenDB()
+	db.Compress = false
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
@@ -1355,6 +1394,8 @@ func TestBucket_Stats_Small(t *testing.T) {
 
 func TestBucket_Stats_EmptyBucket(t *testing.T) {
 	db := MustOpenDB()
+	db.Compress = false
+
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
@@ -1415,6 +1456,8 @@ func TestBucket_Stats_EmptyBucket(t *testing.T) {
 // Ensure a bucket can calculate stats.
 func TestBucket_Stats_Nested(t *testing.T) {
 	db := MustOpenDB()
+	db.Compress = false
+
 	defer db.MustClose()
 
 	if err := db.Update(func(tx *bolt.Tx) error {
@@ -1521,6 +1564,8 @@ func TestBucket_Stats_Large(t *testing.T) {
 	}
 
 	db := MustOpenDB()
+	db.Compress = false
+
 	defer db.MustClose()
 
 	var index int

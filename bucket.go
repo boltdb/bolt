@@ -109,13 +109,14 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 
 	// Move cursor to key.
 	c := b.Cursor()
-	k, v, flags := c.seek(name)
+	k, flags := c.seekKey(name)
 
 	// Return nil if the key doesn't exist or it is not a bucket.
 	if !bytes.Equal(name, k) || (flags&bucketLeafFlag) == 0 {
 		return nil
 	}
 
+	k, v, flags := c.seek(name)
 	// Otherwise create a bucket and cache it.
 	var child = b.openBucket(v)
 	if b.buckets != nil {
@@ -169,7 +170,7 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
-	k, _, flags := c.seek(key)
+	k, flags := c.seekKey(key)
 
 	// Return an error if there is an existing key.
 	if bytes.Equal(key, k) {
@@ -223,7 +224,7 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
-	k, _, flags := c.seek(key)
+	k, flags := c.seekKey(key)
 
 	// Return an error if bucket doesn't exist or is not a bucket.
 	if !bytes.Equal(key, k) {
@@ -297,7 +298,7 @@ func (b *Bucket) Put(key []byte, value []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
-	k, _, flags := c.seek(key)
+	k, flags := c.seekKey(key)
 
 	// Return an error if there is an existing key with a bucket value.
 	if bytes.Equal(key, k) && (flags&bucketLeafFlag) != 0 {
@@ -323,7 +324,7 @@ func (b *Bucket) Delete(key []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
-	_, _, flags := c.seek(key)
+	_, flags := c.seekKey(key)
 
 	// Return an error if there is already existing bucket value.
 	if (flags & bucketLeafFlag) != 0 {
@@ -388,6 +389,23 @@ func (b *Bucket) ForEach(fn func(k, v []byte) error) error {
 	c := b.Cursor()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		if err := fn(k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachKey executes a function for each key pair in a bucket.
+// If the provided function returns an error then the iteration is stopped and
+// the error is returned to the caller. The provided function must not modify
+// the bucket; this will result in undefined behavior.
+func (b *Bucket) ForEachKey(fn func(k []byte) error) error {
+	if b.tx.db == nil {
+		return ErrTxClosed
+	}
+	c := b.Cursor()
+	for k := c.FirstKey(); k != nil; k = c.NextKey() {
+		if err := fn(k); err != nil {
 			return err
 		}
 	}
@@ -551,7 +569,7 @@ func (b *Bucket) spill() error {
 
 		// Update parent node.
 		var c = b.Cursor()
-		k, _, flags := c.seek([]byte(name))
+		k, flags := c.seekKey([]byte(name))
 		if !bytes.Equal([]byte(name), k) {
 			panic(fmt.Sprintf("misplaced bucket header: %x -> %x", []byte(name), k))
 		}
