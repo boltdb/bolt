@@ -381,12 +381,13 @@ func (n *node) spill() error {
 		// Insert into parent inodes.
 		if node.parent != nil {
 			var key = node.key
+			ikey := node.inodes[0].key
 			if key == nil {
-				key = node.inodes[0].key
+				key = ikey
 			}
 
-			node.parent.put(key, node.inodes[0].key, nil, node.pgid, 0)
-			node.key = node.inodes[0].key
+			node.parent.put(key, ikey, nil, node.pgid, 0)
+			node.key = ikey
 			_assert(len(node.key) > 0, "spill: zero-length node key")
 		}
 

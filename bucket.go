@@ -551,14 +551,15 @@ func (b *Bucket) spill() error {
 
 		// Update parent node.
 		var c = b.Cursor()
-		k, _, flags := c.seek([]byte(name))
-		if !bytes.Equal([]byte(name), k) {
-			panic(fmt.Sprintf("misplaced bucket header: %x -> %x", []byte(name), k))
+		nb := []byte(name)
+		k, _, flags := c.seek(nb)
+		if !bytes.Equal(nb, k) {
+			panic(fmt.Sprintf("misplaced bucket header: %x -> %x", nb, k))
 		}
 		if flags&bucketLeafFlag == 0 {
 			panic(fmt.Sprintf("unexpected bucket header flag: %x", flags))
 		}
-		c.node().put([]byte(name), []byte(name), value, 0, bucketLeafFlag)
+		c.node().put(nb, nb, value, 0, bucketLeafFlag)
 	}
 
 	// Ignore if there's not a materialized root node.
