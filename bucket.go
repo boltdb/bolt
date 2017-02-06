@@ -235,7 +235,7 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 	// Recursively delete all child buckets.
 	child := b.Bucket(key)
 	err := child.ForEach(func(k, v []byte) error {
-		if v == nil {
+		if _, _, childFlags := child.Cursor().seek(k); (childFlags & bucketLeafFlag) != 0 {
 			if err := child.DeleteBucket(k); err != nil {
 				return fmt.Errorf("delete bucket: %s", err)
 			}
