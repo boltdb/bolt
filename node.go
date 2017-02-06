@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"time"
 	"unsafe"
 )
 
@@ -249,7 +250,7 @@ func (n *node) write(p *page) {
 // This should only be called from the spill() function.
 func (n *node) split(pageSize int) []*node {
 	var nodes []*node
-
+	st := time.Now()
 	node := n
 	for {
 		// Split node into two.
@@ -265,6 +266,12 @@ func (n *node) split(pageSize int) []*node {
 		node = b
 	}
 
+	took := time.Since(st)
+	if took > 100*time.Millisecond {
+		fmt.Println("node.spill   took:", took, "[BAD]")
+	} else {
+		fmt.Println("node.spill   took:", took)
+	}
 	return nodes
 }
 

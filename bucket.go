@@ -3,6 +3,7 @@ package bolt
 import (
 	"bytes"
 	"fmt"
+	"time"
 	"unsafe"
 )
 
@@ -524,6 +525,7 @@ func (b *Bucket) _forEachPageNode(pgid pgid, depth int, fn func(*page, *node, in
 
 // spill writes all the nodes for this bucket to dirty pages.
 func (b *Bucket) spill() error {
+	st := time.Now()
 	// Spill all child buckets first.
 	for name, child := range b.buckets {
 		// If the child bucket is small enough and it has no child buckets then
@@ -534,8 +536,16 @@ func (b *Bucket) spill() error {
 			child.free()
 			value = child.write()
 		} else {
+			sss := time.Now()
 			if err := child.spill(); err != nil {
 				return err
+			}
+			took2 := time.Since(sss)
+			if took2 > 100*time.Millisecond {
+				fmt.Println("recursive call inside:", len(b.buckets))
+				fmt.Println("----------- took2:", took2, "[BAD]")
+			} else {
+				fmt.Println("----------- took2:", took2)
 			}
 
 			// Update the child bucket header in this bucket.
@@ -558,6 +568,7 @@ func (b *Bucket) spill() error {
 		if flags&bucketLeafFlag == 0 {
 			panic(fmt.Sprintf("unexpected bucket header flag: %x", flags))
 		}
+
 		c.node().put([]byte(name), []byte(name), value, 0, bucketLeafFlag)
 	}
 
@@ -578,6 +589,12 @@ func (b *Bucket) spill() error {
 	}
 	b.root = b.rootNode.pgid
 
+	took := time.Since(st)
+	if took > 100*time.Millisecond {
+		fmt.Println("bucket.spill took:", took, "[BAD]")
+	} else {
+		fmt.Println("bucket.spill took:", took)
+	}
 	return nil
 }
 
