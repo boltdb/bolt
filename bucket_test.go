@@ -425,6 +425,39 @@ func TestBucket_Delete_FreelistOverflow(t *testing.T) {
 	}
 }
 
+// Ensure that deleting of non-existing key is a no-op.
+func TestBucket_Delete_NonExisting(t *testing.T) {
+	db := MustOpenDB()
+	defer db.MustClose()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err = b.CreateBucket([]byte("nested")); err != nil {
+			t.Fatal(err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("widgets"))
+		if err := b.Delete([]byte("foo")); err != nil {
+			t.Fatal(err)
+		}
+		if b.Bucket([]byte("nested")) == nil {
+			t.Fatal("nested bucket has been deleted")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Ensure that accessing and updating nested buckets is ok across transactions.
 func TestBucket_Nested(t *testing.T) {
 	db := MustOpenDB()
