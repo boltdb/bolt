@@ -50,9 +50,17 @@ func (t testdata) Less(i, j int) bool { return bytes.Compare(t[i].Key, t[j].Key)
 func (t testdata) Generate(rand *rand.Rand, size int) reflect.Value {
 	n := rand.Intn(qmaxitems-1) + 1
 	items := make(testdata, n)
+	used := make(map[string]bool)
 	for i := 0; i < n; i++ {
 		item := &items[i]
-		item.Key = randByteSlice(rand, 1, qmaxksize)
+		// Ensure that keys are unique by looping until we find one that we have not already used.
+		for {
+			item.Key = randByteSlice(rand, 1, qmaxksize)
+			if !used[string(item.Key)] {
+				used[string(item.Key)] = true
+				break
+			}
+		}
 		item.Value = randByteSlice(rand, 0, qmaxvsize)
 	}
 	return reflect.ValueOf(items)

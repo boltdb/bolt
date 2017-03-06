@@ -395,7 +395,7 @@ db.View(func(tx *bolt.Tx) error {
 	c := tx.Bucket([]byte("MyBucket")).Cursor()
 
 	prefix := []byte("1234")
-	for k, v := c.Seek(prefix); bytes.HasPrefix(k, prefix); k, v = c.Next() {
+	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
 		fmt.Printf("key=%s, value=%s\n", k, v)
 	}
 

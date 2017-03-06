@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -177,69 +176,6 @@ func TestOpen_ErrChecksum(t *testing.T) {
 	// Reopen data file.
 	if _, err := bolt.Open(path, 0666, nil); err != bolt.ErrChecksum {
 		t.Fatalf("unexpected error: %s", err)
-	}
-}
-
-// Ensure that opening an already open database file will timeout.
-func TestOpen_Timeout(t *testing.T) {
-	if runtime.GOOS == "solaris" {
-		t.Skip("solaris fcntl locks don't support intra-process locking")
-	}
-
-	path := tempfile()
-
-	// Open a data file.
-	db0, err := bolt.Open(path, 0666, nil)
-	if err != nil {
-		t.Fatal(err)
-	} else if db0 == nil {
-		t.Fatal("expected database")
-	}
-
-	// Attempt to open the database again.
-	start := time.Now()
-	db1, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 100 * time.Millisecond})
-	if err != bolt.ErrTimeout {
-		t.Fatalf("unexpected timeout: %s", err)
-	} else if db1 != nil {
-		t.Fatal("unexpected database")
-	} else if time.Since(start) <= 100*time.Millisecond {
-		t.Fatal("expected to wait at least timeout duration")
-	}
-
-	if err := db0.Close(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// Ensure that opening an already open database file will wait until its closed.
-func TestOpen_Wait(t *testing.T) {
-	if runtime.GOOS == "solaris" {
-		t.Skip("solaris fcntl locks don't support intra-process locking")
-	}
-
-	path := tempfile()
-
-	// Open a data file.
-	db0, err := bolt.Open(path, 0666, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Close it in just a bit.
-	time.AfterFunc(100*time.Millisecond, func() { _ = db0.Close() })
-
-	// Attempt to open the database again.
-	start := time.Now()
-	db1, err := bolt.Open(path, 0666, &bolt.Options{Timeout: 200 * time.Millisecond})
-	if err != nil {
-		t.Fatal(err)
-	} else if time.Since(start) <= 100*time.Millisecond {
-		t.Fatal("expected to wait at least timeout duration")
-	}
-
-	if err := db1.Close(); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -423,103 +359,6 @@ func TestOpen_FileTooSmall(t *testing.T) {
 	db, err = bolt.Open(path, 0666, nil)
 	if err == nil || err.Error() != "file size too small" {
 		t.Fatalf("unexpected error: %s", err)
-	}
-}
-
-// Ensure that a database can be opened in read-only mode by multiple processes
-// and that a database can not be opened in read-write mode and in read-only
-// mode at the same time.
-func TestOpen_ReadOnly(t *testing.T) {
-	if runtime.GOOS == "solaris" {
-		t.Skip("solaris fcntl locks don't support intra-process locking")
-	}
-
-	bucket, key, value := []byte(`bucket`), []byte(`key`), []byte(`value`)
-
-	path := tempfile()
-
-	// Open in read-write mode.
-	db, err := bolt.Open(path, 0666, nil)
-	if err != nil {
-		t.Fatal(err)
-	} else if db.IsReadOnly() {
-		t.Fatal("db should not be in read only mode")
-	}
-	if err := db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket(bucket)
-		if err != nil {
-			return err
-		}
-		if err := b.Put(key, value); err != nil {
-			t.Fatal(err)
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Open in read-only mode.
-	db0, err := bolt.Open(path, 0666, &bolt.Options{ReadOnly: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Opening in read-write mode should return an error.
-	if _, err = bolt.Open(path, 0666, &bolt.Options{Timeout: time.Millisecond * 100}); err == nil {
-		t.Fatal("expected error")
-	}
-
-	// And again (in read-only mode).
-	db1, err := bolt.Open(path, 0666, &bolt.Options{ReadOnly: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify both read-only databases are accessible.
-	for _, db := range []*bolt.DB{db0, db1} {
-		// Verify is is in read only mode indeed.
-		if !db.IsReadOnly() {
-			t.Fatal("expected read only mode")
-		}
-
-		// Read-only databases should not allow updates.
-		if err := db.Update(func(*bolt.Tx) error {
-			panic(`should never get here`)
-		}); err != bolt.ErrDatabaseReadOnly {
-			t.Fatalf("unexpected error: %s", err)
-		}
-
-		// Read-only databases should not allow beginning writable txns.
-		if _, err := db.Begin(true); err != bolt.ErrDatabaseReadOnly {
-			t.Fatalf("unexpected error: %s", err)
-		}
-
-		// Verify the data.
-		if err := db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket(bucket)
-			if b == nil {
-				return fmt.Errorf("expected bucket `%s`", string(bucket))
-			}
-
-			got := string(b.Get(key))
-			expected := string(value)
-			if got != expected {
-				return fmt.Errorf("expected `%s`, got `%s`", expected, got)
-			}
-			return nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if err := db0.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := db1.Close(); err != nil {
-		t.Fatal(err)
 	}
 }
 
