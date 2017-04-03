@@ -911,5 +911,6 @@ Below is a list of public, open source projects that use Bolt:
 * [dcrwallet](https://github.com/decred/dcrwallet) - A wallet for the Decred cryptocurrency.
 * [Ironsmith](https://github.com/timshannon/ironsmith) - A simple, script-driven continuous integration (build - > test -> release) tool, with no external dependencies
 * [BoltHold](https://github.com/timshannon/bolthold) - An embeddable NoSQL store for Go types built on BoltDB
+* [Key Value Access Langusge (KVAL)](https://github.com/kval-access-language) - A proposed grammar for key-value datastores offering a BoltDB binding.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
