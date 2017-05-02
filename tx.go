@@ -224,12 +224,20 @@ func (tx *Tx) Commit() error {
 	}
 	tx.stats.WriteTime += time.Since(startTime)
 
+	// Save db so we can compact after the commit.
+	db := tx.db
+
 	// Finalize the transaction.
 	tx.close()
 
 	// Execute commit handlers now that the locks have been removed.
 	for _, fn := range tx.commitHandlers {
 		fn()
+	}
+
+	// Check if we are scheduled to compact.
+	if err := db.onCommitCompactionCheck(); err != nil {
+		return err
 	}
 
 	return nil

@@ -10,6 +10,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 )
@@ -31,9 +32,10 @@ const IgnoreNoSync = runtime.GOOS == "openbsd"
 
 // Default values if not set in a DB instance.
 const (
-	DefaultMaxBatchSize  int = 1000
-	DefaultMaxBatchDelay     = 10 * time.Millisecond
-	DefaultAllocSize         = 16 * 1024 * 1024
+	DefaultMaxBatchSize          int = 1000
+	DefaultMaxBatchDelay             = 10 * time.Millisecond
+	DefaultAllocSize                 = 16 * 1024 * 1024
+	DefaultCompactBatchSizeBytes     = 4 * 1024 * 1024
 )
 
 // default page size for db is set to the OS page size.
@@ -94,6 +96,13 @@ type DB struct {
 	// of truncate() and fsync() when growing the data file.
 	AllocSize int
 
+	// Auto-compact every this many Update() calls, if non-zero.
+	CompactAfterCommitCount int64
+
+	// DefaultCompactBatchSizeBytes controls the size of the
+	// Compact transactions.
+	CompactBatchSizeBytes int64
+
 	path     string
 	file     *os.File
 	lockfile *os.File // windows only
@@ -127,6 +136,12 @@ type DB struct {
 	// Read only mode.
 	// When true, Update() and Begin(true) return ErrDatabaseReadOnly immediately.
 	readOnly bool
+
+	// a copy of exactly what Open() options were supplied, so reOpen does the same.
+	origOptions                *Options
+	origOpenMode               os.FileMode
+	commitsSinceLastCompaction int64
+	successfulCompactionCount  int64
 }
 
 // Path returns the path to currently open database file.
@@ -153,7 +168,12 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	// Set default options if no options are provided.
 	if options == nil {
 		options = DefaultOptions
+	} else {
+		o := *options
+		db.origOptions = &o
 	}
+	db.origOpenMode = mode
+	db.CompactAfterCommitCount = options.CompactAfterCommitCount
 	db.NoGrowSync = options.NoGrowSync
 	db.MmapFlags = options.MmapFlags
 
@@ -161,6 +181,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	db.MaxBatchSize = DefaultMaxBatchSize
 	db.MaxBatchDelay = DefaultMaxBatchDelay
 	db.AllocSize = DefaultAllocSize
+	db.CompactBatchSizeBytes = DefaultCompactBatchSizeBytes
 
 	flag := os.O_RDWR
 	if options.ReadOnly {
@@ -579,6 +600,7 @@ func (db *DB) removeTx(tx *Tx) {
 //
 // Attempting to manually commit or rollback within the function will cause a panic.
 func (db *DB) Update(fn func(*Tx) error) error {
+
 	t, err := db.Begin(true)
 	if err != nil {
 		return err
@@ -893,6 +915,36 @@ func (db *DB) IsReadOnly() bool {
 	return db.readOnly
 }
 
+// auto-compaction feature
+func (db *DB) onCommitCompactionCheck() error {
+
+	if db == nil {
+		return nil
+	}
+	if db.CompactAfterCommitCount > 0 {
+		db.commitsSinceLastCompaction++
+		if db.commitsSinceLastCompaction >= db.CompactAfterCommitCount {
+			db.commitsSinceLastCompaction = 0
+			if err := db.CompactQuietly(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// SuccessfulCompactionCount() returns the number of times
+// Compact has been executed successfully.
+func (db *DB) SuccessfulCompactionCount() int64 {
+	return atomic.LoadInt64(&db.successfulCompactionCount)
+}
+
+// CommitsSinceLastCompaction says how commits have happened
+// since last we compacted.
+func (db *DB) CommitsSinceLastCompaction() int64 {
+	return db.commitsSinceLastCompaction
+}
+
 // Options represents the options that can be set when opening a database.
 type Options struct {
 	// Timeout is the amount of time to wait to obtain a file lock.
@@ -919,6 +971,12 @@ type Options struct {
 	// If initialMmapSize is smaller than the previous database size,
 	// it takes no effect.
 	InitialMmapSize int
+
+	// CompactAfterCommitCount allows automatic compaction. If zero,
+	// no automatic compaction is done. If greater than zero, then
+	// after every CompactAfterCommitCount commits, we will invoke
+	// CompactQuietly().
+	CompactAfterCommitCount int64
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().
