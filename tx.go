@@ -224,6 +224,9 @@ func (tx *Tx) Commit() error {
 	}
 	tx.stats.WriteTime += time.Since(startTime)
 
+	// Save db so we can call the commit hook.
+	db := tx.db
+	
 	// Finalize the transaction.
 	tx.close()
 
@@ -232,6 +235,10 @@ func (tx *Tx) Commit() error {
 		fn()
 	}
 
+	if db.CommitHook != nil {
+		db.CommitHook(db)
+	}
+	
 	return nil
 }
 
