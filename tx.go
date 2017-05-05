@@ -121,6 +121,11 @@ func (tx *Tx) DeleteBucket(name []byte) error {
 	return tx.root.DeleteBucket(name)
 }
 
+// DeleteBucketIfExists deletes a bucket if it exists.
+func (tx *Tx) DeleteBucketIfExists(name []byte) error {
+	return tx.root.DeleteBucketIfExists(name)
+}
+
 // ForEach executes a function for each bucket in the root.
 // If the provided function returns an error then the iteration is stopped and
 // the error is returned to the caller.

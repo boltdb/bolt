@@ -343,6 +343,30 @@ func TestTx_DeleteBucket(t *testing.T) {
 	}
 }
 
+func TestTx_DeleteBucketIfExists(t *testing.T) {
+	db := NewTestDB()
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		// Delete a non-existent bucket without errors
+		err := tx.DeleteBucketIfExists([]byte("widgets"))
+		ok(t, err)
+
+		// Create a bucket to delete
+		_, err = tx.CreateBucket([]byte("widgets"))
+		ok(t, err)
+
+		// Attempt to delete it
+		err = tx.DeleteBucketIfExists([]byte("widgets"))
+		ok(t, err)
+
+		// Make sure it was actually deleted
+		assert(t, tx.Bucket([]byte("widgets")) == nil, "")
+
+		return nil
+	})
+}
+
 // Ensure that deleting a bucket on a closed transaction returns an error.
 func TestTx_DeleteBucket_ErrTxClosed(t *testing.T) {
 	db := MustOpenDB()

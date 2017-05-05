@@ -260,6 +260,15 @@ func (b *Bucket) DeleteBucket(key []byte) error {
 	return nil
 }
 
+// DeleteBucketIfExists deletes a bucket if it exists
+func (b *Bucket) DeleteBucketIfExists(key []byte) error {
+	err := b.DeleteBucket(key)
+	if err == ErrBucketNotFound {
+		err = nil
+	}
+	return err
+}
+
 // Get retrieves the value for a key in the bucket.
 // Returns a nil value if the key does not exist or if the key is a nested bucket.
 // The returned value is only valid for the life of the transaction.
