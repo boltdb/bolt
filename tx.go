@@ -169,27 +169,28 @@ func (tx *Tx) Commit() error {
 	// Free the old root bucket.
 	tx.meta.root.root = tx.root.root
 
-	opgid := tx.meta.pgid
+	if !tx.db.NoFreelistSync {
+		opgid := tx.meta.pgid
 
-	// Free the freelist and allocate new pages for it. This will overestimate
-	// the size of the freelist but not underestimate the size (which would be bad).
-	tx.db.freelist.free(tx.meta.txid, tx.db.page(tx.meta.freelist))
-	p, err := tx.allocate((tx.db.freelist.size() / tx.db.pageSize) + 1)
-	if err != nil {
-		tx.rollback()
-		return err
-	}
-	if err := tx.db.freelist.write(p); err != nil {
-		tx.rollback()
-		return err
-	}
-	tx.meta.freelist = p.id
-
-	// If the high water mark has moved up then attempt to grow the database.
-	if tx.meta.pgid > opgid {
-		if err := tx.db.grow(int(tx.meta.pgid+1) * tx.db.pageSize); err != nil {
+		// Free the freelist and allocate new pages for it. This will overestimate
+		// the size of the freelist but not underestimate the size (which would be bad).
+		tx.db.freelist.free(tx.meta.txid, tx.db.page(tx.meta.freelist))
+		p, err := tx.allocate((tx.db.freelist.size() / tx.db.pageSize) + 1)
+		if err != nil {
 			tx.rollback()
 			return err
+		}
+		if err := tx.db.freelist.write(p); err != nil {
+			tx.rollback()
+			return err
+		}
+		tx.meta.freelist = p.id
+		// If the high water mark has moved up then attempt to grow the database.
+		if tx.meta.pgid > opgid {
+			if err := tx.db.grow(int(tx.meta.pgid+1) * tx.db.pageSize); err != nil {
+				tx.rollback()
+				return err
+			}
 		}
 	}
 
@@ -394,8 +395,10 @@ func (tx *Tx) check(ch chan error) {
 	reachable := make(map[pgid]*page)
 	reachable[0] = tx.page(0) // meta0
 	reachable[1] = tx.page(1) // meta1
-	for i := uint32(0); i <= tx.page(tx.meta.freelist).overflow; i++ {
-		reachable[tx.meta.freelist+pgid(i)] = tx.page(tx.meta.freelist)
+	if !tx.DB().NoFreelistSync {
+		for i := uint32(0); i <= tx.page(tx.meta.freelist).overflow; i++ {
+			reachable[tx.meta.freelist+pgid(i)] = tx.page(tx.meta.freelist)
+		}
 	}
 
 	// Recursively check buckets.
