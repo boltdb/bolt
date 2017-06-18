@@ -61,6 +61,11 @@ type DB struct {
 	// THIS IS UNSAFE. PLEASE USE WITH CAUTION.
 	NoSync bool
 
+	// When true, skips syncing freelist to disk. This improves the database
+	// write performance under normal operation, but requires a full database
+	// re-sync during recovery.
+	NoFreelistSync bool
+
 	// When true, skips the truncate call when growing the database.
 	// Setting this to true is only safe on non-ext3/ext4 systems.
 	// Skipping truncation avoids preallocation of hard drive space and
@@ -156,6 +161,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 	db.NoGrowSync = options.NoGrowSync
 	db.MmapFlags = options.MmapFlags
+	db.NoFreelistSync = options.NoFreelistSync
 
 	// Set default values for later DB operations.
 	db.MaxBatchSize = DefaultMaxBatchSize
@@ -232,9 +238,13 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		return nil, err
 	}
 
-	// Read in the freelist.
-	db.freelist = newFreelist()
-	db.freelist.read(db.page(db.meta().freelist))
+	if db.NoFreelistSync {
+		db.freelist = newFreelistWithIDs(db.freepages())
+	} else {
+		// Read in the freelist.
+		db.freelist = newFreelist()
+		db.freelist.read(db.page(db.meta().freelist))
+	}
 
 	// Mark the database as opened and return.
 	return db, nil
@@ -893,6 +903,54 @@ func (db *DB) IsReadOnly() bool {
 	return db.readOnly
 }
 
+func (db *DB) freepages() []pgid {
+	tx, err := db.beginTx()
+	if err != nil {
+		panic("freepages: failed to open read only tx")
+	}
+
+	reachable := make(map[pgid]*page)
+	checkReachable(tx, &tx.root, reachable)
+
+	var fids []pgid
+	for i := pgid(2); i < db.meta().pgid; i++ {
+		if _, ok := reachable[i]; !ok {
+			fids = append(fids, i)
+		}
+	}
+	return fids
+}
+
+func checkReachable(tx *Tx, b *Bucket, reachable map[pgid]*page) {
+	// Ignore inline buckets.
+	if b.root == 0 {
+		return
+	}
+
+	// Check every page used by this bucket.
+	b.tx.forEachPage(b.root, 0, func(p *page, _ int) {
+		if p.id > tx.meta.pgid {
+			panic(fmt.Sprintf("page %d: out of bounds: %d", int(p.id), int(b.tx.meta.pgid)))
+		}
+
+		for i := pgid(0); i <= pgid(p.overflow); i++ {
+			var id = p.id + i
+			if _, ok := reachable[id]; ok {
+				panic(fmt.Sprintf("page %d: multiple references", int(id)))
+			}
+			reachable[id] = p
+		}
+	})
+
+	// Check each bucket within this bucket.
+	_ = b.ForEach(func(k, v []byte) error {
+		if child := b.Bucket(k); child != nil {
+			checkReachable(tx, child, reachable)
+		}
+		return nil
+	})
+}
+
 // Options represents the options that can be set when opening a database.
 type Options struct {
 	// Timeout is the amount of time to wait to obtain a file lock.
@@ -902,6 +960,10 @@ type Options struct {
 
 	// Sets the DB.NoGrowSync flag before memory mapping the file.
 	NoGrowSync bool
+
+	// Do not sync freelist to disk. This improves the database write performance
+	// under normal operation, but requires a full database re-sync during recovery.
+	NoFreelistSync bool
 
 	// Open database in read-only mode. Uses flock(..., LOCK_SH |LOCK_NB) to
 	// grab a shared lock (UNIX).

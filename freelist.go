@@ -22,6 +22,14 @@ func newFreelist() *freelist {
 	}
 }
 
+func newFreelistWithIDs(ids []pgid) *freelist {
+	return &freelist{
+		ids:     ids,
+		pending: make(map[txid][]pgid),
+		cache:   make(map[pgid]bool),
+	}
+}
+
 // size returns the size of the page after serialization.
 func (f *freelist) size() int {
 	n := f.count()
