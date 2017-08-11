@@ -19,7 +19,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/boltdb/bolt"
+	"github.com/coreos/bbolt"
 )
 
 var statsFlag = flag.Bool("stats", false, "show performance stats")
@@ -419,6 +419,74 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 
 	if err := rtx.Rollback(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestOpen_RecoverFreeList tests opening the DB with free-list
+// write-out after no free list sync will recover the free list
+// and write it out.
+func TestOpen_RecoverFreeList(t *testing.T) {
+	db := MustOpenWithOption(&bolt.Options{NoFreelistSync: true})
+	defer db.MustClose()
+
+	// Write some pages.
+	tx, err := db.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wbuf := make([]byte, 8192)
+	for i := 0; i < 100; i++ {
+		s := fmt.Sprintf("%d", i)
+		b, err := tx.CreateBucket([]byte(s))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = b.Put([]byte(s), wbuf); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Generate free pages.
+	if tx, err = db.Begin(true); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		s := fmt.Sprintf("%d", i)
+		b := tx.Bucket([]byte(s))
+		if b == nil {
+			t.Fatal(err)
+		}
+		if err := b.Delete([]byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Record freelist count from opening with NoFreelistSync.
+	db.MustReopen()
+	freepages := db.Stats().FreePageN
+	if freepages == 0 {
+		t.Fatalf("no free pages on NoFreelistSync reopen")
+	}
+	if err := db.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check free page count is reconstructed when opened with freelist sync.
+	db.o = &bolt.Options{}
+	db.MustReopen()
+	// One less free page for syncing the free list on open.
+	freepages--
+	if fp := db.Stats().FreePageN; fp < freepages {
+		t.Fatalf("closed with %d free pages, opened with %d", freepages, fp)
 	}
 }
 
@@ -1366,15 +1434,35 @@ func validateBatchBench(b *testing.B, db *DB) {
 // DB is a test wrapper for bolt.DB.
 type DB struct {
 	*bolt.DB
+	f string
+	o *bolt.Options
 }
 
 // MustOpenDB returns a new, open DB at a temporary location.
 func MustOpenDB() *DB {
-	db, err := bolt.Open(tempfile(), 0666, nil)
+	f := tempfile()
+	db, err := bolt.Open(f, 0666, nil)
 	if err != nil {
 		panic(err)
 	}
-	return &DB{db}
+	return &DB{
+		DB: db,
+		f:  f,
+	}
+}
+
+// MustOpenDBWithOption returns a new, open DB at a temporary location with given options.
+func MustOpenWithOption(o *bolt.Options) *DB {
+	f := tempfile()
+	db, err := bolt.Open(f, 0666, o)
+	if err != nil {
+		panic(err)
+	}
+	return &DB{
+		DB: db,
+		f:  f,
+		o:  o,
+	}
 }
 
 // Close closes the database and deletes the underlying file.
@@ -1397,6 +1485,15 @@ func (db *DB) MustClose() {
 	if err := db.Close(); err != nil {
 		panic(err)
 	}
+}
+
+// MustReopen reopen the database. Panic on error.
+func (db *DB) MustReopen() {
+	indb, err := bolt.Open(db.f, 0666, db.o)
+	if err != nil {
+		panic(err)
+	}
+	db.DB = indb
 }
 
 // PrintStats prints the database stats
@@ -1490,7 +1587,7 @@ func mustContainKeys(b *bolt.Bucket, m map[string]string) {
 
 	// Check for keys found in bucket that shouldn't be there.
 	var keys []string
-	for k, _ := range found {
+	for k := range found {
 		if _, ok := m[string(k)]; !ok {
 			keys = append(keys, k)
 		}
@@ -1501,7 +1598,7 @@ func mustContainKeys(b *bolt.Bucket, m map[string]string) {
 	}
 
 	// Check for keys not found in bucket that should be there.
-	for k, _ := range m {
+	for k := range m {
 		if _, ok := found[string(k)]; !ok {
 			keys = append(keys, k)
 		}
