@@ -13,7 +13,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/boltdb/bolt"
+	"github.com/coreos/bbolt"
 )
 
 // Ensure that a bucket that gets a non-existent key returns nil.
@@ -113,6 +113,7 @@ func TestBucket_Get_Capacity(t *testing.T) {
 		// Ensure slice can be appended to without a segfault.
 		k = append(k, []byte("123")...)
 		v = append(v, []byte("123")...)
+		_, _ = k, v // to pass ineffassign
 
 		return nil
 	}); err != nil {
@@ -418,6 +419,55 @@ func TestBucket_Delete_FreelistOverflow(t *testing.T) {
 			if err := c.Delete(); err != nil {
 				t.Fatal(err)
 			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check more than an overflow's worth of pages are freed.
+	stats := db.Stats()
+	freePages := stats.FreePageN + stats.PendingPageN
+	if freePages <= 0xFFFF {
+		t.Fatalf("expected more than 0xFFFF free pages, got %v", freePages)
+	}
+
+	// Free page count should be preserved on reopen.
+	if err := db.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db.MustReopen()
+	if reopenFreePages := db.Stats().FreePageN; freePages != reopenFreePages {
+		t.Fatalf("expected %d free pages, got %+v", freePages, db.Stats())
+	}
+}
+
+// Ensure that deleting of non-existing key is a no-op.
+func TestBucket_Delete_NonExisting(t *testing.T) {
+	db := MustOpenDB()
+	defer db.MustClose()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err = b.CreateBucket([]byte("nested")); err != nil {
+			t.Fatal(err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("widgets"))
+		if err := b.Delete([]byte("foo")); err != nil {
+			t.Fatal(err)
+		}
+		if b.Bucket([]byte("nested")) == nil {
+			t.Fatal("nested bucket has been deleted")
 		}
 		return nil
 	}); err != nil {
@@ -1198,7 +1248,7 @@ func TestBucket_Stats(t *testing.T) {
 		}
 
 		// Only check allocations for 4KB pages.
-		if os.Getpagesize() == 4096 {
+		if db.Info().PageSize == 4096 {
 			if stats.BranchAlloc != 4096 {
 				t.Fatalf("unexpected BranchAlloc: %d", stats.BranchAlloc)
 			} else if stats.LeafAlloc != 36864 {
@@ -1331,7 +1381,7 @@ func TestBucket_Stats_Small(t *testing.T) {
 			t.Fatalf("unexpected LeafInuse: %d", stats.LeafInuse)
 		}
 
-		if os.Getpagesize() == 4096 {
+		if db.Info().PageSize == 4096 {
 			if stats.BranchAlloc != 0 {
 				t.Fatalf("unexpected BranchAlloc: %d", stats.BranchAlloc)
 			} else if stats.LeafAlloc != 0 {
@@ -1390,7 +1440,7 @@ func TestBucket_Stats_EmptyBucket(t *testing.T) {
 			t.Fatalf("unexpected LeafInuse: %d", stats.LeafInuse)
 		}
 
-		if os.Getpagesize() == 4096 {
+		if db.Info().PageSize == 4096 {
 			if stats.BranchAlloc != 0 {
 				t.Fatalf("unexpected BranchAlloc: %d", stats.BranchAlloc)
 			} else if stats.LeafAlloc != 0 {
@@ -1492,7 +1542,7 @@ func TestBucket_Stats_Nested(t *testing.T) {
 			t.Fatalf("unexpected LeafInuse: %d", stats.LeafInuse)
 		}
 
-		if os.Getpagesize() == 4096 {
+		if db.Info().PageSize == 4096 {
 			if stats.BranchAlloc != 0 {
 				t.Fatalf("unexpected BranchAlloc: %d", stats.BranchAlloc)
 			} else if stats.LeafAlloc != 8192 {
@@ -1565,7 +1615,7 @@ func TestBucket_Stats_Large(t *testing.T) {
 			t.Fatalf("unexpected LeafInuse: %d", stats.LeafInuse)
 		}
 
-		if os.Getpagesize() == 4096 {
+		if db.Info().PageSize == 4096 {
 			if stats.BranchAlloc != 53248 {
 				t.Fatalf("unexpected BranchAlloc: %d", stats.BranchAlloc)
 			} else if stats.LeafAlloc != 4898816 {
@@ -1640,7 +1690,7 @@ func TestBucket_Put_Single(t *testing.T) {
 
 		index++
 		return true
-	}, nil); err != nil {
+	}, qconfig()); err != nil {
 		t.Error(err)
 	}
 }

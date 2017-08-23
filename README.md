@@ -1,5 +1,7 @@
-Bolt [![Coverage Status](https://coveralls.io/repos/boltdb/bolt/badge.svg?branch=master)](https://coveralls.io/r/boltdb/bolt?branch=master) [![GoDoc](https://godoc.org/github.com/boltdb/bolt?status.svg)](https://godoc.org/github.com/boltdb/bolt) ![Version](https://img.shields.io/badge/version-1.2.1-green.svg)
+Bolt
 ====
+
+[![Go Report Card](https://goreportcard.com/badge/github.com/coreos/bbolt?style=flat-square)](https://goreportcard.com/report/github.com/coreos/bbolt) [![Godoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://godoc.org/github.com/coreos/bbolt)
 
 Bolt is a pure Go key/value store inspired by [Howard Chu's][hyc_symas]
 [LMDB project][lmdb]. The goal of the project is to provide a simple,
@@ -59,7 +61,7 @@ Shopify and Heroku use Bolt-backed services every day.
 To start using Bolt, install Go and run `go get`:
 
 ```sh
-$ go get github.com/boltdb/bolt/...
+$ go get github.com/coreos/bbolt/...
 ```
 
 This will retrieve the library and install the `bolt` command line utility into
@@ -79,7 +81,7 @@ package main
 import (
 	"log"
 
-	"github.com/boltdb/bolt"
+	bolt "github.com/coreos/bbolt"
 )
 
 func main() {
@@ -522,7 +524,7 @@ this from a read-only transaction, it will perform a hot backup and not block
 your other database reads and writes.
 
 By default, it will use a regular file handle which will utilize the operating
-system's page cache. See the [`Tx`](https://godoc.org/github.com/boltdb/bolt#Tx)
+system's page cache. See the [`Tx`](https://godoc.org/github.com/coreos/bbolt#Tx)
 documentation for information about optimizing for larger-than-RAM datasets.
 
 One common use case is to backup over HTTP so you can use tools like `cURL` to
