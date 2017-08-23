@@ -7,11 +7,19 @@ default: build
 race:
 	@go test -v -race -test.run="TestSimulate_(100op|1000op)"
 
+# go get honnef.co/go/tools/simple
+# go get honnef.co/go/tools/unused
+fmt:
+	gosimple ./...
+	unused ./...
+	gofmt -l -s -d $(find -name \*.go)
+
+
 # go get github.com/kisielk/errcheck
 errcheck:
-	@errcheck -ignorepkg=bytes -ignore=os:Remove github.com/boltdb/bolt
+	@errcheck -ignorepkg=bytes -ignore=os:Remove github.com/coreos/bbolt
 
-test: 
+test:
 	@go test -v -cover .
 	@go test -v ./cmd/bolt
 
