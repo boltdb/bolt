@@ -58,8 +58,10 @@ func TestOpen(t *testing.T) {
 	} else if db == nil {
 		t.Fatal("expected db")
 	}
+	defer os.Remove(path)
 
 	if s := db.Path(); s != path {
+		os.Remove(s)
 		t.Fatalf("unexpected path: %s", s)
 	}
 
