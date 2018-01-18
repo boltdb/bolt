@@ -370,8 +370,8 @@ func TestDB_Open_InitialMmapSize(t *testing.T) {
 	path := tempfile()
 	defer os.Remove(path)
 
-	initMmapSize := 1 << 31  // 2GB
-	testWriteSize := 1 << 27 // 134MB
+	initMmapSize := (1 << 31) - 1 // 2GB
+	testWriteSize := 1 << 27      // 134MB
 
 	db, err := bolt.Open(path, 0666, &bolt.Options{InitialMmapSize: initMmapSize})
 	if err != nil {
