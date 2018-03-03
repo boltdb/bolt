@@ -12,7 +12,7 @@ import (
 func TestFreelist_free(t *testing.T) {
 	f := newFreelist()
 	f.free(100, &page{id: 12})
-	if !reflect.DeepEqual([]pgid{12}, f.pending[100]) {
+	if !reflect.DeepEqual([]pgid{12}, f.pending[100].ids) {
 		t.Fatalf("exp=%v; got=%v", []pgid{12}, f.pending[100])
 	}
 }
@@ -21,7 +21,7 @@ func TestFreelist_free(t *testing.T) {
 func TestFreelist_free_overflow(t *testing.T) {
 	f := newFreelist()
 	f.free(100, &page{id: 12, overflow: 3})
-	if exp := []pgid{12, 13, 14, 15}; !reflect.DeepEqual(exp, f.pending[100]) {
+	if exp := []pgid{12, 13, 14, 15}; !reflect.DeepEqual(exp, f.pending[100].ids) {
 		t.Fatalf("exp=%v; got=%v", exp, f.pending[100])
 	}
 }
@@ -46,39 +46,40 @@ func TestFreelist_release(t *testing.T) {
 
 // Ensure that a freelist can find contiguous blocks of pages.
 func TestFreelist_allocate(t *testing.T) {
-	f := &freelist{ids: []pgid{3, 4, 5, 6, 7, 9, 12, 13, 18}}
-	if id := int(f.allocate(3)); id != 3 {
+	f := newFreelist()
+	f.ids = []pgid{3, 4, 5, 6, 7, 9, 12, 13, 18}
+	if id := int(f.allocate(1, 3)); id != 3 {
 		t.Fatalf("exp=3; got=%v", id)
 	}
-	if id := int(f.allocate(1)); id != 6 {
+	if id := int(f.allocate(1, 1)); id != 6 {
 		t.Fatalf("exp=6; got=%v", id)
 	}
-	if id := int(f.allocate(3)); id != 0 {
+	if id := int(f.allocate(1, 3)); id != 0 {
 		t.Fatalf("exp=0; got=%v", id)
 	}
-	if id := int(f.allocate(2)); id != 12 {
+	if id := int(f.allocate(1, 2)); id != 12 {
 		t.Fatalf("exp=12; got=%v", id)
 	}
-	if id := int(f.allocate(1)); id != 7 {
+	if id := int(f.allocate(1, 1)); id != 7 {
 		t.Fatalf("exp=7; got=%v", id)
 	}
-	if id := int(f.allocate(0)); id != 0 {
+	if id := int(f.allocate(1, 0)); id != 0 {
 		t.Fatalf("exp=0; got=%v", id)
 	}
-	if id := int(f.allocate(0)); id != 0 {
+	if id := int(f.allocate(1, 0)); id != 0 {
 		t.Fatalf("exp=0; got=%v", id)
 	}
 	if exp := []pgid{9, 18}; !reflect.DeepEqual(exp, f.ids) {
 		t.Fatalf("exp=%v; got=%v", exp, f.ids)
 	}
 
-	if id := int(f.allocate(1)); id != 9 {
+	if id := int(f.allocate(1, 1)); id != 9 {
 		t.Fatalf("exp=9; got=%v", id)
 	}
-	if id := int(f.allocate(1)); id != 18 {
+	if id := int(f.allocate(1, 1)); id != 18 {
 		t.Fatalf("exp=18; got=%v", id)
 	}
-	if id := int(f.allocate(1)); id != 0 {
+	if id := int(f.allocate(1, 1)); id != 0 {
 		t.Fatalf("exp=0; got=%v", id)
 	}
 	if exp := []pgid{}; !reflect.DeepEqual(exp, f.ids) {
@@ -113,9 +114,9 @@ func TestFreelist_read(t *testing.T) {
 func TestFreelist_write(t *testing.T) {
 	// Create a freelist and write it to a page.
 	var buf [4096]byte
-	f := &freelist{ids: []pgid{12, 39}, pending: make(map[txid][]pgid)}
-	f.pending[100] = []pgid{28, 11}
-	f.pending[101] = []pgid{3}
+	f := &freelist{ids: []pgid{12, 39}, pending: make(map[txid]*txPending)}
+	f.pending[100] = &txPending{ids: []pgid{28, 11}}
+	f.pending[101] = &txPending{ids: []pgid{3}}
 	p := (*page)(unsafe.Pointer(&buf[0]))
 	if err := f.write(p); err != nil {
 		t.Fatal(err)
@@ -142,7 +143,8 @@ func benchmark_FreelistRelease(b *testing.B, size int) {
 	pending := randomPgids(len(ids) / 400)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		f := &freelist{ids: ids, pending: map[txid][]pgid{1: pending}}
+		txp := &txPending{ids: pending}
+		f := &freelist{ids: ids, pending: map[txid]*txPending{1: txp}}
 		f.release(1)
 	}
 }

@@ -455,7 +455,7 @@ func (tx *Tx) checkBucket(b *Bucket, reachable map[pgid]*page, freed map[pgid]bo
 
 // allocate returns a contiguous block of memory starting at a given page.
 func (tx *Tx) allocate(count int) (*page, error) {
-	p, err := tx.db.allocate(count)
+	p, err := tx.db.allocate(tx.meta.txid, count)
 	if err != nil {
 		return nil, err
 	}
