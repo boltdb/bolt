@@ -1664,6 +1664,9 @@ func (cmd *CompactCommand) compact(dst, src *bolt.DB) error {
 			}
 		}
 
+		// Fill the entire page for best compaction.
+		b.FillPercent = 1.0
+
 		// If there is no value then this is a bucket call.
 		if v == nil {
 			bkt, err := b.CreateBucket(k)
