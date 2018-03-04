@@ -323,7 +323,12 @@ func (b *Bucket) Delete(key []byte) error {
 
 	// Move cursor to correct position.
 	c := b.Cursor()
-	_, _, flags := c.seek(key)
+	k, _, flags := c.seek(key)
+
+	// Return nil if the key doesn't exist.
+	if !bytes.Equal(key, k) {
+		return nil
+	}
 
 	// Return an error if there is already existing bucket value.
 	if (flags & bucketLeafFlag) != 0 {
