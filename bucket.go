@@ -3,6 +3,8 @@ package bolt
 import (
 	"bytes"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -40,6 +42,7 @@ type Bucket struct {
 	page     *page              // inline page reference
 	rootNode *node              // materialized node for the root page.
 	nodes    map[pgid]*node     // node cache
+	mu       sync.RWMutex       // protects access to subbucket cache
 
 	// Sets the threshold for filling nodes when they split. By default,
 	// the bucket will fill to 50% but it can be useful to increase this
@@ -88,7 +91,7 @@ func (b *Bucket) Writable() bool {
 // Do not use a cursor after the transaction is closed.
 func (b *Bucket) Cursor() *Cursor {
 	// Update transaction statistics.
-	b.tx.stats.CursorCount++
+	atomic.AddInt32(&b.tx.stats.CursorCount, 1)
 
 	// Allocate and return a cursor.
 	return &Cursor{
@@ -101,11 +104,14 @@ func (b *Bucket) Cursor() *Cursor {
 // Returns nil if the bucket does not exist.
 // The bucket instance is only valid for the lifetime of the transaction.
 func (b *Bucket) Bucket(name []byte) *Bucket {
+	b.mu.RLock()
 	if b.buckets != nil {
 		if child := b.buckets[string(name)]; child != nil {
+			b.mu.RUnlock()
 			return child
 		}
 	}
+	b.mu.RUnlock()
 
 	// Move cursor to key.
 	c := b.Cursor()
@@ -116,11 +122,13 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 		return nil
 	}
 
+	b.mu.Lock()
 	// Otherwise create a bucket and cache it.
 	var child = b.openBucket(v)
 	if b.buckets != nil {
 		b.buckets[string(name)] = child
 	}
+	b.mu.Unlock()
 
 	return child
 }

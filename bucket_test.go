@@ -120,6 +120,48 @@ func TestBucket_Get_Capacity(t *testing.T) {
 	}
 }
 
+// Ensure that fetching data from a read-only tx does not race.
+func TestBucket_Get_Concurrent(t *testing.T) {
+	db := MustOpenDB()
+	defer db.MustClose()
+
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("widgets"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Put([]byte("foo"), []byte("bar")); err != nil {
+			t.Fatal(err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := db.Begin(false)
+	defer tx.Rollback()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	errc := make(chan error, 100)
+	for i := 0; i < 100; i++ {
+		go func() {
+			var err error
+			b := tx.Bucket([]byte("widgets"))
+			if v := b.Get([]byte("foo")); !bytes.Equal(v, []byte("bar")) {
+				err = fmt.Errorf(`expected "bar", got %q`, string(v))
+			}
+			errc <- err
+		}()
+	}
+	for i := 0; i < 100; i++ {
+		if err := <-errc; err != nil {
+			t.Error(err)
+		}
+	}
+}
+
 // Ensure that a bucket can write a key/value.
 func TestBucket_Put(t *testing.T) {
 	db := MustOpenDB()
