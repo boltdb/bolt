@@ -181,8 +181,8 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	// the two processes would write meta pages and free pages separately.
 	// The database file is locked exclusively (only one process can grab the lock)
 	// if !options.ReadOnly.
-	// The database file is locked using the shared lock (more than one process may
-	// hold a lock at the same time) otherwise (options.ReadOnly is set).
+	// Otherwise if options.ReadOnly is set, the database file is locked using the shared lock
+	// that can be held by more than one process at the same time.
 	if err := flock(db, mode, !db.readOnly, options.Timeout); err != nil {
 		_ = db.close()
 		return nil, err
