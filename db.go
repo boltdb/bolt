@@ -275,7 +275,12 @@ func (db *DB) mmap(minsz int) error {
 
 	// Memory-map the data file as a byte slice.
 	if err := mmap(db, size); err != nil {
-		return err
+		// mmap failed; the system may have run out of space. Fallback to
+		// mapping the bare minimum needed for the current db size.
+		if err2 := mmap(db, db.datasz); err2 != nil {
+			panic(fmt.Sprintf("failed to revert db size after failed mmap: %v", err2))
+		}
+		return MmapError(err.Error())
 	}
 
 	// Save references to the meta pages.

@@ -69,3 +69,10 @@ var (
 	// non-bucket key on an existing bucket key.
 	ErrIncompatibleValue = errors.New("incompatible value")
 )
+
+// MmapError represents an error resulting from a failed mmap call. Typically,
+// this error means that no further database writes will be possible. The most
+// common cause is insufficient disk space.
+type MmapError string
+
+func (e MmapError) Error() string { return string(e) }
