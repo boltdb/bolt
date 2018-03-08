@@ -402,9 +402,16 @@ func (b *Bucket) Stats() BucketStats {
 	if b.root == 0 {
 		s.InlineBucketN += 1
 	}
-	b.forEachPage(func(p *page, depth int) {
+	b.forEachPageNode(func(p *page, n *node, depth int) {
 		if (p.flags & leafPageFlag) != 0 {
-			s.KeyN += int(p.count)
+			keyCount := int(p.count)
+			
+			// Use key count of node in case page states none as we might be in a transaction and the page does
+			// not exist yet
+			if keyCount == 0 && n != nil && n.isLeaf {
+				keyCount = len(n.inodes)
+			}
+			s.KeyN += keyCount
 
 			// used totals the used bytes for the page
 			used := pageHeaderSize
@@ -493,7 +500,8 @@ func (b *Bucket) forEachPage(fn func(*page, int)) {
 func (b *Bucket) forEachPageNode(fn func(*page, *node, int)) {
 	// If we have an inline page or root node then just use that.
 	if b.page != nil {
-		fn(b.page, nil, 0)
+		_, n := b.pageNode(b.page.id)
+		fn(b.page, n, 0)
 		return
 	}
 	b._forEachPageNode(b.root, 0, fn)

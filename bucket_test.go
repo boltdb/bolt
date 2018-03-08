@@ -1587,6 +1587,20 @@ func TestBucket_Stats_Large(t *testing.T) {
 	}
 }
 
+// Ensure a bucket can calculate stats before commit.
+func TestBucket_Stats_InMemory(t *testing.T) {
+    db := NewTestDB()
+    defer db.Close()
+    db.Update(func(tx *bolt.Tx) error {
+        b, _ := tx.CreateBucketIfNotExists([]byte("woojits"))
+        b.Put([]byte("foo"), []byte("000"))
+        b.Put([]byte("bar"), []byte("000"))
+        stats := b.Stats()
+        equals(t, 2, stats.KeyN)
+        return nil
+    })
+}
+
 // Ensure that a bucket can write random keys and values across multiple transactions.
 func TestBucket_Put_Single(t *testing.T) {
 	if testing.Short() {
