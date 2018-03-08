@@ -481,6 +481,18 @@ func (db *DB) beginTx() (*Tx, error) {
 		return nil, ErrDatabaseNotOpen
 	}
 
+	// Validate the meta pages.
+	if err := db.meta0.validate(); err != nil {
+		db.mmaplock.RUnlock()
+		db.metalock.Unlock()
+		return nil, fmt.Errorf("meta0 error: %s", err)
+	}
+	if err := db.meta1.validate(); err != nil {
+		db.mmaplock.RUnlock()
+		db.metalock.Unlock()
+		return nil, fmt.Errorf("meta1 error: %s", err)
+	}
+
 	// Create a transaction associated with the database.
 	t := &Tx{}
 	t.init(db)

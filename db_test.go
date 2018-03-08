@@ -430,6 +430,34 @@ func TestDB_Begin_ErrDatabaseNotOpen(t *testing.T) {
 	}
 }
 
+// Ensure that reading a corrupted database does not cause a bus error.
+func TestDB_Begin_CorruptedRead(t *testing.T) {
+	// Open the database.
+	db, err := bolt.Open(tempfile(), 0666, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(db.Path())
+
+	// Create a bucket using a read-write transaction.
+	if err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucket([]byte("widgets"))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Corrupt the database.
+	if err := ioutil.WriteFile(db.Path(), []byte("corruption"), 0666); err != nil {
+		t.Fatalf("unable to corrupt file %q: %v", db.Path(), err)
+	}
+
+	// Make sure no bus error happens and that an error is returned.
+	if _, err := db.Begin(false); err == nil {
+		t.Error("expected validate to fail, got nil")
+	}
+}
+
 // Ensure that a read-write transaction can be retrieved.
 func TestDB_BeginRW(t *testing.T) {
 	db := MustOpenDB()
