@@ -29,11 +29,18 @@ const magic uint32 = 0xED0CDAED
 // must be synchronized using the msync(2) syscall.
 const IgnoreNoSync = runtime.GOOS == "openbsd"
 
+// Madvise option values (from unix 'syscall.MADV_*'). No effect on non-unix.
+const (
+	MADV_NORMAL = 0x0
+	MADV_RANDOM = 0x1
+)
+
 // Default values if not set in a DB instance.
 const (
 	DefaultMaxBatchSize  int = 1000
 	DefaultMaxBatchDelay     = 10 * time.Millisecond
 	DefaultAllocSize         = 16 * 1024 * 1024
+	DefaultMadvise           = MADV_RANDOM
 )
 
 // default page size for db is set to the OS page size.
@@ -93,6 +100,14 @@ type DB struct {
 	// needs to create new pages. This is done to amortize the cost
 	// of truncate() and fsync() when growing the data file.
 	AllocSize int
+
+	// Madvise allows advising the kernel how the mmap should be accessed. The
+	// default is "random", but if the db is being used sequentially, setting
+	// to "normal" has been shown to improve performance on high latency
+	// filesystem storage.
+	//
+	// https://github.com/boltdb/bolt/issues/691.
+	Madvise int
 
 	path     string
 	file     *os.File
@@ -161,6 +176,12 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	db.MaxBatchSize = DefaultMaxBatchSize
 	db.MaxBatchDelay = DefaultMaxBatchDelay
 	db.AllocSize = DefaultAllocSize
+	db.Madvise = DefaultMadvise
+
+	// because an empty value would be 'normal', use options only if set
+	if options.Madvise != nil {
+		db.Madvise = *options.Madvise
+	}
 
 	flag := os.O_RDWR
 	if options.ReadOnly {
@@ -917,6 +938,14 @@ type Options struct {
 	// If initialMmapSize is smaller than the previous database size,
 	// it takes no effect.
 	InitialMmapSize int
+
+	// Madvise allows advising the kernel how the mmap should be accessed. The
+	// default is "random", but if the db is being used sequentially, setting
+	// to "normal" has been shown to improve performance on high latency
+	// filesystem storage.
+	//
+	// https://github.com/boltdb/bolt/issues/691.
+	Madvise *int
 }
 
 // DefaultOptions represent the options used if nil options are passed into Open().
