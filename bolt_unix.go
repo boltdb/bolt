@@ -13,12 +13,13 @@ import (
 // flock acquires an advisory lock on a file descriptor.
 func flock(db *DB, mode os.FileMode, exclusive bool, timeout time.Duration) error {
 	var t time.Time
+	if timeout > 0 {
+		t = time.Now()
+	}
 	for {
 		// If we're beyond our timeout then return an error.
 		// This can only occur after we've attempted a flock once.
-		if t.IsZero() {
-			t = time.Now()
-		} else if timeout > 0 && time.Since(t) > timeout {
+		if timeout > 0 && time.Since(t) > timeout {
 			return ErrTimeout
 		}
 		flag := syscall.LOCK_SH
@@ -30,7 +31,11 @@ func flock(db *DB, mode os.FileMode, exclusive bool, timeout time.Duration) erro
 		err := syscall.Flock(int(db.file.Fd()), flag|syscall.LOCK_NB)
 		if err == nil {
 			return nil
-		} else if err != syscall.EWOULDBLOCK {
+		} else if err == syscall.EWOULDBLOCK {
+			if timeout < 0 {
+				return ErrTimeout
+			}
+		} else {
 			return err
 		}
 

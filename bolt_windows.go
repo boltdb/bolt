@@ -59,12 +59,13 @@ func flock(db *DB, mode os.FileMode, exclusive bool, timeout time.Duration) erro
 	db.lockfile = f
 
 	var t time.Time
+	if timeout > 0 {
+		t = time.Now()
+	}
 	for {
 		// If we're beyond our timeout then return an error.
 		// This can only occur after we've attempted a flock once.
-		if t.IsZero() {
-			t = time.Now()
-		} else if timeout > 0 && time.Since(t) > timeout {
+		if timeout > 0 && time.Since(t) > timeout {
 			return ErrTimeout
 		}
 
@@ -76,7 +77,11 @@ func flock(db *DB, mode os.FileMode, exclusive bool, timeout time.Duration) erro
 		err := lockFileEx(syscall.Handle(db.lockfile.Fd()), flag, 0, 1, 0, &syscall.Overlapped{})
 		if err == nil {
 			return nil
-		} else if err != errLockViolation {
+		} else if err == errLockViolation {
+			if timeout < 0 {
+				return ErrTimeout
+			}
+		} else {
 			return err
 		}
 
