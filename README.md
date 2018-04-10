@@ -883,6 +883,7 @@ them via pull request.
 Below is a list of public, open source projects that use Bolt:
 
 * [BoltDbWeb](https://github.com/evnix/boltdbweb) - A web based GUI for BoltDB files.
+* [BoltInspector](https://github.com/89yoyos/BoltInspector) - A commandline tool for inspecting BoltDB files
 * [Operation Go: A Routine Mission](http://gocode.io) - An online programming game for Golang using Bolt for user accounts and a leaderboard.
 * [Bazil](https://bazil.org/) - A file system that lets your data reside where it is most convenient for it to reside.
 * [DVID](https://github.com/janelia-flyem/dvid) - Added Bolt as optional storage engine and testing it against Basho-tuned leveldb.
