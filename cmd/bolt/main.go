@@ -133,8 +133,10 @@ The commands are:
     bench       run synthetic benchmark against bolt
     check       verifies integrity of bolt database
     compact     copies a bolt database, compacting it in the process
+    dump        prints one or more pages in hexadecimal format
     info        print basic info
     help        print this screen
+    page        prints one or more pages in human readable format
     pages       print list of pages with their types
     stats       iterate over all pages and generate usage stats
 
@@ -407,7 +409,7 @@ func (cmd *DumpCommand) PrintPage(w io.Writer, r io.ReaderAt, pageID int, pageSi
 // Usage returns the help message.
 func (cmd *DumpCommand) Usage() string {
 	return strings.TrimLeft(`
-usage: bolt dump -page PAGEID PATH
+usage: bolt dump PATH pageid [pageid...]
 
 Dump prints a hexadecimal dump of a single page.
 `, "\n")
@@ -644,7 +646,7 @@ func (cmd *PageCommand) PrintPage(w io.Writer, r io.ReaderAt, pageID int, pageSi
 // Usage returns the help message.
 func (cmd *PageCommand) Usage() string {
 	return strings.TrimLeft(`
-usage: bolt page -page PATH pageid [pageid...]
+usage: bolt page PATH pageid [pageid...]
 
 Page prints one or more pages in human readable format.
 `, "\n")
