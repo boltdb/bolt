@@ -12,7 +12,7 @@ rolled back in the event of a crash.
 
 The design of Bolt is based on Howard Chu's LMDB database project.
 
-Bolt currently works on Windows, Mac OS X, and Linux.
+Bolt currently works on Windows, Mac OS X, Linux, iOS and Android.
 
 
 Basics
