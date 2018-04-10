@@ -1490,7 +1490,7 @@ func mustContainKeys(b *bolt.Bucket, m map[string]string) {
 
 	// Check for keys found in bucket that shouldn't be there.
 	var keys []string
-	for k, _ := range found {
+	for k := range found {
 		if _, ok := m[string(k)]; !ok {
 			keys = append(keys, k)
 		}
@@ -1501,7 +1501,7 @@ func mustContainKeys(b *bolt.Bucket, m map[string]string) {
 	}
 
 	// Check for keys not found in bucket that should be there.
-	for k, _ := range m {
+	for k := range m {
 		if _, ok := found[string(k)]; !ok {
 			keys = append(keys, k)
 		}
