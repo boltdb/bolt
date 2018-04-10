@@ -931,5 +931,6 @@ Below is a list of public, open source projects that use Bolt:
 * [Ironsmith](https://github.com/timshannon/ironsmith) - A simple, script-driven continuous integration (build - > test -> release) tool, with no external dependencies
 * [BoltHold](https://github.com/timshannon/bolthold) - An embeddable NoSQL store for Go types built on BoltDB
 * [Ponzu CMS](https://ponzu-cms.org) - Headless CMS + automatic JSON API with auto-HTTPS, HTTP/2 Server Push, and flexible server framework.
+* [kv](https://github.com/helinwang/kv) - A Go key/value store service based on BoltDB, access BoltDB from multiple processes.
 
 If you are using Bolt in a project please send a pull request to add it to the list.
