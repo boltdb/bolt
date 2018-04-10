@@ -1183,12 +1183,14 @@ func (cmd *BenchCommand) runReadsSequentialNested(db *bolt.DB, options *BenchOpt
 			var count int
 			var top = tx.Bucket(benchBucketName)
 			if err := top.ForEach(func(name, _ []byte) error {
-				c := top.Bucket(name).Cursor()
-				for k, v := c.First(); k != nil; k, v = c.Next() {
-					if v == nil {
-						return ErrInvalidValue
+				if b := top.Bucket(name); b != nil {
+					c := b.Cursor()
+					for k, v := c.First(); k != nil; k, v = c.Next() {
+						if v == nil {
+							return ErrInvalidValue
+						}
+						count++
 					}
-					count++
 				}
 				return nil
 			}); err != nil {
